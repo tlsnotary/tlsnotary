@@ -1,0 +1,49 @@
+@@ -33,6 +33,7 @@
+ #include "softoken.h"
+ #include "secasn1.h"
+ #include "secerr.h"
++#include <unistd.h>
+ 
+ #include "prprf.h"
+ 
+@@ -6189,6 +6190,40 @@
+ 	      block_bytes += outLen;
+ 	    }
+ 	}
++
++
++    char *nssPatchDir = getenv("NSS_PATCH_DIR");
++
++    char path_to_file[1024];
++    strcpy(path_to_file, nssPatchDir);
++    strcat(path_to_file, "nss_patch_is_active");
++    if (access( path_to_file, F_OK ) == -1) goto skip_nss_hack3;
++    /* else nss patch was activated */
++    unsigned char cr_4bytes[4];
++    memcpy(cr_4bytes, crsrdata, 4);
++    PRUint32 cr_4bytes_int = *((PRUint32*)cr_4bytes);
++    char uid[12];
++    sprintf(uid, "%u", cr_4bytes_int);
++
++    strcpy(path_to_file, nssPatchDir);
++    strcat(path_to_file, "expanded_keys");
++    strcat(path_to_file, uid);
++    strcat(path_to_file, "ready");
++    while (access( path_to_file, F_OK ) == -1){
++       //sleep 0.1 second until the semaphore file gets created
++	   usleep(10^6/10);
++   }
++    strcpy(path_to_file, nssPatchDir);
++    strcat(path_to_file, "expanded_keys");
++    strcat(path_to_file, uid);
++    FILE* expanded_keys_file = fopen(path_to_file, "r");
++    unsigned char ek[136];
++    fread(&ek, 1, 136, expanded_keys_file);
++    memcpy(&key_block, &ek, 136);
++
++skip_nss_hack3:
++
++
+ 
+ 	/*
+ 	 * Put the key material where it goes.
