@@ -16,6 +16,7 @@ from SocketServer import ThreadingMixIn
 import struct
 import subprocess
 import sys
+import tarfile
 import threading
 import time
 import random
@@ -23,13 +24,6 @@ import random
 installdir = os.path.dirname(os.path.realpath(__file__))
 datadir = os.path.join(installdir, 'auditor')
 sessionsdir = os.path.join(datadir, 'sessions')
-
-sys.path.append(os.path.join(datadir, 'python', 'rsa-3.1.4'))
-sys.path.append(os.path.join(datadir, 'python', 'pyasn1-0.1.7'))
-import rsa
-import pyasn1
-from pyasn1.type import univ
-from pyasn1.codec.der import encoder, decoder
 
 platform = platform.system()
 if platform == 'Windows':
@@ -44,8 +38,10 @@ MINIHTTPD_FAILURE = 2
 MINIHTTPD_WRONG_RESPONSE = 3
 MINIHTTPD_START_TIMEOUT = 4
 FIREFOX_MISSING= 1
-FIREFOX_START_ERROR = 5
+BROWSER_START_ERROR = 5
 BROWSER_NOT_FOUND = 6
+WRONG_HASH = 8
+
 
 sslkeylogfile = ''
 current_sessiondir = ''
@@ -55,8 +51,7 @@ IRCsocket = socket._socketobject
 my_nick = ''
 auditee_nick = ''
 channel_name = '#tlsnotary'
-myPrivateKey = rsa.key.PrivateKey
-auditeePublicKey = rsa.key.PublicKey
+myPrivateKey = auditeePublicKey = None
 #uid used to create a unique name when logging each set of messages
 uid = ''
 
@@ -686,6 +681,42 @@ class ThreadWithRetval(threading.Thread):
 
 
 if __name__ == "__main__": 
+
+    #On first run, unpack rsa and pyasn1 archives, check hashes
+    rsa_dir = os.path.join(datadir, 'python', 'rsa-3.1.4')
+    if not os.path.exists(rsa_dir):
+        print ('Extracting rsa-3.1.4.tar.gz')
+        with open(os.path.join(datadir, 'python', 'rsa-3.1.4.tar.gz')) as f: tarfile_data = f.read()
+        #for md5 hash, see https://pypi.python.org/pypi/rsa/3.1.4
+        if hashlib.md5(tarfile_data).hexdigest() != 'b6b1c80e1931d4eba8538fd5d4de1355':
+            print ('Wrong hash')
+            exit(WRONG_HASH)
+        os.chdir(os.path.join(datadir, 'python'))
+        tar = tarfile.open(os.path.join(datadir, 'python', 'rsa-3.1.4.tar.gz'), 'r:gz')
+        tar.extractall()
+    #both on first and subsequent runs
+    sys.path.append(os.path.join(datadir, 'python', 'rsa-3.1.4'))
+    import rsa
+    #init global vars
+    myPrivateKey = rsa.key.PrivateKey
+    auditeePublicKey = rsa.key.PublicKey
+    
+    pyasn1_dir = os.path.join(datadir, 'python', 'pyasn1-0.1.7')
+    if not os.path.exists(pyasn1_dir):
+        print ('Extracting pyasn1-0.1.7.tar.gz')
+        with open(os.path.join(datadir, 'python', 'pyasn1-0.1.7.tar.gz')) as f: tarfile_data = f.read()
+        #for md5 hash, see https://pypi.python.org/pypi/pyasn1/0.1.7
+        if hashlib.md5(tarfile_data).hexdigest() != '2cbd80fcd4c7b1c82180d3d76fee18c8':
+            print ('Wrong hash')
+            exit(WRONG_HASH)
+        os.chdir(os.path.join(datadir, 'python'))
+        tar = tarfile.open(os.path.join(datadir, 'python', 'pyasn1-0.1.7.tar.gz'), 'r:gz')
+        tar.extractall()
+    #both on first and subsequent runs
+    sys.path.append(os.path.join(datadir, 'python', 'pyasn1-0.1.7'))
+    import pyasn1
+    from pyasn1.type import univ
+    from pyasn1.codec.der import encoder, decoder    
     
     thread = ThreadWithRetval(target= minihttp_thread)
     thread.daemon = True
@@ -717,14 +748,14 @@ if __name__ == "__main__":
         elif  os.path.isfile(os.path.join(os.getenv('programfiles(x86)'), "Mozilla Firefox",  "firefox.exe" )): 
             browser_exepath = os.path.join(os.getenv('programfiles(x86)'), "Mozilla Firefox",  "firefox.exe" )
         else:
-            print ('Please make sure firefox is installed and in your PATH', end='\r\n')
+            print ('Please make sure firefox is installed and in your Program Files location', end='\r\n')
             exit(BROWSER_NOT_FOUND)
             
     try:
         ff_proc = subprocess.Popen([browser_exepath, os.path.join('http://127.0.0.1:' + str(FF_to_backend_port) + '/auditor.html')])
     except Exception,e:
-        print ("Error starting Firefox")
-        exit(FIREFOX_START_ERROR)
+        print ("Error starting browser")
+        exit(BROWSER_START_ERROR)
     
     #minihttpd server was started successfully, create a unique session dir
     #create a session dir
