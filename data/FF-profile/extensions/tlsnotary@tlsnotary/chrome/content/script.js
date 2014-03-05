@@ -92,6 +92,8 @@ function responseStartRecording(iteration){
 
 
 function stopRecording(){
+	//disable proxy so that we can reach our localhost backend
+	Components.classes["@mozilla.org/preferences-service;1"].getService(Components.interfaces.nsIPrefService).getBranch("network.proxy.").setIntPref("type", 0);
 	var button_record_disabled = document.getElementById("button_record_disabled");
 	var button_spinner = document.getElementById("button_spinner");
 	var button_stop_enabled = document.getElementById("button_stop_enabled");
