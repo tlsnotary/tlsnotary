@@ -44,6 +44,7 @@ FIREFOX_START_ERROR = 5
 CANT_FIND_TORBROWSER = 6
 TBB_INSTALLER_TOO_LONG = 7
 WRONG_HASH = 8
+CANT_FIND_XZ = 9
 
 IRCsocket = socket._socketobject
 recvQueue = Queue.Queue() #all IRC messages are placed here by receivingThread
@@ -537,7 +538,10 @@ def start_recording():
     os.makedirs(logdir)
     for i in range(3):
         FF_proxy_port = random.randint(1025,65535)
-        stcppipe_proc = subprocess.Popen([os.path.join(datadir, 'stcppipe', 'stcppipe.exe' if OS=='mswin' else 'stcppipe'), '-d', logdir, '-b', '127.0.0.1', str(HTTPS_proxy_port), str(FF_proxy_port)])
+        if OS=='mswin': stcppipe_exename = 'stcppipe.exe'
+        elif OS=='linux': stcppipe_exename = 'stcppipe_linux'
+        elif OS=='macos': stcppipe_exename = 'stcppipe_mac'
+        stcppipe_proc = subprocess.Popen([os.path.join(datadir, 'stcppipe', stcppipe_exename), '-d', logdir, '-b', '127.0.0.1', str(HTTPS_proxy_port), str(FF_proxy_port)])
         time.sleep(1)
         if stcppipe_proc.poll() != None:
             print ('Maybe the port was in use, trying again with a new port')
@@ -679,7 +683,6 @@ def start_irc():
     return 'success'
     
   
-
 def start_firefox(FF_to_backend_port):
     global current_sessiondir
     global nss_patch_dir
@@ -695,25 +698,9 @@ def start_firefox(FF_to_backend_port):
     if not os.path.isdir(os.path.join(datadir, 'logs')): os.makedirs(os.path.join(datadir, 'logs'))
     if not os.path.isfile(os.path.join(datadir, 'logs', 'firefox.stdout')): open(os.path.join(datadir, 'logs', 'firefox.stdout'), 'w').close()
     if not os.path.isfile(os.path.join(datadir, 'logs', 'firefox.stderr')): open(os.path.join(datadir, 'logs', 'firefox.stderr'), 'w').close()    
-    if not os.path.isfile(os.path.join(datadir, 'FF-profile', 'extensions.ini')):
-    #FF rewrites extensions.ini on first run, so we allow FF to create it, then we kill FF, rewrite the file and start FF again
-    #we do this to avoid the nagging screen asking the user to install the addon and restart firefox
-        #try:
-            #ff_proc = subprocess.Popen([firefox_exepath,'-no-remote', '-profile', os.path.join(datadir, 'FF-profile')], stdout=open(os.path.join(datadir, 'logs', "firefox.stdout"),'w'), stderr=open(os.path.join(datadir, 'logs', "firefox.stderr"), 'w'))
-        #except Exception,e:
-            #return ("Error starting Firefox", )
-        
-        #while 1:
-            #time.sleep(0.5)
-            #if os.path.isfile(os.path.join(datadir, 'FF-profile', 'extensions.ini')):
-                #ff_proc.kill()
-                #break
-            
+    if not os.path.isfile(os.path.join(datadir, 'FF-profile', 'extensions.ini')):            
         try:
-            #enable extension                            
-            #with codecs.open (os.path.join(datadir, 'FF-profile', 'extensions.ini'), "w") as f1:
-                #f1.write("[ExtensionDirs]\nExtension0=" + os.path.join(datadir, 'FF-profile', "extensions", "tlsnotary@tlsnotary") + "\n")
-            ##show addon bar
+            #show addon bar
             with codecs.open(os.path.join(datadir, 'FF-profile', 'localstore.rdf'), 'w') as f2:
                 f2.write('<?xml version="1.0"?><RDF:RDF xmlns:NC="http://home.netscape.com/NC-rdf#" xmlns:RDF="http://www.w3.org/1999/02/22-rdf-syntax-ns#"><RDF:Description RDF:about="chrome://browser/content/browser.xul"><NC:persist RDF:resource="chrome://browser/content/browser.xul#addon-bar" collapsed="false"/></RDF:Description></RDF:RDF>')    
         except Exception,e:
@@ -836,7 +823,10 @@ if __name__ == "__main__":
             os.mkdir(os.path.join(datadir, 'tmpextract'))
             os.chdir(os.path.join(datadir, 'tmpextract'))
             tbbtar.extractall()
+            tbbtar.close()
             os.remove(tarball_path)
+            #change working dir away from the deleted one, otherwise FF will not start
+            os.chdir(datadir)
             shutil.copytree(os.path.join(datadir, 'tmpextract', 'tor-browser_en-US', 'Browser'), os.path.join(datadir, 'firefoxcopy'))
             shutil.rmtree(os.path.join(datadir, 'tmpextract'))
             
