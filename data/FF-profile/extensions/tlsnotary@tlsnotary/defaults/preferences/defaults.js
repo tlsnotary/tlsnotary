@@ -54,12 +54,13 @@ pref("browser.rights.3.shown", true)
 pref("extensions.checkCompatibility", false); 
 // The last version of the browser to successfully load extensions. 
 //Used to determine whether or not to disable extensions due to possible incompatibilities. 
-pref("extensions.lastAppVersion", "100.0.0");
-pref("extensions.update.autoUpdate", false); 
+pref("extensions.lastAppVersion", "100.0.0"); //gets overriden by tbb
+pref("extensions.update.autoUpdate", false);  //doesnt exist in tbb
 pref("extensions.update.enabled", false);
 pref("datareporting.policy.dataSubmissionEnabled", false)
 
-//Override Tor Browser Bundle's prefs
+//Override Tor Browser Bundle's 
+//NB network.proxy.* prefs do not override from here, we call them from within addon's JS
 pref("network.proxy.type", 0);
 //if socks_remote_dns is true even with proxy.type == 0, TBB still tries to use proxy
 //That's a TBB/Firefox24ESR bug (not present if FF27, though)
