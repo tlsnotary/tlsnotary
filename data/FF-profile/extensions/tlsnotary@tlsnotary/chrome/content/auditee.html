@@ -110,7 +110,7 @@ function responseGetRecentKeys(iteration){
 	var textarea_auditorkey = document.getElementById("textarea_auditorkey");
     textarea_auditorkey.value = auditorpubkey;
 	//we get an empty pubkey on the very first run, request a new pubkey
-	if (mypubkey.length == 0){
+	if (mypubkey == null){
 		newKeypair();
 	}
 }
@@ -123,7 +123,7 @@ function startPressed(){
 	var textarea_auditorkey = document.getElementById("textarea_auditorkey");
     var auditorpubkey = textarea_auditorkey.value;
 	if (auditorpubkey.length != 173){
-		alert("Wrong auditor pubkey length. Expected 336 characters");
+		alert("Wrong auditee pubkey length. Expected 173 characters");
 		return;
 	}
 	reqImportAuditorPubkey = new XMLHttpRequest();
