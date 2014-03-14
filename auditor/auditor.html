@@ -113,7 +113,7 @@ function responseGetRecentKeys(iteration){
 	var textarea_auditeekey = document.getElementById("textarea_auditeekey");
     textarea_auditeekey.value = auditeepubkey;
 	//we get an empty pubkey on the very first run, request a new pubkey
-	if (mypubkey.length == 0){
+	if (mypubkey == null){
 		newKeypair();
 	}
 }
@@ -250,6 +250,7 @@ function newKeypair() {
     reqNewKeypair.onload = responseNewKeypair;
     reqNewKeypair.open("HEAD", "http://127.0.0.1:"+port+"/new_keypair", true);
     reqNewKeypair.send();
+	bNewKeypairResponded = false;
     //give 20 secs for escrow to respond
     setTimeout(responseNewKeypair, 1000, 0);
 }
