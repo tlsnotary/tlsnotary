@@ -27,12 +27,12 @@ datadir = os.path.join(installdir, 'data')
 nsslibdir = os.path.join(datadir, 'nsslibs')
 sessionsdir = os.path.join(datadir, 'sessions')
 
-platform = platform.system()
-if platform == 'Windows':
+m_platform = platform.system()
+if m_platform == 'Windows':
     OS = 'mswin'
-elif platform == 'Linux':
+elif m_platform == 'Linux':
     OS = 'linux'
-elif platform == 'darwin':
+elif m_platform == 'darwin':
     OS = 'macos'
  
 #exit codes
@@ -805,7 +805,10 @@ if __name__ == "__main__":
     if not os.path.exists(os.path.join(datadir, 'firefoxcopy')):
         print ('Extracting Tor Browser Bundle ...')
         if OS=='linux':
-            zipname = 'tor-browser-linux32-3.5.2.1_en-US.tar.xz'
+            if platform.machine() == 'x86_64':
+                zipname = 'tor-browser-linux64-3.5.2.1_en-US.tar.xz'
+            else:
+                zipname = 'tor-browser-linux32-3.5.2.1_en-US.tar.xz'
             if os.path.exists(os.path.join(installdir, zipname)):
                 torbrowser_zip_path = os.path.join(installdir, zipname)
             else:
@@ -817,7 +820,10 @@ if __name__ == "__main__":
                 print ('Could not extract ' + torbrowser_zip_path + '.Make sure xz is installed on your system')
                 exit (CANT_FIND_XZ)
             #by default the result of the extraction will be tor-browser-linux32-3.5.2.1_en-US.tar
-            tarball_path = os.path.join(installdir, 'tor-browser-linux32-3.5.2.1_en-US.tar')
+            if platform.machine() == 'x86_64':
+                tarball_path = os.path.join(installdir, 'tor-browser-linux64-3.5.2.1_en-US.tar')
+            else:
+                tarball_path = os.path.join(installdir, 'tor-browser-linux32-3.5.2.1_en-US.tar')
             tbbtar = tarfile.open(tarball_path)
             #tarball extracts into current working dir
             os.mkdir(os.path.join(datadir, 'tmpextract'))
