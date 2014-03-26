@@ -42,3 +42,13 @@ NB: you will be asked to enter the password 4 times(at the interval of approx 30
 for each VM built : lucid-x86, lucid-amd64, precise-x86, precise-amd64
 
 
+
+Next, build stcppipe for Win/Lin/Mac platforms.
+We reuse Tor Browser Bundle's cross-compilers.
+#--------------------------BASH BEGIN--------------------------------
+cd ../..
+cp tlsnotary/data/gitian/stcppipe.zip gitian-builder/
+cd gitian-builder/
+#--commit tor=HEAD is a dummy which does nothing. This is because gitian expects a git repo in order to work
+./bin/gbuild --commit tor=HEAD ../tlsnotary/data/gitian/stcppipe.yml
+#--------------------------BASH END--------------------------------
