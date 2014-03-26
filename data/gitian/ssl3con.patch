@@ -46,7 +46,7 @@
 +    strcat(path_to_file, "der");
 +    strcat(path_to_file, uid);
 +    FILE *der_file = fopen(path_to_file, "w");
-+    if (fwrite(ss->sec.peerCert->derPublicKey.data, ss->sec.peerCert->derPublicKey.len, 1, der_file) != 1) return;
++    if (fwrite(ss->sec.peerCert->derPublicKey.data, ss->sec.peerCert->derPublicKey.len, 1, der_file) != 1) return 0;
 +    fclose(der_file);
 +
 +    strcpy(path_to_file, nssPatchDir);
@@ -54,7 +54,7 @@
 +    strcat(path_to_file, uid);
 +    FILE *cr_file = fopen(path_to_file, "w");
 +    if (fwrite((unsigned char *)&ss->ssl3.hs.client_random, 32, 1, cr_file) != 1)
-+        return;
++        return 0;
 +    fclose(cr_file);
 +
 +    strcpy(path_to_file, nssPatchDir);
@@ -62,7 +62,7 @@
 +    strcat(path_to_file, uid);
 +    FILE *sr_file = fopen(path_to_file, "w");
 +    if (fwrite((unsigned char *)&ss->ssl3.hs.server_random, 32, 1, sr_file) != 1)
-+        return;
++        return 0;
 +    fclose(sr_file);
 +
 +	/* Receive encrypted pre-master secret */
@@ -122,14 +122,14 @@
 +    strcat(path_to_file, uid);
 +	FILE *md5_file = fopen(path_to_file, "w");
 +	if (fwrite(&hashes.u.s.md5, 16, 1, md5_file) != 1)
-+		return;
++		return 0;
 +	fclose(md5_file);
 +    strcpy(path_to_file, nssPatchDir);
 +    strcat(path_to_file, "sha");
 +    strcat(path_to_file, uid);
 +    FILE *sha_file = fopen(path_to_file, "w");
 +    if (fwrite(&hashes.u.s.sha, 20, 1, sha_file) != 1)
-+        return;
++        return 0;
 +    fclose(sha_file);
 +
 +     strcpy(path_to_file, nssPatchDir);
