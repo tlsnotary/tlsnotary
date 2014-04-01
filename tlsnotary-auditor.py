@@ -55,16 +55,19 @@ myPrivateKey = auditeePublicKey = None
 #uid used to create a unique name when logging each set of messages
 uid = ''
 
-#There are 2 ways to convert the FF's internal DER pubkey structure: using openssl or pure-python rsa module
-#Ideally, we don't want to ship openssl on Windows, so we use pyasn1 by default
-#Still, we leave the openssl implementation switch here just in case
-DER_to_pubkey_using_openssl = False
-DER_to_pubkey_using_pyasn1 = True
-
 recvQueue = Queue.Queue() #all IRC messages are placed on this queue
-countQueue = Queue.Queue() #count_my_messages_thread places messages' ordinal numbers on this thread 
+ackQueue = Queue.Queue() #count_my_messages_thread places messages' ordinal numbers on this thread 
 progressQueue = Queue.Queue() #messages intended to be displayed by the frontend are placed here
 
+secretbytes_amount=8
+
+def bigint_to_bytearray(bigint):
+    m_bytes = []
+    while bigint != 0:
+        b = bigint%256
+        m_bytes.insert( 0, b )
+        bigint //= 256
+    return bytearray(m_bytes)
 
 #processes each http request in a separate thread
 #we need threading in order to send progress updates to the frontend in a non-blocking manner
@@ -80,286 +83,111 @@ class StoppableThreadedHttpServer (ThreadingMixIn, BaseHTTPServer.HTTPServer):
     
 
 
-def get_encrypted_pms(der):    
-      #if DER_to_pubkey_using_openssl == True:
-      #import subprocess
-      ##check out the output of "openssl asn1parse -inform der -in /tmp/der -strparse 19" to understand the parsing below
-      #rv = subprocess.check_output(['openssl', 'asn1parse', '-inform', 'der', '-in', os.path.join(NSS_PATCH_DIR, 'der'+uid), '-strparse', '19'])
-      #items = rv.split()
-      #key_material = dict()
-      #is_modulus_found = False
-      #for index,one_item in enumerate(items):
-          #if one_item == 'INTEGER':
-              #if not is_modulus_found:
-                  #key_material["modulus"] = items[index+1][1:]
-                  #is_modulus_found = True
-                  #continue
-              #else:
-                  #key_material["exponent"] = items[index+1][1:]
-                  #break
-      
-      #exponent_openssl = key_material['exponent'].decode('hex')
-      #e_intlist = []
-      #for c in bytearray(exponent_openssl): e_intlist.append(c)
-      #e_int = reduce(lambda x, y: (x<<8) + y, e_intlist)
-      
-      #modulus_openssl = key_material['modulus'].decode('hex')
-      #m_intlist = []
-      #for c in bytearray(modulus_openssl): m_intlist.append(c)
-      #m_int = reduce(lambda x, y: (x<<8) + y, m_intlist)
-      
-      #pubkey = rsa.PublicKey(m_int, e_int)
-  
-    #if DER_to_pubkey_using_pyasn1 == True:
-    try:       
-        rv  = decoder.decode(der, asn1Spec=univ.Sequence())
-        bitstring = rv[0].getComponentByPosition(1)
-        #bitstring is a list of ints, like [01110001010101000...]
-        #convert it into into a string   '01110001010101000...'
-        stringOfBits = ''
-        for bit in bitstring:
-            bit_as_str = str(bit)
-            stringOfBits += bit_as_str
-    
-        #treat every 8 chars as an int and pack the ints into a bytearray
-        ba = bytearray()
-        for i in range(0, len(stringOfBits)/8):
-            onebyte = stringOfBits[i*8 : (i+1)*8]
-            oneint = int(onebyte, base=2)
-            ba.append(oneint)
-    
-        #decoding the nested sequence
-        rv  = decoder.decode(str(ba), asn1Spec=univ.Sequence())
-        exponent = rv[0].getComponentByPosition(1)
-        modulus = rv[0].getComponentByPosition(0)
-        modulus_int = int(modulus)
-        exponent_int = int(exponent)
-        pubkey = rsa.PublicKey(modulus_int, exponent_int)
-    except:
-        return('failure', 0,0)
-        
-    #generate PMS and encrypt it
-    #see RFC2246 7.4.7.1. RSA encrypted premaster secret message
-    rand_string = bytearray(os.urandom(46))
-    pms = bytearray()
-    ints = bytearray()
-    ints.append(3)
-    ints.append(1)
-    pms = ints + rand_string
-    with open(os.path.join(current_sessiondir, 'pms'+uid), 'w') as f: f.write(pms)
-    enc_pms = rsa.encrypt(str(pms), pubkey)
-    with open(os.path.join(current_sessiondir, 'encpms'+uid), 'w') as f: f.write(enc_pms)
-    return ('success', pms, enc_pms)
-   
-   
-        
-def get_expanded_keys(cr, sr, pms):
-    with open(os.path.join(current_sessiondir, 'cr'+uid), 'w') as f: f.write(cr)
-    
-    #derive master secret
-    #see RFC2246 8.1. Computing the master secret & 5. HMAC and the pseudorandom function    
-    secret = pms
-    secret_first_half = secret[:24]
-    secret_second_half = secret[24:]
-    label = "master secret"
-    seed = cr + sr
-    
-    #start the PRF
-    md5A1 = hmac.new(secret_first_half,  label+seed, hashlib.md5).digest()
-    md5A2 = hmac.new(secret_first_half,  md5A1, hashlib.md5).digest()
-    md5A3 = hmac.new(secret_first_half,  md5A2, hashlib.md5).digest()
-    
-    md5hmac1 = hmac.new(secret_first_half, md5A1 + label + seed, hashlib.md5).digest()
-    md5hmac2 = hmac.new(secret_first_half, md5A2 + label + seed, hashlib.md5).digest()
-    md5hmac3 = hmac.new(secret_first_half, md5A3 + label + seed, hashlib.md5).digest()
-    md5hmac = md5hmac1+md5hmac2+md5hmac3
-    
-    sha1A1 = hmac.new(secret_second_half,  label+seed, hashlib.sha1).digest()
-    sha1A2 = hmac.new(secret_second_half,  sha1A1, hashlib.sha1).digest()
-    sha1A3 = hmac.new(secret_second_half,  sha1A2, hashlib.sha1).digest()
-    
-    sha1hmac1 = hmac.new(secret_second_half, sha1A1 + label + seed, hashlib.sha1).digest()
-    sha1hmac2 = hmac.new(secret_second_half, sha1A2 + label + seed, hashlib.sha1).digest()
-    sha1hmac3 = hmac.new(secret_second_half, sha1A3 + label + seed, hashlib.sha1).digest()
-    sha1hmac = sha1hmac1+sha1hmac2+sha1hmac3
-    
-    #xor the two hmacs
-    xored = [ord(a) ^ ord(b) for a,b in zip(md5hmac,sha1hmac)]
-    ms = bytearray(xored)
-
-    with open(os.path.join(current_sessiondir, 'ms'+uid), 'w') as f: f.write(ms)
-    #from https://developer.mozilla.org/en-US/docs/NSS_Key_Log_Format
-    #CLIENT_RANDOM <space> <64 bytes of hex encoded client_random> <space> <96 bytes of hex encoded master secret>
-    sslkeylogfile.write('CLIENT_RANDOM ' + binascii.hexlify(cr) + ' ' + binascii.hexlify(ms) + '\n')
-    sslkeylogfile.flush()
-    
-    #master secret key expansion
-    #see RFC2246 6.3. Key calculation & 5. HMAC and the pseudorandom function   
-    #for AES-CBC-SHA  (in bytes): mac secret 20, write key 32, IV 16
-    #hence we need to generate 2*(20+32+16)= 136 bytes
-    # 7 sha hmacs * 20 = 140 and 9 md5 hmacs * 16 = 144
-    ms_first_half = ms[:24]
-    ms_second_half = ms[24:]
-    label = "key expansion"
-    seed = sr + cr
-    #this is not optimized in a loop on purpose. I want people to see exactly what is going on
-    md5A1 = hmac.new(ms_first_half,  label+seed, hashlib.md5).digest()
-    md5A2 = hmac.new(ms_first_half,  md5A1, hashlib.md5).digest()
-    md5A3 = hmac.new(ms_first_half,  md5A2, hashlib.md5).digest()
-    md5A4 = hmac.new(ms_first_half,  md5A3, hashlib.md5).digest()
-    md5A5 = hmac.new(ms_first_half,  md5A4, hashlib.md5).digest()
-    md5A6 = hmac.new(ms_first_half,  md5A5, hashlib.md5).digest()
-    md5A7 = hmac.new(ms_first_half,  md5A6, hashlib.md5).digest()
-    md5A8 = hmac.new(ms_first_half,  md5A7, hashlib.md5).digest()
-    md5A9 = hmac.new(ms_first_half,  md5A8, hashlib.md5).digest()
-    
-    md5hmac1 = hmac.new(ms_first_half, md5A1 + label + seed, hashlib.md5).digest()
-    md5hmac2 = hmac.new(ms_first_half, md5A2 + label + seed, hashlib.md5).digest()
-    md5hmac3 = hmac.new(ms_first_half, md5A3 + label + seed, hashlib.md5).digest()
-    md5hmac4 = hmac.new(ms_first_half, md5A4 + label + seed, hashlib.md5).digest()
-    md5hmac5 = hmac.new(ms_first_half, md5A5 + label + seed, hashlib.md5).digest()
-    md5hmac6 = hmac.new(ms_first_half, md5A6 + label + seed, hashlib.md5).digest()
-    md5hmac7 = hmac.new(ms_first_half, md5A7 + label + seed, hashlib.md5).digest()
-    md5hmac8 = hmac.new(ms_first_half, md5A8 + label + seed, hashlib.md5).digest()
-    md5hmac9 = hmac.new(ms_first_half, md5A9 + label + seed, hashlib.md5).digest()
-    
-    md5hmac = md5hmac1+md5hmac2+md5hmac3+md5hmac4+md5hmac5+md5hmac6+md5hmac7+md5hmac8+md5hmac9
-    
-    
-    sha1A1 = hmac.new(ms_second_half,  label+seed, hashlib.sha1).digest()
-    sha1A2 = hmac.new(ms_second_half,  sha1A1, hashlib.sha1).digest()
-    sha1A3 = hmac.new(ms_second_half,  sha1A2, hashlib.sha1).digest()
-    sha1A4 = hmac.new(ms_second_half,  sha1A3, hashlib.sha1).digest()
-    sha1A5 = hmac.new(ms_second_half,  sha1A4, hashlib.sha1).digest()
-    sha1A6 = hmac.new(ms_second_half,  sha1A5, hashlib.sha1).digest()
-    sha1A7 = hmac.new(ms_second_half,  sha1A6, hashlib.sha1).digest()
-    
-    sha1hmac1 = hmac.new(ms_second_half, sha1A1 + label + seed, hashlib.sha1).digest()
-    sha1hmac2 = hmac.new(ms_second_half, sha1A2 + label + seed, hashlib.sha1).digest()
-    sha1hmac3 = hmac.new(ms_second_half, sha1A3 + label + seed, hashlib.sha1).digest()
-    sha1hmac4 = hmac.new(ms_second_half, sha1A4 + label + seed, hashlib.sha1).digest()
-    sha1hmac5 = hmac.new(ms_second_half, sha1A5 + label + seed, hashlib.sha1).digest()
-    sha1hmac6 = hmac.new(ms_second_half, sha1A6 + label + seed, hashlib.sha1).digest()
-    sha1hmac7 = hmac.new(ms_second_half, sha1A7 + label + seed, hashlib.sha1).digest()
-    
-    sha1hmac = sha1hmac1+sha1hmac2+sha1hmac3+sha1hmac4+sha1hmac5+sha1hmac6+sha1hmac7
-    
-    xored = [ord(a) ^ ord(b) for a,b in zip(md5hmac,sha1hmac)]
-    expanded_keys = bytearray(xored)
-    
-    #we hide the server_mac from the auditee and put random data instead
-    ek = expanded_keys[:20]+ bytearray(os.urandom(20)) + expanded_keys[40:]  
-    return (ms, ek)
-  
-  
-def get_verify_data( md5, sha, ms):      
-    #calculate verify_data for Finished message
-    #see RFC2246 7.4.9. Finished & 5. HMAC and the pseudorandom function
-    label = "client finished"
-    seed = md5 + sha
-    ms_first_half = ms[:24]
-    ms_second_half = ms[24:]
-   
-    md5A1 = hmac.new(ms_first_half,  label+seed, hashlib.md5).digest()
-    md5hmac1 = hmac.new(ms_first_half, md5A1 + label + seed, hashlib.md5).digest()
-    
-    sha1A1 = hmac.new(ms_second_half,  label+seed, hashlib.sha1).digest()
-    sha1hmac1 = hmac.new(ms_second_half, sha1A1 + label + seed, hashlib.sha1).digest()
-    
-    xored = [ord(a) ^ ord(b) for a,b in zip(md5hmac1,sha1hmac1)]
-    verify_data = bytearray(xored[:12])
-    return verify_data
-
 
 #respond to PING messages and put all the other messages onto the recvQueue
 def receivingThread():
+    if not hasattr(receivingThread, "last_seq_which_i_acked"):
+        receivingThread.last_seq_which_i_acked = 0 #static variable. Initialized only on first function's run
+     
+    first_chunk='' #we put the first chunk here and do a new loop iteration to pick up the second one
     while True:
         buffer = ''
         try: buffer = IRCsocket.recv(1024)
         except: continue #1 sec timeout
         if not buffer: continue
-        #sometimes the IRC server may pack multiple PRIVMSGs into one message separated with \r\n
-        print (buffer)
-        messages = buffer.split('\r\n')
+        print ('RECEIVED: ' + buffer)
+        messages = buffer.split('\r\n')  #sometimes the server packs multiple PRIVMSGs into one message separated with \r\n
         for onemsg in messages:
+            
             msg = onemsg.split()
             if len(msg)==0 : continue  #stray newline
-            if msg[0] == "PING": #check if server have sent ping command
+            if msg[0] == "PING":
                 IRCsocket.send("PONG %s" % msg[1]) #answer with pong as per RFC 1459
                 continue
-            else:
-                #check if the message is correctly formatted
-                if not len(msg) == 6: continue
-                if not (msg[1]=='PRIVMSG' and msg[2]==channel_name and (msg[3]==':'+my_nick or msg[3]==':broadcast') and msg[4].startswith('seq:') and msg[5].startswith(('client_hello:', 'der:', 'crsr:', 'md5sha:', 'zipsig:'))): continue
-                if not msg[5].startswith('client_hello'):
-                    #we only process messages which were sent from the auditee
-                    #we exclude the client_hello message because auditee's nick is not yet known at that point
-                    exclamaitionMarkPosition = msg[0].find('!')
-                    auditee_nick_from_message = msg[0][1:exclamaitionMarkPosition]
-                    if not auditee_nick == auditee_nick_from_message: continue
-                recvQueue.put(msg)
+            #check if the message is correctly formatted
+            if not len(msg) >= 5: continue
+            if not (msg[1]=='PRIVMSG' and msg[2]==channel_name and msg[3]==':'+my_nick ): continue
+            exclamaitionMarkPosition = msg[0].find('!')
+            nick_from_message = msg[0][1:exclamaitionMarkPosition]
+            if not auditee_nick == nick_from_message: continue
+            if len(msg)==5 and msg[4].startswith('ack:'):
+                ackQueue.put(msg[4][len('ack:'):])
+                continue
+            if not (len(msg)==7 and msg[4].startswith('seq:')): continue
+            his_seq = int(msg[4][len('seq:'):])
+            if his_seq <= receivingThread.last_seq_which_i_acked: 
+                #the other side is out of sync, send an ack again
+                IRCsocket.send('PRIVMSG ' + channel_name + ' :' + auditee_nick + ' ack:' + str(his_seq) + ' \r\n')
+                continue
+            if not his_seq == receivingThread.last_seq_which_i_acked+1: continue #we did not receive the next seq in order
+            #else we got a new seq      
+            if first_chunk=='' and  not msg[5].startswith( ('cr_sr_hmac_n_e', 'verify_md5sha:', 'zipsig:') ) : continue         
+            #check if this is the first chunk of a chunked message. Only 2 chunks are supported for now
+            #'CRLF' is used at the end of the first chunk, 'EOL' is used to show that there are no more chunks
+            if msg[-1]=='CRLF':
+                if first_chunk != '': #we already have one chunk, no more are allowed
+                    continue
+                #else
+                first_chunk = msg[5]
+                IRCsocket.send('PRIVMSG ' + channel_name + ' :' + auditee_nick + ' ack:' + str(his_seq) + ' \r\n')
+                receivingThread.last_seq_which_i_acked = his_seq
+                continue #go pickup another chunk
+            elif msg[-1]=='EOL' and first_chunk != '': #second chunk arrived
+                print ('second chunk arrived')
+                assembled_message = first_chunk + msg[5]
+                recvQueue.put(assembled_message)
+                first_chunk='' #empty the container for the next iterations
+                IRCsocket.send('PRIVMSG ' + channel_name + ' :' + auditee_nick + ' ack:' + str(his_seq) + ' \r\n')
+                receivingThread.last_seq_which_i_acked = his_seq
+            elif msg[-1]=='EOL':
+                recvQueue.put(msg[5])
+                IRCsocket.send('PRIVMSG ' + channel_name + ' :' + auditee_nick + ' ack:' + str(his_seq) + ' \r\n')
+                receivingThread.last_seq_which_i_acked = his_seq
+                
 
+def send_message(data):
+    if not hasattr(send_message, "my_seq"):
+        send_message.my_seq = 100000 #static variable. Initialized only on first function's run
 
-def send_message(msg, ack):
-    #try 3 times to send a message and have my shadow user pick it up and put it on the countQueue
-    for i in range (3):
-        if i > 0: time.sleep(2)
-        bytessent = IRCsocket.send(msg)
-        print('SENT: ' + str(bytessent) + ' ' + msg)
-        try:
-            ack_check = countQueue.get(block=True, timeout=3)
-            if ack == ack_check:
-                return
-        except: #nothing showed up on the queue in 2 secs
-            continue
+    #split up data longer than 400 bytes (IRC message limit is 512 bytes including the header data)
+    #'\r\n' must go to the end of each message
+    chunks = len(data)/400 + 1
+    if len(data)%400 == 0: chunks -= 1 #avoid creating an empty chunk if data length is a multiple of 400
     
+    for chunk_index in range(chunks) :
+        send_message.my_seq += 1
+        chunk = data[400*chunk_index:400*(chunk_index+1)]
+        for i in range (3):
+            bWasMessageAcked = False
+            ending = ' EOL ' if chunk_index+1==chunks else ' CRLF ' #EOL for the last chunk, otherwise CRLF
+            irc_msg = 'PRIVMSG ' + channel_name + ' :' + auditee_nick + ' seq:' + str(send_message.my_seq) + ' ' + chunk + ending +' \r\n'
+            bytessent = IRCsocket.send(irc_msg)
+            print('SENT: ' + str(bytessent) + ' ' + irc_msg)
+            try: ack_check = ackQueue.get(block=True, timeout=3)
+            except: continue #send again because ack was not received
+            if not str(send_message.my_seq) == ack_check: continue
+            #else: correct ack received
+            bWasMessageAcked = True
+            break
+        if not bWasMessageAcked:
+            return ('failure',)
+    return('success',)
 
+
+    
 #Receive messages from auditee, perform calculations, and respond to them accordingly
 def process_messages():
     global auditee_nick
     global uid
-    
-    #the very first message should be a client_hello
-    print('waiting for hello from auditee')
-    #get the hash of my public key - this serves as a signal from auditee that he is addressing me
-    #This way the auditee does not have to know my (auditor's) IRC nickname in advance, neither I his
-    with open(os.path.join(current_sessiondir, 'mypubkey'), 'r') as f: my_pubkey_pem =f.read()
-    myPublicKey = rsa.PublicKey.load_pkcs1(my_pubkey_pem)
-    myPublicKeyHash = hashlib.sha256(str(myPublicKey.n)).hexdigest()
-    while True:
-        msg = recvQueue.get(block=True) 
-        if not (msg[5].startswith('client_hello:') and msg[3]==':broadcast'): continue
-        b64_hello = msg[5][len('client_hello'):]
-        try:
-            hello = base64.b64decode(b64_hello)
-            keyhash = hello[:64] #this is the hash of auditor's pubkey
-            sig = hello[64:] #this is a sig for 'client_hello'. The auditor is expected to have received auditee's pubkey via other channels
-            if keyhash != myPublicKeyHash : continue
-            rsa.verify('client_hello', sig, auditeePublicKey)
-            #we get here if there was no exception
-            #msg[0] looks like (without quotes) ":supernick!some_other_info"
-            exclamaitionMarkPosition = msg[0].find('!')
-            auditee_nick = msg[0][1:exclamaitionMarkPosition]
-            print ('Auditee successfully verified')
-        except:
-            print ('Verification of a hello message failed')
-            continue
-        #send back a hello message
-        ack = msg[4][len('seq:'):]
-        signed_hello = rsa.sign('server_hello', myPrivateKey, 'SHA-1')
-        b64_signed_hello = base64.b64encode(signed_hello)
-        send_message('PRIVMSG ' + channel_name + ' :' + auditee_nick + ' ack:' + ack + ' server_hello:'+ b64_signed_hello + '\r\n', ack)
-        progressQueue.put(time.strftime('%H:%M:%S', time.localtime()) + ': Auditee has been authorized. Awaiting data...')
-        break
-        
+            
     #after the auditee was authorized, entering a regular message processing loop
     while True:
         uid =  ''.join(random.choice('0123456789') for x in range(10)) #unique id is needed to create unique filenames
-        msg = recvQueue.get(block=True) #block on the very first message. Subsequent messages must be received within the timeout window
-        
-        if msg[5].startswith('zipsig:'): #the user has finished  and send the signature of the trace zipfile
-            ack = msg[4][len('seq:'):]
-            b64_zipsig = msg[5][len('zipsig:'):]
+        try:
+            msg = recvQueue.get(block=True, timeout=1)
+        except: continue
+        if msg.startswith('zipsig:'): #the user has finished  and send the signature of the trace zipfile
+            b64_zipsig = msg[len('zipsig:'):]
             try:
                 zipsig = base64.b64decode(b64_zipsig)
                 shahash = zipsig[:64]
@@ -378,7 +206,7 @@ def process_messages():
             shahash = hashlib.sha256(sslkeylog_data).hexdigest()
             sig = rsa.sign(shahash, myPrivateKey, 'SHA-1')
             b64_sig = base64.b64encode(shahash+sig)
-            send_message('PRIVMSG ' + channel_name + ' :' + auditee_nick + ' ack:' + ack + ' logsig:' + b64_sig  +'\r\n', ack)
+            send_message('logsig:' + b64_sig)
             progressQueue.put(time.strftime('%H:%M:%S', time.localtime()) + ': The auditee has successfully finished the audit session')
             progressQueue.put(time.strftime('%H:%M:%S', time.localtime()) + ': All data pertaining to this session can be found at ' + current_sessiondir)
             progressQueue.put(time.strftime('%H:%M:%S', time.localtime()) + ': You may now close the browser.')
@@ -387,54 +215,103 @@ def process_messages():
         #and go to Edit-Preferences-Protocols-HTTP in SSL/TLS Ports enter 1024-65535, 
         #otherwise wireshark will fail do decrypt even when using the Decode As function
             
-        elif msg[5].startswith('der:'): #the first msg must be 'der'
-            ack = msg[4][len('seq:'):]
-            b64_der = msg[5][len('der:'):]
-            try:
-                der = base64.b64decode(b64_der)
-            except:
-                print ('base64 decode error')
-                continue
-            status, pms, encpms = get_encrypted_pms(der)
-            if status != 'success':
-                print ('Error in get_encrypted_pms')
-                continue
-            b64_encpms = base64.b64encode(encpms)
-            send_message('PRIVMSG ' + channel_name + ' :' + auditee_nick + ' ack:' + ack + ' encpms:'+ b64_encpms + '\r\n', ack)
+        elif msg.startswith('cr_sr_hmac_n_e:'): #the first msg must be 'der'
             progressQueue.put(time.strftime('%H:%M:%S', time.localtime()) + ': Processing data from the auditee.')
-        else:
-            print ('expected der, received something else instead')
-            continue
+            b64_cr_sr_hmac_n_e = msg[len('cr_sr_hmac_n_e:'):]
+            try: cr_sr_hmac_n_e = base64.b64decode(b64_cr_sr_hmac_n_e)
+            except:
+                print ('base64 decode error in cr_sr_hmac_n_e')
+                continue
+         
         
-        msg = recvQueue.get(block=True, timeout=10)
-        if not msg[5].startswith('crsr'): continue
-        ack = msg[4][len('seq:'):]
-        b64_crsr = msg[5][len('crsr:'):]
-        try:
-            crsr = base64.b64decode(b64_crsr)
-        except:
-            print ('base64 decode error')
-            continue
-        cr = crsr[:32]
-        sr = crsr[32:]
-        ms, ek = get_expanded_keys(cr,sr, pms)
-        b64_ek = base64.b64encode(ek)
-        send_message('PRIVMSG ' + channel_name + ' :' + auditee_nick + ' ack:' + ack + ' ek:'+ b64_ek  + '\r\n', ack)
-        
-        msg = recvQueue.get(block=True, timeout=10)
-        if not msg[5].startswith('md5sha'): continue
-        ack = msg[4][len('seq:'):]
-        b64_md5sha = msg[5][len('md5sha:'):]
-        try:
-            md5sha = base64.b64decode(b64_md5sha)
-        except:
-            print ('base64 decode error')
-            continue
-        md5 = md5sha[:16] #md5 hash is 16bytes
-        sha = md5sha[16:]   #sha hash is 20 bytes
-        verify_data = get_verify_data(md5, sha, ms)
-        b64_verify_data = base64.b64encode(verify_data)
-        send_message('PRIVMSG ' + channel_name + ' :' + auditee_nick + ' ack:' + ack + ' verify_data:'+ b64_verify_data  + '\r\n', ack)
+            cr = cr_sr_hmac_n_e[:32]
+            sr = cr_sr_hmac_n_e[32:64]
+            md5hmac_for_MS_first_half=cr_sr_hmac_n_e[64:88]
+            n = cr_sr_hmac_n_e[88:344]
+            e = cr_sr_hmac_n_e[344:]
+            n_int = int(n.encode('hex'),16)
+            e_int = int(e.encode('hex'),16)
+            
+            PMS_second_half =  os.urandom(secretbytes_amount) + ('\x00' * (24-secretbytes_amount-1)) + '\x01'
+            #RSA encryption without padding: ciphertext = plaintext^e mod n
+            RSA_PMS_second_half_int = pow( int(('\x01'+('\x00'*25)+PMS_second_half).encode('hex'),16), e_int, n_int )
+            
+            label = "master secret"
+            seed = cr + sr        
+            #start the PRF
+            sha1A1 = hmac.new(PMS_second_half,  label+seed, hashlib.sha1).digest()
+            sha1A2 = hmac.new(PMS_second_half,  sha1A1, hashlib.sha1).digest()
+            sha1A3 = hmac.new(PMS_second_half,  sha1A2, hashlib.sha1).digest()
+            
+            sha1hmac1 = hmac.new(PMS_second_half, sha1A1 + label + seed, hashlib.sha1).digest()
+            sha1hmac2 = hmac.new(PMS_second_half, sha1A2 + label + seed, hashlib.sha1).digest()
+            sha1hmac3 = hmac.new(PMS_second_half, sha1A3 + label + seed, hashlib.sha1).digest()
+            sha1hmac = sha1hmac1+sha1hmac2+sha1hmac3
+
+            sha1hmac_for_MS_first_half = sha1hmac[:24]
+            sha1hmac_for_MS_second_half = sha1hmac[24:48]
+            
+            MS_first_half = bytearray([ord(a) ^ ord(b) for a,b in zip(md5hmac_for_MS_first_half, sha1hmac_for_MS_first_half)])
+            
+            #master secret key expansion
+            #see RFC2246 6.3. Key calculation & 5. HMAC and the pseudorandom function   
+            #for AES-CBC-SHA  (in bytes): mac secret 20, write key 32, IV 16
+            #hence we need to generate 2*(20+32+16)= 136 bytes
+            #the IVs will be ignored
+            # 7 sha hmacs * 20 = 140 and 9 md5 hmacs * 16 = 144
+            label = "key expansion"
+            seed = sr + cr
+            #this is not optimized in a loop on purpose. I want people to see exactly what is going on
+            md5A1 = hmac.new(MS_first_half,  label+seed, hashlib.md5).digest()
+            md5A2 = hmac.new(MS_first_half,  md5A1, hashlib.md5).digest()
+            md5A3 = hmac.new(MS_first_half,  md5A2, hashlib.md5).digest()
+            md5A4 = hmac.new(MS_first_half,  md5A3, hashlib.md5).digest()
+            md5A5 = hmac.new(MS_first_half,  md5A4, hashlib.md5).digest()
+            md5A6 = hmac.new(MS_first_half,  md5A5, hashlib.md5).digest()
+            md5A7 = hmac.new(MS_first_half,  md5A6, hashlib.md5).digest()
+            md5A8 = hmac.new(MS_first_half,  md5A7, hashlib.md5).digest()
+            md5A9 = hmac.new(MS_first_half,  md5A8, hashlib.md5).digest()
+            
+            md5hmac1 = hmac.new(MS_first_half, md5A1 + label + seed, hashlib.md5).digest()
+            md5hmac2 = hmac.new(MS_first_half, md5A2 + label + seed, hashlib.md5).digest()
+            md5hmac3 = hmac.new(MS_first_half, md5A3 + label + seed, hashlib.md5).digest()
+            md5hmac4 = hmac.new(MS_first_half, md5A4 + label + seed, hashlib.md5).digest()
+            md5hmac5 = hmac.new(MS_first_half, md5A5 + label + seed, hashlib.md5).digest()
+            md5hmac6 = hmac.new(MS_first_half, md5A6 + label + seed, hashlib.md5).digest()
+            md5hmac7 = hmac.new(MS_first_half, md5A7 + label + seed, hashlib.md5).digest()
+            md5hmac8 = hmac.new(MS_first_half, md5A8 + label + seed, hashlib.md5).digest()
+            md5hmac9 = hmac.new(MS_first_half, md5A9 + label + seed, hashlib.md5).digest()
+            
+            md5hmac = (md5hmac1+md5hmac2+md5hmac3+md5hmac4+md5hmac5+md5hmac6+md5hmac7+md5hmac8+md5hmac9)[:136]
+            #fill the place of server MAC with zeroes
+            md5hmac_for_ek = md5hmac[:20] + bytearray(os.urandom(20)) + md5hmac[40:136]
+            
+            rsapms_hmacms_hmacek = bigint_to_bytearray(RSA_PMS_second_half_int)+sha1hmac_for_MS_second_half+md5hmac_for_ek
+            b64_rsapms_hmacms_hmacek = base64.b64encode(rsapms_hmacms_hmacek)
+            send_message('rsapms_hmacms_hmacek:'+ b64_rsapms_hmacms_hmacek)
+            
+            try: msg = recvQueue.get(block=True, timeout=10)
+            except: 
+                print ('did not receive verify_md5sha in 10 secs')
+                return 'did not receive verify_md5sha in 10 secs'
+            if not msg.startswith('verify_md5sha'): continue
+            b64_md5sha = msg[len('verify_md5sha:'):]
+            try: md5sha = base64.b64decode(b64_md5sha)
+            except:
+                print ('base64 decode error in verify_md5sha')
+                continue
+            md5 = md5sha[:16] #md5 hash is 16bytes
+            sha = md5sha[16:]   #sha hash is 20 bytes
+            
+            #calculate verify_data for Finished message
+            #see RFC2246 7.4.9. Finished & 5. HMAC and the pseudorandom function
+            label = "client finished"
+            seed = md5 + sha
+           
+            md5A1 = hmac.new(MS_first_half,  label+seed, hashlib.md5).digest()
+            md5hmac1 = hmac.new(MS_first_half, md5A1 + label + seed, hashlib.md5).digest()
+            b64_verify_hmac = base64.b64encode(md5hmac1)
+            send_message('verify_hmac:'+b64_verify_hmac)
         
       
 #Receive HTTP HEAD requests from FF extension. This is how the extension communicates with python backend.
@@ -574,72 +451,82 @@ class Handler(SimpleHTTPServer.SimpleHTTPRequestHandler):
             self.send_header("response", "unknown command")
             self.end_headers()
             return
+    
       
-#listen for auditor's messages and count them. Used to prevent the loss of messages.
-def count_my_messages_thread(nick, IRCsocket):
-    while True:
+def registerAuditeeThread():
+    global auditee_nick
+
+    with open(os.path.join(current_sessiondir, 'mypubkey'), 'r') as f: my_pubkey_pem =f.read()
+    myPublicKey = rsa.PublicKey.load_pkcs1(my_pubkey_pem)
+    myPublicKeyHash = hashlib.sha256(str(myPublicKey.n)).hexdigest()
+    bIsAuditeeRegistered = False
+    IRCsocket.settimeout(1)
+    while not bIsAuditeeRegistered: 
         buffer = ''
         try: buffer = IRCsocket.recv(1024)
         except: continue #1 sec timeout
         if not buffer: continue
-        #sometimes the IRC server may pack multiple PRIVMSGs into one message separated with \r\n
         print (buffer)
-        messages = buffer.split('\r\n')
+        messages = buffer.split('\r\n')  #sometimes the IRC server may pack multiple PRIVMSGs into one message separated with /r/n/
         for onemsg in messages:
             msg = onemsg.split()
             if len(msg)==0 : continue  #stray newline
-            if msg[0] == "PING": #check if server have sent ping command
+            if msg[0] == "PING":
                 IRCsocket.send("PONG %s" % msg[1]) #answer with pong as per RFC 1459
                 continue
-            else:
-                if not len(msg) == 6: continue
-                #check if the message was sent by me (the auditor)
+            if not len(msg) == 4: continue
+            if not (msg[1]=='PRIVMSG' and msg[2]==channel_name and msg[3].startswith(':client_hello:')): continue
+            b64_hello = msg[3][len(':client_hello:'):]
+            try:
+                hello = base64.b64decode(b64_hello)
+                keyhash = hello[:64] #this is the hash of auditor's pubkey
+                sig = hello[64:] #this is a sig for 'client_hello'. The auditor is expected to have received auditee's pubkey via other channels
+                if keyhash != myPublicKeyHash : continue
+                rsa.verify('client_hello', sig, auditeePublicKey)
+                #we get here if there was no exception
+                #msg[0] looks like (without quotes) ":supernick!some_other_info"
                 exclamaitionMarkPosition = msg[0].find('!')
-                auditor_nick_from_message = msg[0][1:exclamaitionMarkPosition]
-                if not nick == auditor_nick_from_message: continue
-                #extract the ack No and put it on the Queue
-                if not msg[4].startswith('ack:'): continue
-                ackno = msg[4][len('ack:'):]
-                countQueue.put(ackno)
-
-      
-      
-def start_irc():
-    progressQueue.put(time.strftime('%H:%M:%S', time.localtime()) +': Connecting to irc.freenode.org and joining #tlsnotary')
-    global my_nick
-    global IRCsocket
-    my_nick= 'user' + ''.join(random.choice('0123456789') for x in range(10))    
-    IRCsocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    IRCsocket.settimeout(1)
-    IRCsocket.connect(('chat.freenode.net', 6667))
+                auditee_nick = msg[0][1:exclamaitionMarkPosition]
+                print ('Auditee successfully verified')
+                bIsAuditeeRegistered = True
+                break
+            except:
+                print ('Verification of a hello message failed')
+                continue
+    if not bIsAuditeeRegistered:
+        return ('failure',)
+    #else send back a hello message
+    signed_hello = rsa.sign('server_hello', myPrivateKey, 'SHA-1')
+    b64_signed_hello = base64.b64encode(signed_hello)
+    IRCsocket.send('PRIVMSG ' + channel_name + ' :' + auditee_nick + ' server_hello:'+b64_signed_hello + ' \r\n')
+    progressQueue.put(time.strftime('%H:%M:%S', time.localtime()) + ': Auditee has been authorized. Awaiting data...')\
+    
     thread = threading.Thread(target= receivingThread)
     thread.daemon = True
     thread.start()
-    IRCsocket.send("USER %s %s %s %s" % ('one', 'two', 'three', 'four') + '\r\n')
-    IRCsocket.send("NICK " + my_nick + '\r\n')  
-    IRCsocket.send("JOIN %s" % channel_name + '\r\n')
-        
+            
     thread = threading.Thread(target= process_messages)
     thread.daemon = True
     thread.start()
     
-    #connect a shadow user which does nothing but counts our messages on the channel
-    #this is needed because I observed that even though I dispatch messages to Freenode,
-    #sometimes (very rarely, though) they fail to appear on the channel
-    shadow_nick= 'user' + ''.join(random.choice('0123456789') for x in range(10))    
-    shadow_IRCsocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    shadow_IRCsocket.settimeout(1)
-    shadow_IRCsocket.connect(('chat.freenode.net', 6667))
-    shadow_IRCsocket.send("USER %s %s %s %s" % ('five', 'six', 'seven', 'eight') + '\r\n')
-    shadow_IRCsocket.send("NICK " + shadow_nick + '\r\n')  
-    shadow_IRCsocket.send("JOIN %s" % channel_name + '\r\n')
     
-    thread = threading.Thread(target= count_my_messages_thread, args=(my_nick, shadow_IRCsocket))
+      
+def start_irc():
+    global my_nick
+    global IRCsocket
+    progressQueue.put(time.strftime('%H:%M:%S', time.localtime()) +': Connecting to irc.freenode.org and joining #tlsnotary')
+    
+    my_nick= 'user' + ''.join(random.choice('0123456789') for x in range(10))    
+    IRCsocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    IRCsocket.connect(('chat.freenode.net', 6667))
+    IRCsocket.send("USER %s %s %s %s" % ('one', 'two', 'three', 'four') + '\r\n')
+    IRCsocket.send("NICK " + my_nick + '\r\n')  
+    IRCsocket.send("JOIN %s" % channel_name + '\r\n')
+    progressQueue.put(time.strftime('%H:%M:%S', time.localtime()) + ': Connected to IRC successfully. Waiting for the auditee to join the channel...')
+
+    thread = threading.Thread(target= registerAuditeeThread)
     thread.daemon = True
-    thread.start()
-    progressQueue.put(time.strftime('%H:%M:%S', time.localtime()) + ': Connected to IRC successfully. You may now invite the auditee to start the auditing process')
-    progressQueue.put(time.strftime('%H:%M:%S', time.localtime()) + ': Waiting for the auditee to join the channel...')
-    
+    thread.start()        
     return 'success'
     
 
