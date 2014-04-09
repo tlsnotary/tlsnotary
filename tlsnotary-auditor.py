@@ -54,6 +54,8 @@ channel_name = '#tlsnotary'
 myPrivateKey = auditeePublicKey = None
 #uid used to create a unique name when logging each set of messages
 uid = ''
+google_modulus = 0
+google_exponent = 0
 
 recvQueue = Queue.Queue() #all IRC messages are placed on this queue
 ackQueue = Queue.Queue() #count_my_messages_thread places messages' ordinal numbers on this thread 
@@ -90,6 +92,7 @@ def receivingThread():
         receivingThread.last_seq_which_i_acked = 0 #static variable. Initialized only on first function's run
      
     first_chunk='' #we put the first chunk here and do a new loop iteration to pick up the second one
+    second_chunk=''
     while True:
         buffer = ''
         try: buffer = IRCsocket.recv(1024)
@@ -121,22 +124,26 @@ def receivingThread():
                 continue
             if not his_seq == receivingThread.last_seq_which_i_acked+1: continue #we did not receive the next seq in order
             #else we got a new seq      
-            if first_chunk=='' and  not msg[5].startswith( ('cr_sr_hmac_n_e', 'verify_md5sha:', 'zipsig:') ) : continue         
+            if first_chunk=='' and  not msg[5].startswith( ('cr_sr_hmac_n_e_gcr_gsr', 'verify_md5sha:', 'zipsig:') ) : continue         
             #check if this is the first chunk of a chunked message. Only 2 chunks are supported for now
             #'CRLF' is used at the end of the first chunk, 'EOL' is used to show that there are no more chunks
             if msg[-1]=='CRLF':
-                if first_chunk != '': #we already have one chunk, no more are allowed
-                    continue
-                #else
-                first_chunk = msg[5]
+                if first_chunk != '': 
+                    if second_chunk != '': #we already have two chunks, no more are allowed
+                        continue
+                    else:
+                        second_chunk = msg[5]
+                else:
+                    first_chunk = msg[5]
                 IRCsocket.send('PRIVMSG ' + channel_name + ' :' + auditee_nick + ' ack:' + str(his_seq) + ' \r\n')
                 receivingThread.last_seq_which_i_acked = his_seq
                 continue #go pickup another chunk
-            elif msg[-1]=='EOL' and first_chunk != '': #second chunk arrived
+            elif msg[-1]=='EOL' and first_chunk != '': #last chunk arrived
                 print ('second chunk arrived')
-                assembled_message = first_chunk + msg[5]
+                assembled_message = first_chunk + second_chunk + msg[5]
                 recvQueue.put(assembled_message)
                 first_chunk='' #empty the container for the next iterations
+                second_chunk=''
                 IRCsocket.send('PRIVMSG ' + channel_name + ' :' + auditee_nick + ' ack:' + str(his_seq) + ' \r\n')
                 receivingThread.last_seq_which_i_acked = his_seq
             elif msg[-1]=='EOL':
@@ -149,6 +156,9 @@ def send_message(data):
     if not hasattr(send_message, "my_seq"):
         send_message.my_seq = 100000 #static variable. Initialized only on first function's run
 
+    #empty queue from possible leftovers
+    #try: ackQueue.get_nowait()
+    #except: pass
     #split up data longer than 400 bytes (IRC message limit is 512 bytes including the header data)
     #'\r\n' must go to the end of each message
     chunks = len(data)/400 + 1
@@ -186,6 +196,7 @@ def process_messages():
         try:
             msg = recvQueue.get(block=True, timeout=1)
         except: continue
+        print ('got msg ' + str(msg) + ' from recvQueue')
         if msg.startswith('zipsig:'): #the user has finished  and send the signature of the trace zipfile
             b64_zipsig = msg[len('zipsig:'):]
             try:
@@ -215,26 +226,29 @@ def process_messages():
         #and go to Edit-Preferences-Protocols-HTTP in SSL/TLS Ports enter 1024-65535, 
         #otherwise wireshark will fail do decrypt even when using the Decode As function
             
-        elif msg.startswith('cr_sr_hmac_n_e:'): #the first msg must be 'der'
+        elif msg.startswith('cr_sr_hmac_n_e_gcr_gsr:'): #the first msg must be 'cr_sr_hmac_n_e_gcr_gsr'
             progressQueue.put(time.strftime('%H:%M:%S', time.localtime()) + ': Processing data from the auditee.')
-            b64_cr_sr_hmac_n_e = msg[len('cr_sr_hmac_n_e:'):]
-            try: cr_sr_hmac_n_e = base64.b64decode(b64_cr_sr_hmac_n_e)
+            b64_cr_sr_hmac_n_e_gcr_gsr = msg[len('cr_sr_hmac_n_e_gcr_gsr:'):]
+            try: cr_sr_hmac_n_e_gcr_gsr = base64.b64decode(b64_cr_sr_hmac_n_e_gcr_gsr)
             except:
-                print ('base64 decode error in cr_sr_hmac_n_e')
+                print ('base64 decode error in cr_sr_hmac_n_e_gcr_gsr')
                 continue
-         
-        
-            cr = cr_sr_hmac_n_e[:32]
-            sr = cr_sr_hmac_n_e[32:64]
-            md5hmac_for_MS_first_half=cr_sr_hmac_n_e[64:88]
-            n = cr_sr_hmac_n_e[88:344]
-            e = cr_sr_hmac_n_e[344:]
+               
+            cr = cr_sr_hmac_n_e_gcr_gsr [:32]
+            sr = cr_sr_hmac_n_e_gcr_gsr [32:64]
+            md5hmac_for_MS_first_half=cr_sr_hmac_n_e_gcr_gsr [64:88] #half of MS's 48 bytes
+            n = cr_sr_hmac_n_e_gcr_gsr [88:344]
+            e = cr_sr_hmac_n_e_gcr_gsr [344:347]
+            google_cr = cr_sr_hmac_n_e_gcr_gsr[347:379]
+            google_sr = cr_sr_hmac_n_e_gcr_gsr[379:411]
             n_int = int(n.encode('hex'),16)
             e_int = int(e.encode('hex'),16)
-            
+                        
             PMS_second_half =  os.urandom(secretbytes_amount) + ('\x00' * (24-secretbytes_amount-1)) + '\x01'
             #RSA encryption without padding: ciphertext = plaintext^e mod n
             RSA_PMS_second_half_int = pow( int(('\x01'+('\x00'*25)+PMS_second_half).encode('hex'),16), e_int, n_int )
+            RSA_PMS_google_int = pow( int(('\x01'+('\x00'*25)+PMS_second_half).encode('hex'),16), google_exponent, google_modulus )
+            grsapms = bigint_to_bytearray(RSA_PMS_google_int)
             
             label = "master secret"
             seed = cr + sr        
@@ -253,9 +267,23 @@ def process_messages():
             
             MS_first_half = bytearray([ord(a) ^ ord(b) for a,b in zip(md5hmac_for_MS_first_half, sha1hmac_for_MS_first_half)])
             
+            #-------------------BEGIN get sha1hmac for google
+            label = "master secret"
+            seed = google_cr + google_sr        
+            #start the PRF
+            sha1A1 = hmac.new(PMS_second_half,  label+seed, hashlib.sha1).digest()
+            sha1A2 = hmac.new(PMS_second_half,  sha1A1, hashlib.sha1).digest()
+            sha1A3 = hmac.new(PMS_second_half,  sha1A2, hashlib.sha1).digest()
+            
+            sha1hmac1 = hmac.new(PMS_second_half, sha1A1 + label + seed, hashlib.sha1).digest()
+            sha1hmac2 = hmac.new(PMS_second_half, sha1A2 + label + seed, hashlib.sha1).digest()
+            sha1hmac3 = hmac.new(PMS_second_half, sha1A3 + label + seed, hashlib.sha1).digest()
+            ghmac = (sha1hmac1+sha1hmac2+sha1hmac3)[:48]
+            #-------------------END get sha1hmac for google
+            
             #master secret key expansion
             #see RFC2246 6.3. Key calculation & 5. HMAC and the pseudorandom function   
-            #for AES-CBC-SHA  (in bytes): mac secret 20, write key 32, IV 16
+            #for AES256-CBC-SHA  (in bytes): mac secret 20, write key 32, IV 16
             #hence we need to generate 2*(20+32+16)= 136 bytes
             #the IVs will be ignored
             # 7 sha hmacs * 20 = 140 and 9 md5 hmacs * 16 = 144
@@ -286,15 +314,12 @@ def process_messages():
             #fill the place of server MAC with zeroes
             md5hmac_for_ek = md5hmac[:20] + bytearray(os.urandom(20)) + md5hmac[40:136]
             
-            rsapms_hmacms_hmacek = bigint_to_bytearray(RSA_PMS_second_half_int)+sha1hmac_for_MS_second_half+md5hmac_for_ek
-            b64_rsapms_hmacms_hmacek = base64.b64encode(rsapms_hmacms_hmacek)
-            send_message('rsapms_hmacms_hmacek:'+ b64_rsapms_hmacms_hmacek)
+            rsapms_hmacms_hmacek_grsapms_ghmac = bigint_to_bytearray(RSA_PMS_second_half_int)+sha1hmac_for_MS_second_half+md5hmac_for_ek+grsapms+ghmac
+            b64_rsapms_hmacms_hmacek_grsapms_ghmac = base64.b64encode(rsapms_hmacms_hmacek_grsapms_ghmac)
+            send_message('rsapms_hmacms_hmacek_grsapms_ghmac:'+ b64_rsapms_hmacms_hmacek_grsapms_ghmac)
+            continue
             
-            try: msg = recvQueue.get(block=True, timeout=10)
-            except: 
-                print ('did not receive verify_md5sha in 10 secs')
-                return 'did not receive verify_md5sha in 10 secs'
-            if not msg.startswith('verify_md5sha'): continue
+        elif msg.startswith('verify_md5sha:'):
             b64_md5sha = msg[len('verify_md5sha:'):]
             try: md5sha = base64.b64decode(b64_md5sha)
             except:
@@ -455,11 +480,14 @@ class Handler(SimpleHTTPServer.SimpleHTTPRequestHandler):
       
 def registerAuditeeThread():
     global auditee_nick
+    global google_modulus
+    global google_exponent
 
     with open(os.path.join(current_sessiondir, 'mypubkey'), 'r') as f: my_pubkey_pem =f.read()
     myPublicKey = rsa.PublicKey.load_pkcs1(my_pubkey_pem)
-    myPublicKeyHash = hashlib.sha256(str(myPublicKey.n)).hexdigest()
+    myModulus = bigint_to_bytearray(myPublicKey.n)[:10]
     bIsAuditeeRegistered = False
+    chunk1 = ''
     IRCsocket.settimeout(1)
     while not bIsAuditeeRegistered: 
         buffer = ''
@@ -475,21 +503,33 @@ def registerAuditeeThread():
                 IRCsocket.send("PONG %s" % msg[1]) #answer with pong as per RFC 1459
                 continue
             if not len(msg) == 4: continue
-            if not (msg[1]=='PRIVMSG' and msg[2]==channel_name and msg[3].startswith(':client_hello:')): continue
+            if not (msg[1]=='PRIVMSG' and msg[2]==channel_name and msg[3].startswith((':google_pubkey:', ':client_hello:'))): continue
+            if msg[3].startswith(':google_pubkey:') and auditee_nick != '': #we already got the first client_hello part
+                try:
+                    b64_google_pubkey = msg[3][len(':client_hello:'):]
+                    google_pubkey =  base64.b64decode(b64_google_pubkey)
+                    google_modulus_byte = google_pubkey[:256]
+                    google_exponent_byte = google_pubkey[256:]
+                    google_modulus = int(google_modulus_byte.encode('hex'),16)
+                    google_exponent = int(google_exponent_byte.encode('hex'),16)
+                    print ('Auditee successfully verified')
+                    bIsAuditeeRegistered = True
+                    break
+                except:
+                    print ('Error while processing google pubkey')
+                    auditee_nick=''#erase the nick so that the auditee could try registering again
+                    continue
             b64_hello = msg[3][len(':client_hello:'):]
             try:
                 hello = base64.b64decode(b64_hello)
-                keyhash = hello[:64] #this is the hash of auditor's pubkey
-                sig = hello[64:] #this is a sig for 'client_hello'. The auditor is expected to have received auditee's pubkey via other channels
-                if keyhash != myPublicKeyHash : continue
+                modulus = hello[:10] #this is the first 10 bytes of modulus of auditor's pubkey
+                sig = hello[10:] #this is a sig for 'client_hello'. The auditor is expected to have received auditee's pubkey via other channels
+                if modulus != myModulus : continue
                 rsa.verify('client_hello', sig, auditeePublicKey)
                 #we get here if there was no exception
                 #msg[0] looks like (without quotes) ":supernick!some_other_info"
                 exclamaitionMarkPosition = msg[0].find('!')
                 auditee_nick = msg[0][1:exclamaitionMarkPosition]
-                print ('Auditee successfully verified')
-                bIsAuditeeRegistered = True
-                break
             except:
                 print ('Verification of a hello message failed')
                 continue
@@ -519,7 +559,7 @@ def start_irc():
     my_nick= 'user' + ''.join(random.choice('0123456789') for x in range(10))    
     IRCsocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     IRCsocket.connect(('chat.freenode.net', 6667))
-    IRCsocket.send("USER %s %s %s %s" % ('one', 'two', 'three', 'four') + '\r\n')
+    IRCsocket.send("USER %s %s %s %s" % ('one1', 'two2', 'three3', 'four4') + '\r\n')
     IRCsocket.send("NICK " + my_nick + '\r\n')  
     IRCsocket.send("JOIN %s" % channel_name + '\r\n')
     progressQueue.put(time.strftime('%H:%M:%S', time.localtime()) + ': Connected to IRC successfully. Waiting for the auditee to join the channel...')
@@ -583,7 +623,7 @@ if __name__ == "__main__":
         tar.extractall()
     #both on first and subsequent runs
     sys.path.append(os.path.join(datadir, 'python', 'rsa-3.1.4'))
-    import rsa
+    import rsa 
     #init global vars
     myPrivateKey = rsa.key.PrivateKey
     auditeePublicKey = rsa.key.PublicKey

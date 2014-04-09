@@ -10,6 +10,7 @@ import os
 import platform
 import Queue
 import random
+import re
 import select
 import shutil
 import signal
@@ -27,6 +28,9 @@ installdir = os.path.dirname(os.path.realpath(__file__))
 datadir = os.path.join(installdir, 'data')
 nsslibdir = os.path.join(datadir, 'nsslibs')
 sessionsdir = os.path.join(datadir, 'sessions')
+
+sys.path.append(os.path.join(datadir, 'python', 'slowaes'))
+from aes import AESModeOfOperation
 
 m_platform = platform.system()
 if m_platform == 'Windows':
@@ -54,6 +58,8 @@ auditor_nick = '' #we learn auditor's nick as soon as we get a hello_server sign
 my_nick = '' #our nick is randomly generated on connection to IRC
 channel_name = '#tlsnotary'
 myPrivateKey = auditorPublicKey = None
+google_modulus = 0
+google_exponent = 0
 
 current_sessiondir = ''
 nss_patch_dir = ''
@@ -69,6 +75,14 @@ def bigint_to_bytearray(bigint):
         m_bytes.insert( 0, b )
         bigint //= 256
     return bytearray(m_bytes)
+
+def bigint_to_list(bigint):
+    m_bytes = []
+    while bigint != 0:
+        b = bigint%256
+        m_bytes.insert( 0, b )
+        bigint //= 256
+    return m_bytes
 
 
 #a thread which returns a value. This is achieved by passing self as the first argument to a target function
@@ -234,6 +248,18 @@ class HandlerClass(SimpleHTTPServer.SimpleHTTPRequestHandler):
             self.end_headers()
             return
         
+        if self.path.startswith('/nsstoggle'):
+            with open(os.path.join(nss_patch_dir, 'nss_patch_is_active'), "wb") as f: f.close()
+            time.sleep(2)
+            os.remove(os.path.join(nss_patch_dir, 'nss_patch_is_active'))
+            self.send_response(200)
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.send_header("Access-Control-Expose-Headers", "response, status")
+            self.send_header("response", "nsstoggle")
+            self.send_header("status", "success")
+            self.end_headers()
+            return
+        
         else:
             self.send_response(200)
             self.send_header("Access-Control-Allow-Origin", "*")
@@ -248,7 +274,9 @@ def send_and_recv (data):
     if not hasattr(send_and_recv, "my_seq"):
         send_and_recv.my_seq = 0 #static variable. Initialized only on first function's run
   
-    #split up data longer than 400 bytes (IRC message limit is 512 bytes including the header data)
+    #empty queue from possible leftovers
+    #try: ackQueue.get_nowait()
+    #except: pass    #split up data longer than 400 bytes (IRC message limit is 512 bytes including the header data)
     #'\r\n' must go to the end of each message
     chunks = len(data)/400 + 1
     if len(data)%400 == 0: chunks -= 1 #avoid creating an empty chunk if data length is a multiple of 400
@@ -277,6 +305,7 @@ def send_and_recv (data):
         try: onemsg = recvQueue.get(block=True, timeout=3)
         except:  continue #try to receive again
         return ('success', onemsg)
+    return ('failure',)
 
 
 
@@ -285,7 +314,7 @@ def stop_recording():
     global bReceivingThreadStopFlagIsSet
     
     #tell NSS to resume normal operation mode
-    os.remove(os.path.join(nss_patch_dir, 'nss_patch_is_active'))
+    #os.remove(os.path.join(nss_patch_dir, 'nss_patch_is_active'))
     #stop stcppipe
     os.kill(stcppipe_proc.pid, signal.SIGTERM)
     #TODO stop https proxy. 
@@ -381,27 +410,185 @@ def process_new_uid(uid):
     md5hmac_for_MS_first_half = md5hmac[:24]
     md5hmac_for_MS_second_half = md5hmac[24:48]
     
-    #first half of sha1hmac goes to the auditor
-    b64_cr_sr_hmac_n_e= base64.b64encode(cr+sr+md5hmac_for_MS_first_half+n+e)   
-    reply = send_and_recv('cr_sr_hmac_n_e:'+b64_cr_sr_hmac_n_e)
+    for i in range(5): #try 5 times until google check succeeds
+        #------------------------------connect to google and get cr and sr
+        cr_time = bigint_to_bytearray(int(time.time()))
+        gcr = cr_time + os.urandom(28)
+        client_hello = '\x16\x03\x01\x00\x2d\x01\x00\x00\x29\x03\x01' + gcr + '\x00\x00\x02\x00\x35\x01\x00'
+        tlssock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        tlssock.settimeout(10)
+        tlssock.connect(('google.com', 443))
+        tlssock.send(client_hello)
+        time.sleep(1)
+        serverhello_certificate_serverhellodone = tlssock.recv(8192*2)  #google sends a ridiculously long cert chain of 10KB+
+        #server hello starts with 16 03 01 * * 02
+        #certificate starts with 16 03 01 * * 0b
+        serverhellodone = '\x16\x03\x01\x00\x04\x0e\x00\x00\x00'   
+        if not re.match(re.compile(b'\x16\x03\x01..\x02'), serverhello_certificate_serverhellodone):
+            print ('Invalid server hello')
+            exit(1)
+        if not serverhello_certificate_serverhellodone.endswith(serverhellodone):
+            print ('invalid server hello done')
+            exit(1)
+        #find the beginning of certificate message
+        cert_match = re.search(re.compile(b'\x16\x03\x01..\x0b'), serverhello_certificate_serverhellodone)
+        if not cert_match:
+            print ('Invalid certificate message')
+            exit(1)
+        cert_start_position = cert_match.start()
+        serverhello = serverhello_certificate_serverhellodone[:cert_start_position]
+        certificate = serverhello_certificate_serverhellodone[cert_start_position : -len(serverhellodone)]
+        gsr = serverhello[11:43]
+                
+        b64_cr_sr_hmac_n_e_gcr_gsr= base64.b64encode(cr+sr+md5hmac_for_MS_first_half+n+e+gcr+gsr)
+        reply = send_and_recv('cr_sr_hmac_n_e_gcr_gsr:'+b64_cr_sr_hmac_n_e_gcr_gsr)
+        
+        if reply[0] != 'success':
+            print ('Failed to receive a reply for cr_sr_hmac_n_e:')
+            return ('Failed to receive a reply for cr_sr_hmac_n_e:')
+        if not reply[1].startswith('rsapms_hmacms_hmacek_grsapms_ghmac:'):
+            print ('bad reply. Expected rsapms_hmacms_hmacek_grsapms_ghmac:')
+            return 'bad reply. Expected rsapms_hmacms_hmacek_grsapms_ghmac:'
+        b64_rsapms_hmacms_hmacek_grsapms_ghmac = reply[1][len('rsapms_hmacms_hmacek_grsapms_ghmac:'):]
+        try:
+            rsapms_hmacms_hmacek_grsapms_ghmac = base64.b64decode(b64_rsapms_hmacms_hmacek_grsapms_ghmac)    
+        except:
+            print ('base64 decode error in rsapms_hmacms_hmacek_grsapms_ghmac')
+            return ('base64 decode error in rsapms_hmacms_hmacek_grsapms_ghmac')
+      
+        RSA_PMS_second_half = rsapms_hmacms_hmacek_grsapms_ghmac[:256]
+        RSA_PMS_second_half_int = int(RSA_PMS_second_half.encode('hex'), 16)
+        sha1hmac_for_MS_second_half = rsapms_hmacms_hmacek_grsapms_ghmac[256:280]
+        md5hmac_for_ek = rsapms_hmacms_hmacek_grsapms_ghmac[280:416]
+        RSA_PMS_second_half_google = rsapms_hmacms_hmacek_grsapms_ghmac[416:672]
+        sha1hmac_google = rsapms_hmacms_hmacek_grsapms_ghmac[672:720]
+        
+        #--------------------------------BEGIN check pms with google
+        label = "master secret"
+        seed = gcr + gsr
+        
+        md5A1 = hmac.new(PMS_first_half,  label+seed, hashlib.md5).digest()
+        md5A2 = hmac.new(PMS_first_half,  md5A1, hashlib.md5).digest()
+        md5A3 = hmac.new(PMS_first_half,  md5A2, hashlib.md5).digest()
+        
+        md5hmac1 = hmac.new(PMS_first_half, md5A1 + label + seed, hashlib.md5).digest()
+        md5hmac2 = hmac.new(PMS_first_half, md5A2 + label + seed, hashlib.md5).digest()
+        md5hmac3 = hmac.new(PMS_first_half, md5A3 + label + seed, hashlib.md5).digest()
+        md5hmac_google = (md5hmac1+md5hmac2+md5hmac3)[:48]
+        
+        #xor the two hmacs
+        xored = [ord(a) ^ ord(b) for a,b in zip(md5hmac_google,sha1hmac_google)]
+        gms = bytearray(xored)
+        
+        ms_first_half = gms[:24]
+        ms_second_half = gms[24:]
+        label = "key expansion"
+        seed = gsr + gcr
+        #this is not optimized in a loop on purpose. I want people to see exactly what is going on
+        md5A1 = hmac.new(ms_first_half, label+seed, hashlib.md5).digest()
+        md5A2 = hmac.new(ms_first_half, md5A1, hashlib.md5).digest()
+        md5A3 = hmac.new(ms_first_half, md5A2, hashlib.md5).digest()
+        md5A4 = hmac.new(ms_first_half, md5A3, hashlib.md5).digest()
+        md5A5 = hmac.new(ms_first_half, md5A4, hashlib.md5).digest()
+        md5A6 = hmac.new(ms_first_half, md5A5, hashlib.md5).digest()
+        md5A7 = hmac.new(ms_first_half, md5A6, hashlib.md5).digest()
+        md5A8 = hmac.new(ms_first_half, md5A7, hashlib.md5).digest()
+        md5A9 = hmac.new(ms_first_half, md5A8, hashlib.md5).digest()
+        
+        md5hmac1 = hmac.new(ms_first_half, md5A1 + label + seed, hashlib.md5).digest()
+        md5hmac2 = hmac.new(ms_first_half, md5A2 + label + seed, hashlib.md5).digest()
+        md5hmac3 = hmac.new(ms_first_half, md5A3 + label + seed, hashlib.md5).digest()
+        md5hmac4 = hmac.new(ms_first_half, md5A4 + label + seed, hashlib.md5).digest()
+        md5hmac5 = hmac.new(ms_first_half, md5A5 + label + seed, hashlib.md5).digest()
+        md5hmac6 = hmac.new(ms_first_half, md5A6 + label + seed, hashlib.md5).digest()
+        md5hmac7 = hmac.new(ms_first_half, md5A7 + label + seed, hashlib.md5).digest()
+        md5hmac8 = hmac.new(ms_first_half, md5A8 + label + seed, hashlib.md5).digest()
+        md5hmac9 = hmac.new(ms_first_half, md5A9 + label + seed, hashlib.md5).digest()
+        
+        md5hmac = md5hmac1+md5hmac2+md5hmac3+md5hmac4+md5hmac5+md5hmac6+md5hmac7+md5hmac8+md5hmac9
+        
+        
+        sha1A1 = hmac.new(ms_second_half, label+seed, hashlib.sha1).digest()
+        sha1A2 = hmac.new(ms_second_half, sha1A1, hashlib.sha1).digest()
+        sha1A3 = hmac.new(ms_second_half, sha1A2, hashlib.sha1).digest()
+        sha1A4 = hmac.new(ms_second_half, sha1A3, hashlib.sha1).digest()
+        sha1A5 = hmac.new(ms_second_half, sha1A4, hashlib.sha1).digest()
+        sha1A6 = hmac.new(ms_second_half, sha1A5, hashlib.sha1).digest()
+        sha1A7 = hmac.new(ms_second_half, sha1A6, hashlib.sha1).digest()
+        
+        sha1hmac1 = hmac.new(ms_second_half, sha1A1 + label + seed, hashlib.sha1).digest()
+        sha1hmac2 = hmac.new(ms_second_half, sha1A2 + label + seed, hashlib.sha1).digest()
+        sha1hmac3 = hmac.new(ms_second_half, sha1A3 + label + seed, hashlib.sha1).digest()
+        sha1hmac4 = hmac.new(ms_second_half, sha1A4 + label + seed, hashlib.sha1).digest()
+        sha1hmac5 = hmac.new(ms_second_half, sha1A5 + label + seed, hashlib.sha1).digest()
+        sha1hmac6 = hmac.new(ms_second_half, sha1A6 + label + seed, hashlib.sha1).digest()
+        sha1hmac7 = hmac.new(ms_second_half, sha1A7 + label + seed, hashlib.sha1).digest()
+        
+        sha1hmac = sha1hmac1+sha1hmac2+sha1hmac3+sha1hmac4+sha1hmac5+sha1hmac6+sha1hmac7
+        
+        xored = [ord(a) ^ ord(b) for a,b in zip(md5hmac,sha1hmac)]
+        gexpanded_keys = bytearray(xored)
+        
+        client_mac_key = gexpanded_keys[:20]
+        client_encryption_key = gexpanded_keys[40:72]
+        client_iv = gexpanded_keys[104:120]
+        
+        RSA_PMS_first_half_int_google = pow( int(('\x02'+('\x01'*156)+'\x00'+PMS_first_half+('\x00'*24)).encode('hex'), 16) + 1, google_exponent, google_modulus)
+        RSA_PMS_second_half_int_google = int(RSA_PMS_second_half_google.encode('hex'), 16)
+        enc_pms_int = (RSA_PMS_first_half_int_google*RSA_PMS_second_half_int_google) % google_modulus 
+        encpms_google = bigint_to_bytearray(enc_pms_int)
+        
+        client_key_exchange = '\x16\x03\x01\x01\x06\x10\x00\x01\x02\x01\00' + encpms_google
+        change_cipher_spec = '\x14\x03\01\x00\x01\x01'
+        
+        #calculate verify data. get hashes of all handshakes
+        handshake_messages = client_hello[5:]+serverhello[5:]+certificate[5:]+serverhellodone[5:]+client_key_exchange[5:]
+        sha = hashlib.sha1(handshake_messages).digest()
+        md5 = hashlib.md5(handshake_messages).digest()
+        #calculate verify_data for Finished message
+        #see RFC2246 7.4.9. Finished & 5. HMAC and the pseudorandom function
+        label = "client finished"
+        seed = md5 + sha
+        ms_first_half = gms[:24]
+        ms_second_half = gms[24:]
+        
+        md5A1 = hmac.new(ms_first_half, label+seed, hashlib.md5).digest()
+        md5hmac1 = hmac.new(ms_first_half, md5A1 + label + seed, hashlib.md5).digest()
+        
+        sha1A1 = hmac.new(ms_second_half, label+seed, hashlib.sha1).digest()
+        sha1hmac1 = hmac.new(ms_second_half, sha1A1 + label + seed, hashlib.sha1).digest()
+        
+        xored = [ord(a) ^ ord(b) for a,b in zip(md5hmac1,sha1hmac1)]
+        verify_data = bytearray(xored[:12])
+        
+        hmac_for_verify_data = hmac.new(client_mac_key, '\x00\x00\x00\x00\x00\x00\x00\x00' + '\x16' + '\x03\x01' + '\x00\x10' + '\x14\x00\x00\x0c' + verify_data, hashlib.sha1).digest()
     
-    if reply[0] != 'success':
-        print ('Failed to receive a reply for cr_sr_hmac_n_e:')
-        return ('Failed to receive a reply for cr_sr_hmac_n_e:')
-    if not reply[1].startswith('rsapms_hmacms_hmacek:'):
-        print ('bad reply. Expected rsapms_hmacms_hmacek:')
-        return 'bad reply. Expected rsapms_hmacms_hmacek:'
-    b64_rsapms_hmacms_hmacek = reply[1][len('rsapms_hmacms_hmacek:'):]
-    try:
-        rsapms_hmacms_hmacek = base64.b64decode(b64_rsapms_hmacms_hmacek)    
-    except:
-        print ('base64 decode error in rsapms_hmacms_hmacek')
-        return ('base64 decode error in rsapms_hmacms_hmacek')
-  
-    RSA_PMS_second_half = rsapms_hmacms_hmacek[:256]
-    RSA_PMS_second_half_int = int(RSA_PMS_second_half.encode('hex'), 16)
-    sha1hmac_for_MS_second_half = rsapms_hmacms_hmacek[256:280]
-    md5hmac_for_ek = rsapms_hmacms_hmacek[280:416]
+        moo = AESModeOfOperation()
+        cleartext = '\x14\x00\x00\x0c' + verify_data + hmac_for_verify_data
+        
+        cleartext_list = bigint_to_list(int(str(cleartext).encode('hex'),16))
+        client_encryption_key_list =  bigint_to_list(int(str(client_encryption_key).encode('hex'),16))
+        client_iv_list =  bigint_to_list(int(str(client_iv).encode('hex'),16))
+        
+        padded_cleartext = cleartext + ('\x0b' * 12) #this is violation of PKCS7 padding, because we are adding 12bytes, yet the padding char is 0x0b==11
+        #This must be investigated
+        try:
+            mode, orig_len, encrypted_verify_data_and_hmac_for_verify_data = moo.encrypt( str(padded_cleartext), moo.modeOfOperation["CBC"], client_encryption_key_list, moo.aes.keySize["SIZE_256"], client_iv_list)
+        except: # TODO find out why I once got TypeError: 'NoneType' object is not iterable.  It helps to catch an exception here
+            tlssock.close()
+            continue
+        
+        finished = '\x16\x03\x01\x00\x30' + bytearray(encrypted_verify_data_and_hmac_for_verify_data)
+        
+        tlssock.send(client_key_exchange+change_cipher_spec+finished)
+        time.sleep(1)
+        response = tlssock.recv(8192)
+        if not response.count(change_cipher_spec):
+            tlssock.close()
+            continue
+        tlssock.close()
+        break #successfull pms check 
+        #--------------------------------END check pms with google
     
     #RSA encryption without padding: ciphertext = plaintext^e mod n
     RSA_PMS_first_half_int = pow( int(('\x02'+('\x01'*156)+'\x00'+PMS_first_half+('\x00'*24)).encode('hex'), 16) + 1, exponent_int, modulus_int)
@@ -488,7 +675,8 @@ def nss_patch_dir_scan_thread():
     uidsAlreadyProcessed = []
     uid = ''
     #the other thread must delete the nss_patch_is_active file to signal that auditing session is over
-    while os.path.isfile(os.path.join(nss_patch_dir, 'nss_patch_is_active')):
+    #while os.path.isfile(os.path.join(nss_patch_dir, 'nss_patch_is_active')):
+    while True:
         time.sleep(0.1)
         bNewUIDFound = False
         files = os.listdir(nss_patch_dir)
@@ -509,69 +697,92 @@ def nss_patch_dir_scan_thread():
             break
 
 def new_connection_thread(socket_client, new_address):
-    #extract destnation address from the http header
+    #extract destination address from the http header
     #the header has a form of: CONNECT encrypted.google.com:443 HTTP/1.1 some_other_stuff
     headers_str = socket_client.recv(8192)
     headers = headers_str.split()
     if len(headers) < 2:
-        print ('Invalid or empty header received. Please investigate')
+        print ('Invalid or empty header received: ' + headers_str)
+        socket_client.close()
         return
     if headers[0] != 'CONNECT':
         print ('Expected CONNECT in header but got ' + headers[0] + '. Please investigate')
+        socket_client.close()
         return
     if headers[1].find(':') == -1:
         print ('Expected colon in the address part of the header but none found. Please investigate')
+        socket_client.close()
         return
     split_result = headers[1].split(':')
     if len(split_result) != 2:
         print ('Expected only two values after splitting the header. Please investigate')
+        socket_client.close()
         return
     host, port = split_result
     try:
         int_port = int(port)
     except:
         print ('Port is not a numerical value. Please investigate')
+        socket_client.close()
         return
-    host_ip = socket.gethostbyname(host)
-    socket_target = socket.socket(socket.AF_INET)
+    try: host_ip = socket.gethostbyname(host)
+    except: #happens when IP lookup fails for some IP6-only hosts
+        socket_client.close()
+        return
+    socket_target = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     socket_target.connect((host_ip, int_port))
     print ('New connection to ' + host_ip + ' port ' + port)
-    #tell Firefox that connection established and it can start sending data
+    #tell Firefox that connection is established and it can start sending data
     socket_client.send('HTTP/1.1 200 Connection established\n' + 'Proxy-agent: tlsnotary https proxy\n\n')
     
+    last_time_data_was_seen = int(time.time())
     while True:
-        rlist, wlist, xlist = select.select((socket_client, socket_target), (), (socket_client, socket_target), 120)
-        if len(rlist) == len(wlist) == len(xlist) == 0: #120 second timeout
-            print ('Socket 120 second timeout. Terminating connection')
+        rlist, wlist, xlist = select.select((socket_client, socket_target), (), (socket_client, socket_target), 60)
+        if len(rlist) == len(wlist) == len(xlist) == 0: #60 second timeout
+            print ('Socket 60 second timeout. Terminating connection')
+            socket_client.close()
+            socket_target.close()
             return
         if len(xlist) > 0:
             print ('Socket exceptional condition. Terminating connection')
+            socket_client.close()
+            socket_target.close()
             return
         if len(rlist) == 0:
             print ('Python internal socket error: rlist should not be empty. Please investigate. Terminating connection')
+            socket_client.close()
+            socket_target.close()
             return
         #else rlist contains socket with data
         for rsocket in rlist:
             try:
                 data = rsocket.recv(8192)
+                if not data: 
+                    #this worries me. Why did select() trigger if there was no data?
+                    #this overwhelms CPU big time unless we sleep
+                    if int(time.time()) - last_time_data_was_seen > 60: #prevent no-data sockets from looping endlessly
+                        socket_client.close()
+                        socket_target.close()
+                        return
+                    #else 60 seconds of datalessness have not elapsed
+                    time.sleep(0.1)
+                    continue 
+                last_time_data_was_seen = int(time.time())
+                if rsocket is socket_client:
+                    socket_target.send(data)
+                    continue
+                elif rsocket is socket_target:
+                    socket_client.send(data)
+                    continue
             except Exception, e:
                 print (e)
+                socket_client.close()
+                socket_target.close()
                 return
-            if not data: 
-                #this worries me. Why did select() trigger if there was no data?
-                #this overwhelms CPU big time unless we sleep
-                time.sleep(0.1)
-                continue 
-            if rsocket is socket_client:
-                socket_target.send(data)
-                continue
-            elif rsocket is socket_target:
-                socket_client.send(data)
-                continue
-        
+         
         
 def https_proxy_thread(parenthread, port):
-    socket_proxy = socket.socket(socket.AF_INET)
+    socket_proxy = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     try:
         socket_proxy.bind(('localhost', port))
         parenthread.retval = 'success'
@@ -579,10 +790,12 @@ def https_proxy_thread(parenthread, port):
         parenthread.retval = 'failure'
         return
     print ('HTTPS proxy is serving on port ' + str(port))
-    socket_proxy.listen(0) #process new connections immediately
+    socket_proxy.listen(5) #5 requests can be queued
     while True:
         #block until a new connection appears
+        print ('listening for a new connection')
         new_socket, new_address = socket_proxy.accept()
+        print ('new connection  accepted')
         thread = threading.Thread(target= new_connection_thread, args=(new_socket, new_address))
         thread.daemon = True
         thread.start()
@@ -631,7 +844,7 @@ def start_recording():
     print ('stcppipe is piping from port ' + str(FF_proxy_port) + ' to port ' + str(HTTPS_proxy_port))
     
     #finally let nss patch know we are ready and start monitoring
-    with open(os.path.join(nss_patch_dir, 'nss_patch_is_active'), "wb") as f: f.close()
+    #with open(os.path.join(nss_patch_dir, 'nss_patch_is_active'), "wb") as f: f.close()
     thread = threading.Thread(target= nss_patch_dir_scan_thread)
     thread.daemon = True
     thread.start()
@@ -645,6 +858,7 @@ def receivingThread(my_nick, auditor_nick, IRCsocket):
         receivingThread.last_seq_which_i_acked = 100000 #static variable. Initialized only on first function's run
     
     first_chunk='' #we put the first chunk here and do a new loop iteration to pick up the second one
+    second_chunk=''
     while not bReceivingThreadStopFlagIsSet:
         buffer = ''
         try: buffer = IRCsocket.recv(1024)
@@ -671,7 +885,7 @@ def receivingThread(my_nick, auditor_nick, IRCsocket):
             his_seq = int(msg[4][len('seq:'):])
             if his_seq <=  receivingThread.last_seq_which_i_acked: 
                 #the other side is out of sync, send an ack again
-                IRCsocket.send('PRIVMSG ' + channel_name + ' :' + auditee_nick + ' ack:' + str(his_seq) + ' \r\n')
+                IRCsocket.send('PRIVMSG ' + channel_name + ' :' + auditor_nick + ' ack:' + str(his_seq) + ' \r\n')
                 continue
             if not his_seq == receivingThread.last_seq_which_i_acked +1: continue #we did not receive the next seq in order
             #else we got a new seq      
@@ -679,18 +893,21 @@ def receivingThread(my_nick, auditor_nick, IRCsocket):
             #check if this is the first chunk of a chunked message. Only 2 chunks are supported for now
             #'CRLF' is used at the end of the first chunk, 'EOL' is used to show that there are no more chunks
             if msg[-1]=='CRLF':
-                if first_chunk != '': #we already have one chunk, no more are allowed
-                    continue
-                #else
-                first_chunk = msg[5]
+                if first_chunk != '':
+                    if second_chunk !='': #we already have two chunks, no more are allowed
+                        continue
+                    second_chunk = msg[5]
+                else:
+                    first_chunk = msg[5]
                 IRCsocket.send('PRIVMSG ' + channel_name + ' :' + auditor_nick + ' ack:' + str(his_seq) + ' \r\n')
                 receivingThread.last_seq_which_i_acked = his_seq
                 continue #go pickup another chunk
-            elif msg[-1]=='EOL' and first_chunk != '': #second chunk arrived
+            elif msg[-1]=='EOL' and first_chunk != '': #last chunk arrived
                 print ('second chunk arrived')
-                assembled_message = first_chunk + msg[5]
+                assembled_message = first_chunk + second_chunk + msg[5]
                 recvQueue.put(assembled_message)
                 first_chunk=''
+                second_chunk=''
                 IRCsocket.send('PRIVMSG ' + channel_name + ' :' + auditor_nick + ' ack:' + str(his_seq) + ' \r\n')
                 receivingThread.last_seq_which_i_acked = his_seq
             elif msg[-1]=='EOL':
@@ -729,6 +946,8 @@ def start_irc():
     global my_nick
     global auditor_nick
     global IRCsocket
+    global google_modulus
+    global google_exponent
     
     my_nick= 'user' + ''.join(random.choice('0123456789') for x in range(10))
     
@@ -738,10 +957,70 @@ def start_irc():
     IRCsocket.send("NICK " + my_nick + '\r\n')  
     IRCsocket.send("JOIN %s" % channel_name + '\r\n')
     
-    modulus_hash = hashlib.sha256(str(auditorPublicKey.n)).hexdigest()
+    # ----------------------------------BEGIN get the certficate for google.com and extract modulus/exponent
+    tlssock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    tlssock.settimeout(10)
+    tlssock.connect(('google.com', 443))
+    cr_time = bigint_to_bytearray(int(time.time()))
+    cr_google = cr_time + os.urandom(28)
+    client_hello = '\x16\x03\x01\x00\x2d\x01\x00\x00\x29\x03\x01' + cr_google + '\x00\x00\x02\x00\x35\x01\x00'
+    tlssock.send(client_hello)
+    time.sleep(1)
+    serverhello_certificate_serverhellodone = tlssock.recv(8192*2)    #google sends a ridiculously long cert chain of 10KB+
+    #server hello starts with 16 03 01 * * 02
+    #certificate starts with 16 03 01 * * 0b
+    serverhellodone = '\x16\x03\x01\x00\x04\x0e\x00\x00\x00'
+    
+    if not re.match(re.compile(b'\x16\x03\x01..\x02'), serverhello_certificate_serverhellodone):
+        print ('Invalid server hello from google')
+        return 'failure'
+    if not serverhello_certificate_serverhellodone.endswith(serverhellodone):
+        print ('invalid server hello done from google')
+        return 'failure'
+    #find the beginning of certificate message
+    cert_match = re.search(re.compile(b'\x16\x03\x01..\x0b'), serverhello_certificate_serverhellodone)
+    if not cert_match:
+        print ('Invalid certificate message from google')
+        return 'failure'
+    cert_start_position = cert_match.start()
+    certificate = serverhello_certificate_serverhellodone[cert_start_position : -len(serverhellodone)]
+    #extract modulus and exponent from the certificate
+    cert_len = int(certificate[12:15].encode('hex'),16)
+    google_cert = certificate[15:15+cert_len]
+    try:       
+        rv  = decoder.decode(google_cert, asn1Spec=univ.Sequence())
+        bitstring = rv[0].getComponentByPosition(0).getComponentByPosition(6).getComponentByPosition(1)
+        #bitstring is a list of ints, like [01110001010101000...]
+        #convert it into into a string   '01110001010101000...'
+        stringOfBits = ''
+        for bit in bitstring:
+            bit_as_str = str(bit)
+            stringOfBits += bit_as_str    
+        #treat every 8 chars as an int and pack the ints into a bytearray
+        ba = bytearray()
+        for i in range(0, len(stringOfBits)/8):
+            onebyte = stringOfBits[i*8 : (i+1)*8]
+            oneint = int(onebyte, base=2)
+            ba.append(oneint)       
+        #decoding the nested sequence
+        rv  = decoder.decode(str(ba), asn1Spec=univ.Sequence())
+        exponent = rv[0].getComponentByPosition(1)
+        modulus = rv[0].getComponentByPosition(0)
+        google_modulus = int(modulus)
+        google_exponent = int(exponent)
+        google_n = bigint_to_bytearray(google_modulus)
+        google_e = bigint_to_bytearray(google_exponent)
+    except:
+        print ('Error decoding der pubkey from google')
+        return 'failure'
+    # ----------------------------------END get the certficate for google.com and extract modulus/exponent
+
+       
+    modulus = bigint_to_bytearray(auditorPublicKey.n)[:10]
     signed_hello = rsa.sign('client_hello', myPrivateKey, 'SHA-1')
-    b64_hello = base64.b64encode(modulus_hash+signed_hello)
-    #hello contains the hash of the auditor's pubkey's n value (modulus)
+    b64_hello = base64.b64encode(modulus+signed_hello)
+    b64_google_pubkey = base64.b64encode(google_n+google_e)
+    #hello contains the first 10 bytes of modulus of the auditor's pubkey
     #this is how the auditor knows on IRC that we are addressing him. Thus we allow multiple audit sessions simultaneously
     IRCsocket.settimeout(1)
     bIsAuditorRegistered = False
@@ -749,6 +1028,8 @@ def start_irc():
         if bIsAuditorRegistered == True: break #previous iteration successfully regd the auditor
         time_attempt_began = int(time.time())
         IRCsocket.send('PRIVMSG ' + channel_name + ' :client_hello:'+b64_hello +' \r\n')
+        time.sleep(1)
+        IRCsocket.send('PRIVMSG ' + channel_name + ' :google_pubkey:'+b64_google_pubkey +' \r\n')
         while not bIsAuditorRegistered:
             if int(time.time()) - time_attempt_began > 10: break
             buffer = ''
