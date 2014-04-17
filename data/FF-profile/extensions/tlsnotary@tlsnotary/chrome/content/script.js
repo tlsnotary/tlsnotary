@@ -1,8 +1,13 @@
 var bStartRecordingResponded = false;
 var bStopRecordingResponded = false;
+var bStopPreparePMS = false;
+var bIsRecordngStarted = false;
 var reqStartRecording;
 var reqStopRecording;
+var reqPreparePMS;
 var port;
+var url_for_recording_full = "";
+var session_path = "";
 
 port = Components.classes["@mozilla.org/process/environment;1"].getService(Components.interfaces.nsIEnvironment).get("FF_to_backend_port");
 //setting homepage should be done from here rather than defaults.js in order to have the desired effect. FF's quirk.
@@ -31,13 +36,21 @@ function pollEnvvar(){
 
 
 function startRecording(){
+	url_for_recording_full = gBrowser.contentWindow.location.href;
+	if (!url_for_recording_full.startsWith("https://")){
+		alert("You can only record pages which start with https://");
+		return;
+	}
 	var button_record_enabled = document.getElementById("button_record_enabled");
 	var button_spinner = document.getElementById("button_spinner");
 	var button_stop_enabled = document.getElementById("button_stop_enabled");
 	var button_stop_disabled = document.getElementById("button_stop_disabled");
 
-
-	button_record_enabled.hidden = true;
+	if (bIsRecordngStarted){
+		preparePMS();
+		return;
+	}
+	button_record_enabled.hidden = false;
 	button_spinner.hidden = false;
 	button_stop_disabled.hidden = true;
 	button_stop_enabled.hidden = false;
@@ -50,6 +63,15 @@ function startRecording(){
     setTimeout(responseStartRecording, 1000, 0);
 }
 
+function preparePMS(){
+	//tell backend to prepare a google-checked PMS
+	reqPreparePMS = new XMLHttpRequest();
+    reqPreparePMS.onload = responsePreparePMS;
+    reqPreparePMS.open("HEAD", "http://127.0.0.1:"+port+"/prepare_pms", true);
+    reqPreparePMS.send();
+    //give 20 secs for escrow to respond
+    setTimeout(responsePreparePMS, 1000, 0);	
+}
 
 function responseStartRecording(iteration){
     if (typeof iteration == "number"){
@@ -75,20 +97,50 @@ function responseStartRecording(iteration){
 		return;
 	}
 	//else successful response
+	bIsRecordngStarted = true;
 	var proxy_port = reqStartRecording.getResponseHeader("proxy_port");
 	var prefs = Components.classes["@mozilla.org/preferences-service;1"].getService(Components.interfaces.nsIPrefService);
 	var port_int = parseInt(proxy_port);
-	var proxy_prefs = prefs.getBranch("network.proxy.");
-	proxy_prefs.setIntPref("type", 1);
-	proxy_prefs.setCharPref("ssl","127.0.0.1");
-	proxy_prefs.setIntPref("ssl_port", port_int);
+	prefs.setIntPref("network.proxy.type", 1);
+	prefs.setCharPref("network.proxy.ssl","127.0.0.1");
+	prefs.setIntPref("network.proxy.ssl_port", port_int);
 	var sdr = Components.classes["@mozilla.org/security/sdr;1"].getService(Components.interfaces.nsISecretDecoderRing);
 	sdr.logoutAndTeardown();
 	var help = document.getElementById("help");
+	preparePMS();
+}
+
+function responsePreparePMS(iteration){
+    if (typeof iteration == "number"){
+    //give 5 secs for backend to respond
+        if (iteration > 20){
+            alert("responsePreparePMS timed out");
+            return;
+        }
+        if (!bStopPreparePMS) setTimeout(responsePreparePMS, 1000, ++iteration)
+        return;
+    }
+    //else: not a timeout but a response from the server
+	bStopPreparePMS = true;
+    var query = reqPreparePMS.getResponseHeader("response");
+    var status = reqPreparePMS.getResponseHeader("status");
+   	if (query != "prepare_pms"){
+        alert("Internal error. Wrong response header: "+query);
+        return;
+    }
+	if (status != "success"){
+		alert ("Received an error message: " + status);
+		return;
+	}
+	//else success preparing PMS, resume page reload
+	var help = document.getElementById("help");
 	help.value = "You can navigate to more than one page. When finished, press STOP"
-	alert("Reloading may take up to one minute, depending on the number of resources on the page.")
+	//alert("Reloading may take up to one minute, depending on the number of resources on the page.")
+	observer = new myObserver();
 	BrowserReloadSkipCache();
 }
+
+
 
 
 function stopRecording(){
@@ -127,7 +179,7 @@ function responseStopRecording(iteration){
 	bStopRecordingResponded = true;
     var query = reqStopRecording.getResponseHeader("response");
     var status = reqStopRecording.getResponseHeader("status");
-    var session_path = reqStopRecording.getResponseHeader("session_path");
+    session_path = reqStopRecording.getResponseHeader("session_path");
 	
 	var button_spinner = document.getElementById("button_spinner");
 	var button_stop_disabled = document.getElementById("button_stop_disabled");
@@ -144,10 +196,41 @@ function responseStopRecording(iteration){
 	}
 	//else successful response, disable proxying
 	var prefs = Components.classes["@mozilla.org/preferences-service;1"].getService(Components.interfaces.nsIPrefService);
-	var proxy_prefs = prefs.getBranch("network.proxy.");
-	proxy_prefs.setIntPref("type", 0);
-	alert("Auditing session finished successfully. All files pertaining to this session are located in "+ session_path)
-	var help = document.getElementById("help");
-	help.value = "Your auditing session finished successfully. You may now close the browser."
+	prefs.setIntPref("network.proxy.type", 0);
+	start_jetbytes(); //from jetbytes.js
 }
 
+
+function myObserver() {  this.register();}
+myObserver.prototype = {
+  observe: function(aSubject, topic, data) {
+	 var httpChannel = aSubject.QueryInterface(Components.interfaces.nsIHttpChannel);
+	 var accept = httpChannel.getRequestHeader("Accept");
+	 var url_full = httpChannel.URI.spec;
+	 var regex= /html/;
+	 //remove the leading https:// and only keep the domain.com part
+	 var urlparts1 = url_for_recording_full.slice(8).split("/")[0].split(".");
+	 var url_for_recording_short = urlparts1[urlparts1.length-2] + "." + urlparts1[urlparts1.length-1];
+	 
+	 var urlparts2 = url_full.slice(8).split("/")[0].split(".");
+	 var url_short = urlparts2[urlparts2.length-2] + "." + urlparts2[urlparts2.length-1];
+	 
+	 var url = url_full;
+	 if ( (url_for_recording_short==url_short) && regex.test(accept) && url.startsWith("https://") && !url.endsWith(".png") && !url.endsWith(".gif") && !url.endsWith(".svg") && !url.endsWith(".css") && !url.endsWith(".js") && !url.endsWith(".jpg") && !url.endsWith(".ico") && !url.endsWith(".woff") && !url.endsWith(".swf") && !url.contains("favicon.ico#") ) 	{
+		Components.classes["@mozilla.org/process/environment;1"].getService(Components.interfaces.nsIEnvironment).set("NSS_PATCH_STAGE_ONE", "true");
+		console.log("patch toggled");
+		observer.unregister();
+	}
+  },
+  register: function() {
+    var observerService = Components.classes["@mozilla.org/observer-service;1"]
+                          .getService(Components.interfaces.nsIObserverService);
+    observerService.addObserver(this, "http-on-modify-request", false);
+  },
+  unregister: function() {
+    var observerService = Components.classes["@mozilla.org/observer-service;1"]
+                            .getService(Components.interfaces.nsIObserverService);
+    observerService.removeObserver(this, "http-on-modify-request");
+  }
+}
+var observer = new myObserver();

@@ -68,6 +68,10 @@ stcppipe_proc = None
 bReceivingThreadStopFlagIsSet = False
 secretbytes_amount=13
 
+PMS_first_half = '' #made global because of google check. TODO: start creating classes
+bIsStcppipeStarted = False
+cr_list = [] #a list of all client_randoms for recorded pages. Used to narrow down stcppipe's dump to only those files which auditor needs.
+
 def bigint_to_bytearray(bigint):
     m_bytes = []
     while bigint != 0:
@@ -104,6 +108,7 @@ class HandlerClass(SimpleHTTPServer.SimpleHTTPRequestHandler):
         global current_sessiondir
         global myPrivateKey
         global auditorPublicKey
+        global bIsStcppipeStarted
         
         print ('minihttp received ' + self.path + ' request',end='\r\n')
         # example HEAD string "/command?parameter=124value1&para2=123value2"    
@@ -207,7 +212,11 @@ class HandlerClass(SimpleHTTPServer.SimpleHTTPRequestHandler):
             return
         
         if self.path.startswith('/start_recording'):
-            rv = start_recording()
+            if not bIsStcppipeStarted:
+                bIsStcppipeStarted = True
+                rv = start_recording()
+            else:
+                rv = ('success', 'success')
             if rv[0] != 'success':
                 self.send_response(400)
                 self.send_header("Access-Control-Allow-Origin", "*")
@@ -248,15 +257,37 @@ class HandlerClass(SimpleHTTPServer.SimpleHTTPRequestHandler):
             self.end_headers()
             return
         
-        if self.path.startswith('/nsstoggle'):
-            with open(os.path.join(nss_patch_dir, 'nss_patch_is_active'), "wb") as f: f.close()
-            time.sleep(2)
-            os.remove(os.path.join(nss_patch_dir, 'nss_patch_is_active'))
+        if self.path.startswith('/prepare_pms'):
+            rv = prepare_pms()
+            if rv != 'success':
+                self.send_response(400)
+            else:
+                self.send_response(200)
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.send_header("Access-Control-Expose-Headers", "response, status")
+            self.send_header("response", "prepare_pms")
+            self.send_header("status", rv)
+            self.end_headers()
+            return
+        
+        if self.path.startswith('/inform_backend'):
+            prepare_to_delete_folder()
             self.send_response(200)
             self.send_header("Access-Control-Allow-Origin", "*")
             self.send_header("Access-Control-Expose-Headers", "response, status")
-            self.send_header("response", "nsstoggle")
-            self.send_header("status", "success")
+            self.send_header("response", "inform_backend")
+            self.send_header("status", 'success')
+            self.end_headers()
+            return
+        
+        if self.path.startswith('/send_link'):
+            filelink = self.path.split('?', 1)[1]
+            rv = send_link(filelink)
+            self.send_response(200)
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.send_header("Access-Control-Expose-Headers", "response, status")
+            self.send_header("response", "send_link")
+            self.send_header("status", rv)
             self.end_headers()
             return
         
@@ -269,146 +300,49 @@ class HandlerClass(SimpleHTTPServer.SimpleHTTPRequestHandler):
             return
 
 
-#send a message and return the response received
-def send_and_recv (data):
-    if not hasattr(send_and_recv, "my_seq"):
-        send_and_recv.my_seq = 0 #static variable. Initialized only on first function's run
-  
-    #empty queue from possible leftovers
-    #try: ackQueue.get_nowait()
-    #except: pass    #split up data longer than 400 bytes (IRC message limit is 512 bytes including the header data)
-    #'\r\n' must go to the end of each message
-    chunks = len(data)/400 + 1
-    if len(data)%400 == 0: chunks -= 1 #avoid creating an empty chunk if data length is a multiple of 400
-    for chunk_index in range(chunks) :
-        send_and_recv.my_seq += 1
-        chunk = data[400*chunk_index:400*(chunk_index+1)]
-        
-        for i in range (3):
-            bWasMessageAcked = False
-            ending = ' EOL ' if chunk_index+1==chunks else ' CRLF ' #EOL for the last chunk, otherwise CRLF
-            irc_msg = 'PRIVMSG ' + channel_name + ' :' + auditor_nick + ' seq:' + str(send_and_recv.my_seq) + ' ' + chunk + ending +'\r\n'
-            bytessent = IRCsocket.send(irc_msg)
-            print('SENT:' + str(bytessent) + ' ' +  irc_msg)
-        
-            try: oneAck = ackQueue.get(block=True, timeout=3)
-            except:  continue #send again because ack was not received
-            if not str(send_and_recv.my_seq) == oneAck: continue
-            #else: correct ack received
-            bWasMessageAcked = True
-            break
-        if not bWasMessageAcked:
-            return ('failure',)
-    
-    #receive a response
-    for i in range(3):
-        try: onemsg = recvQueue.get(block=True, timeout=3)
-        except:  continue #try to receive again
-        return ('success', onemsg)
-    return ('failure',)
+def send_link(filelink):
+    b64_link = base64.b64encode(filelink)
+    reply = send_and_recv('link:'+b64_link)
+    if not reply[0] == 'success' : return 'failure'
+    if not reply[1].startswith('response:') : return 'failure'
+    response = reply[1][len('response:'):]
+    return response
 
 
-
-
-def stop_recording():
-    global bReceivingThreadStopFlagIsSet
-    
-    #tell NSS to resume normal operation mode
-    #os.remove(os.path.join(nss_patch_dir, 'nss_patch_is_active'))
-    #stop stcppipe
-    os.kill(stcppipe_proc.pid, signal.SIGTERM)
-    #TODO stop https proxy. 
-    
-    #zip up all trace files, sign the zip and give the sig to the auditor
-    zipf = zipfile.ZipFile(os.path.join(current_sessiondir, 'mytrace.zip'), 'w')
-    for root, dirs, files in os.walk(os.path.join(current_sessiondir, 'tracelog')):
-        for onefile in files:
-            zipf.write(os.path.join(root, onefile), onefile)
-    zipf.close()
-    with open(os.path.join(current_sessiondir, 'mytrace.zip'), 'rb') as f: zipdata = f.read()
-    zip_hash = hashlib.sha256(zipdata).hexdigest()
-
-    signed_zip_hash = rsa.sign(zip_hash, myPrivateKey, 'SHA-1')
-    b64_signed_zip_hash = base64.b64encode(zip_hash + signed_zip_hash)
-    with open(os.path.join(current_sessiondir, 'my_signed_hash.txt'), 'wb') as f: f.write(zip_hash + '\n' + b64_signed_zip_hash)    
- 
-    reply = send_and_recv('zipsig:'+b64_signed_zip_hash)
-    if reply[0] != 'success':
-        print ('Failed to receive a reply')
-        return ('Failed to receive a reply')
-    if not reply[1].startswith('logsig:'):
-        print ('bad reply')
-        return ('bad reply')
-    
-    #stop IRC receiving thread
-    bReceivingThreadStopFlagIsSet = True
-    
-    b64_logsig  = reply[1][len('logsig:'):]
-    try:
-        logsig = base64.b64decode(b64_logsig)
-        shahash = logsig[:64]
-        sig = logsig[64:]
-        #sanity check. is the signature correct?
-        rsa.verify(shahash, sig, auditorPublicKey)
-    except:
-        print ('Verification of the auditor\'s hash failed')
-        return 'Verification of the auditor\'s hash failed'
-    with open(os.path.join(current_sessiondir, 'auditor_signed_hash.txt'), 'wb') as f: f.write(shahash + '\n' + sig)
+def prepare_to_delete_folder_thread(parentthread):
+    dirset = set(os.listdir(current_sessiondir))
+    #don't run this CPU-overwhelming code for longer than 5 seconds
+    time_started = int(time.time())
+    parentthread.retval = 'ready'
+    while True:
+        if int(time.time()) - time_started > 5:
+            print ('5 seconds elapsed while waiting for a new folder')
+            return
+        newdirset = set(os.listdir(current_sessiondir))
+        diffset = newdirset - dirset
+        if len(diffset) == 1:
+            item_to_delete = list(diffset)[0]
+            os.rmdir(os.path.join(current_sessiondir, item_to_delete))
+            print ('removed folder ' + item_to_delete)
+            return
+            
+#Launch a thread to delete a folder which is created by FF when Select File dialog opens up
+def prepare_to_delete_folder():
+    thread = ThreadWithRetval(target= prepare_to_delete_folder_thread)
+    thread.daemon = True
+    thread.start()
+    #wait for the thread to signal that it is ready
+    while True:
+        time.sleep(0.1)
+        if thread.retval == 'ready': break
     return 'success'
-    
-#The NSS patch has created a new file in the nss_patch_dir
-def process_new_uid(uid):  
-    with  open(os.path.join(nss_patch_dir, 'der'+uid), 'rb') as fd: der = fd.read()
-    #TODO: find out why on windows \r\n newline makes its way into der encoding
-    if OS=='mswin': der = der.replace('\r\n', '\n')
-    with  open(os.path.join(nss_patch_dir, 'cr'+uid), 'rb') as fd: cr = fd.read()
-    with open(os.path.join(nss_patch_dir, 'sr'+uid), 'rb') as fd: sr = fd.read()
-    
-    #extract n and e from the pubkey
-    try:       
-        rv  = decoder.decode(der, asn1Spec=univ.Sequence())
-        bitstring = rv[0].getComponentByPosition(1)
-        #bitstring is a list of ints, like [01110001010101000...]
-        #convert it into into a string   '01110001010101000...'
-        stringOfBits = ''
-        for bit in bitstring:
-            bit_as_str = str(bit)
-            stringOfBits += bit_as_str
-    
-        #treat every 8 chars as an int and pack the ints into a bytearray
-        ba = bytearray()
-        for i in range(0, len(stringOfBits)/8):
-            onebyte = stringOfBits[i*8 : (i+1)*8]
-            oneint = int(onebyte, base=2)
-            ba.append(oneint)
-    
-        #decoding the nested sequence
-        rv  = decoder.decode(str(ba), asn1Spec=univ.Sequence())
-        exponent = rv[0].getComponentByPosition(1)
-        modulus = rv[0].getComponentByPosition(0)
-        modulus_int = int(modulus)
-        exponent_int = int(exponent)
-        n = bigint_to_bytearray(modulus_int)
-        e = bigint_to_bytearray(exponent_int)
-    except:
-        print ('Error decoding der pubkey')
-        return 'failure'
-     
+
+
+#prepare google-checked PMSs in advance of page reloading
+def prepare_pms():
+    global PMS_first_half
+    bIsCheckSuccessfull = False
     PMS_first_half = '\x03\x01'+os.urandom(secretbytes_amount) + ('\x00' * (24-2-secretbytes_amount))
-    label = "master secret"
-    seed = cr + sr
-    
-    md5A1 = hmac.new(PMS_first_half,  label+seed, hashlib.md5).digest()
-    md5A2 = hmac.new(PMS_first_half,  md5A1, hashlib.md5).digest()
-    md5A3 = hmac.new(PMS_first_half,  md5A2, hashlib.md5).digest()
-    
-    md5hmac1 = hmac.new(PMS_first_half, md5A1 + label + seed, hashlib.md5).digest()
-    md5hmac2 = hmac.new(PMS_first_half, md5A2 + label + seed, hashlib.md5).digest()
-    md5hmac3 = hmac.new(PMS_first_half, md5A3 + label + seed, hashlib.md5).digest()
-    md5hmac = md5hmac1+md5hmac2+md5hmac3
-    
-    md5hmac_for_MS_first_half = md5hmac[:24]
-    md5hmac_for_MS_second_half = md5hmac[24:48]
     
     for i in range(5): #try 5 times until google check succeeds
         #------------------------------connect to google and get cr and sr
@@ -439,31 +373,27 @@ def process_new_uid(uid):
         serverhello = serverhello_certificate_serverhellodone[:cert_start_position]
         certificate = serverhello_certificate_serverhellodone[cert_start_position : -len(serverhellodone)]
         gsr = serverhello[11:43]
-                
-        b64_cr_sr_hmac_n_e_gcr_gsr= base64.b64encode(cr+sr+md5hmac_for_MS_first_half+n+e+gcr+gsr)
-        reply = send_and_recv('cr_sr_hmac_n_e_gcr_gsr:'+b64_cr_sr_hmac_n_e_gcr_gsr)
+        
+        b64_gcr_gsr = base64.b64encode(gcr+gsr)
+        reply = send_and_recv('gcr_gsr:'+b64_gcr_gsr)
         
         if reply[0] != 'success':
-            print ('Failed to receive a reply for cr_sr_hmac_n_e:')
-            return ('Failed to receive a reply for cr_sr_hmac_n_e:')
-        if not reply[1].startswith('rsapms_hmacms_hmacek_grsapms_ghmac:'):
-            print ('bad reply. Expected rsapms_hmacms_hmacek_grsapms_ghmac:')
-            return 'bad reply. Expected rsapms_hmacms_hmacek_grsapms_ghmac:'
-        b64_rsapms_hmacms_hmacek_grsapms_ghmac = reply[1][len('rsapms_hmacms_hmacek_grsapms_ghmac:'):]
+            print ('Failed to receive a reply for gcr+gsr:')
+            return ('Failed to receive a reply for gcr+gsr:')
+        if not reply[1].startswith('grsapms_ghmac:'):
+            print ('bad reply. Expected rsapms_ghmac:')
+            return 'bad reply. Expected grsapms_ghmac:'
+    
+        b64_grsapms_ghmac = reply[1][len('grsapms_ghmac:'):]
         try:
-            rsapms_hmacms_hmacek_grsapms_ghmac = base64.b64decode(b64_rsapms_hmacms_hmacek_grsapms_ghmac)    
+            grsapms_ghmac = base64.b64decode(b64_grsapms_ghmac)    
         except:
-            print ('base64 decode error in rsapms_hmacms_hmacek_grsapms_ghmac')
-            return ('base64 decode error in rsapms_hmacms_hmacek_grsapms_ghmac')
-      
-        RSA_PMS_second_half = rsapms_hmacms_hmacek_grsapms_ghmac[:256]
-        RSA_PMS_second_half_int = int(RSA_PMS_second_half.encode('hex'), 16)
-        sha1hmac_for_MS_second_half = rsapms_hmacms_hmacek_grsapms_ghmac[256:280]
-        md5hmac_for_ek = rsapms_hmacms_hmacek_grsapms_ghmac[280:416]
-        RSA_PMS_second_half_google = rsapms_hmacms_hmacek_grsapms_ghmac[416:672]
-        sha1hmac_google = rsapms_hmacms_hmacek_grsapms_ghmac[672:720]
+            print ('base64 decode error in grsapms_ghmac')
+            return ('base64 decode error in grsapms_ghmac')
         
-        #--------------------------------BEGIN check pms with google
+        RSA_PMS_second_half_google = grsapms_ghmac[:256]
+        sha1hmac_google = grsapms_ghmac[256:304]
+        
         label = "master secret"
         seed = gcr + gsr
         
@@ -507,7 +437,7 @@ def process_new_uid(uid):
         
         md5hmac = md5hmac1+md5hmac2+md5hmac3+md5hmac4+md5hmac5+md5hmac6+md5hmac7+md5hmac8+md5hmac9
         
-        
+      
         sha1A1 = hmac.new(ms_second_half, label+seed, hashlib.sha1).digest()
         sha1A2 = hmac.new(ms_second_half, sha1A1, hashlib.sha1).digest()
         sha1A3 = hmac.new(ms_second_half, sha1A2, hashlib.sha1).digest()
@@ -562,7 +492,7 @@ def process_new_uid(uid):
         verify_data = bytearray(xored[:12])
         
         hmac_for_verify_data = hmac.new(client_mac_key, '\x00\x00\x00\x00\x00\x00\x00\x00' + '\x16' + '\x03\x01' + '\x00\x10' + '\x14\x00\x00\x0c' + verify_data, hashlib.sha1).digest()
-    
+       
         moo = AESModeOfOperation()
         cleartext = '\x14\x00\x00\x0c' + verify_data + hmac_for_verify_data
         
@@ -574,7 +504,8 @@ def process_new_uid(uid):
         #This must be investigated
         try:
             mode, orig_len, encrypted_verify_data_and_hmac_for_verify_data = moo.encrypt( str(padded_cleartext), moo.modeOfOperation["CBC"], client_encryption_key_list, moo.aes.keySize["SIZE_256"], client_iv_list)
-        except: # TODO find out why I once got TypeError: 'NoneType' object is not iterable.  It helps to catch an exception here
+        except Exception, e: # TODO find out why I once got TypeError: 'NoneType' object is not iterable.  It helps to catch an exception here
+            print ('Caught exception while doing slowaes encrypt: ', e)
             tlssock.close()
             continue
         
@@ -584,12 +515,181 @@ def process_new_uid(uid):
         time.sleep(1)
         response = tlssock.recv(8192)
         if not response.count(change_cipher_spec):
+            #the response did not contain ccs == error alert received
             tlssock.close()
             continue
         tlssock.close()
-        break #successfull pms check 
-        #--------------------------------END check pms with google
+        bIsCheckSuccessfull = False
+        return 'success' #successfull pms check        
+    #no dice after 5 tries
+    return 'failure'
+
     
+
+#send a message and return the response received
+def send_and_recv (data):
+    if not hasattr(send_and_recv, "my_seq"):
+        send_and_recv.my_seq = 0 #static variable. Initialized only on first function's run
+  
+    #empty queue from possible leftovers
+    #try: ackQueue.get_nowait()
+    #except: pass    #split up data longer than 400 bytes (IRC message limit is 512 bytes including the header data)
+    #'\r\n' must go to the end of each message
+    chunks = len(data)/400 + 1
+    if len(data)%400 == 0: chunks -= 1 #avoid creating an empty chunk if data length is a multiple of 400
+    for chunk_index in range(chunks) :
+        send_and_recv.my_seq += 1
+        chunk = data[400*chunk_index:400*(chunk_index+1)]
+        
+        for i in range (3):
+            bWasMessageAcked = False
+            ending = ' EOL ' if chunk_index+1==chunks else ' CRLF ' #EOL for the last chunk, otherwise CRLF
+            irc_msg = 'PRIVMSG ' + channel_name + ' :' + auditor_nick + ' seq:' + str(send_and_recv.my_seq) + ' ' + chunk + ending +'\r\n'
+            bytessent = IRCsocket.send(irc_msg)
+            print('SENT:' + str(bytessent) + ' ' +  irc_msg)
+        
+            try: oneAck = ackQueue.get(block=True, timeout=5)
+            except:  continue #send again because ack was not received
+            if not str(send_and_recv.my_seq) == oneAck: continue
+            #else: correct ack received
+            bWasMessageAcked = True
+            break
+        if not bWasMessageAcked:
+            return ('failure', '')
+    
+    #receive a response
+    for i in range(3):
+        try: onemsg = recvQueue.get(block=True, timeout=3)
+        except:  continue #try to receive again
+        return ('success', onemsg)
+    return ('failure', '')
+
+
+
+
+def stop_recording():
+    global bReceivingThreadStopFlagIsSet
+    os.kill(stcppipe_proc.pid, signal.SIGTERM)
+    #TODO stop https proxy. 
+    #pick out only those trace files which contain client_random of recorded pages
+        
+    #zip up all trace files, sign the zip and give the sig to the auditor
+    zipf = zipfile.ZipFile(os.path.join(current_sessiondir, 'mytrace.zip'), 'w')
+    for root, dirs, files in os.walk(os.path.join(current_sessiondir, 'tracelog')):
+        for onefile in files:
+            with open(os.path.join(root, onefile), 'rb') as f: data=f.read()
+            cr_sum = sum([data.count(one_cr) for one_cr in cr_list])
+            if cr_sum  > 1 : raise Exception ('More that one cr found in tracefile')
+            if cr_sum != 1 : continue
+            zipf.write(os.path.join(root, onefile), onefile)
+    zipf.close()
+    with open(os.path.join(current_sessiondir, 'mytrace.zip'), 'rb') as f: zipdata = f.read()
+    zip_hash = hashlib.sha256(zipdata).digest()
+
+    signed_zip_hash = rsa.sign(zip_hash, myPrivateKey, 'SHA-1')
+    b64_signed_zip_hash = base64.b64encode(zip_hash + signed_zip_hash)
+    with open(os.path.join(current_sessiondir, 'my_signed_hash.txt'), 'wb') as f: f.write(zip_hash + '\n' + b64_signed_zip_hash)    
+ 
+    reply = send_and_recv('zipsig:'+b64_signed_zip_hash)
+    if reply[0] != 'success':
+        print ('Failed to receive a reply')
+        return ('Failed to receive a reply')
+    if not reply[1].startswith('logsig:'):
+        print ('bad reply')
+        return ('bad reply')
+    
+    #stop IRC receiving thread
+    #bReceivingThreadStopFlagIsSet = True
+    
+    b64_logsig  = reply[1][len('logsig:'):]
+    try:
+        logsig = base64.b64decode(b64_logsig)
+        shahash = logsig[:64]
+        sig = logsig[64:]
+        #sanity check. is the signature correct?
+        rsa.verify(shahash, sig, auditorPublicKey)
+    except:
+        print ('Verification of the auditor\'s hash failed')
+        return 'Verification of the auditor\'s hash failed'
+    with open(os.path.join(current_sessiondir, 'auditor_signed_hash.txt'), 'wb') as f: f.write(shahash + '\n' + sig)
+    return 'success'
+    
+#The NSS patch has created a new file in the nss_patch_dir
+def process_new_uid(uid): 
+    global current_client_random
+    with  open(os.path.join(nss_patch_dir, 'der'+uid), 'rb') as fd: der = fd.read()
+    #TODO: find out why on windows \r\n newline makes its way into der encoding
+    if OS=='mswin': der = der.replace('\r\n', '\n')
+    with  open(os.path.join(nss_patch_dir, 'cr'+uid), 'rb') as fd: cr = fd.read()
+    with open(os.path.join(nss_patch_dir, 'sr'+uid), 'rb') as fd: sr = fd.read()
+    cr_list.append(cr)
+    
+    #extract n and e from the pubkey
+    try:       
+        rv  = decoder.decode(der, asn1Spec=univ.Sequence())
+        bitstring = rv[0].getComponentByPosition(1)
+        #bitstring is a list of ints, like [01110001010101000...]
+        #convert it into into a string   '01110001010101000...'
+        stringOfBits = ''
+        for bit in bitstring:
+            bit_as_str = str(bit)
+            stringOfBits += bit_as_str
+    
+        #treat every 8 chars as an int and pack the ints into a bytearray
+        ba = bytearray()
+        for i in range(0, len(stringOfBits)/8):
+            onebyte = stringOfBits[i*8 : (i+1)*8]
+            oneint = int(onebyte, base=2)
+            ba.append(oneint)
+    
+        #decoding the nested sequence
+        rv  = decoder.decode(str(ba), asn1Spec=univ.Sequence())
+        exponent = rv[0].getComponentByPosition(1)
+        modulus = rv[0].getComponentByPosition(0)
+        modulus_int = int(modulus)
+        exponent_int = int(exponent)
+        n = bigint_to_bytearray(modulus_int)
+        e = bigint_to_bytearray(exponent_int)
+    except:
+        print ('Error decoding der pubkey')
+        return 'failure'
+     
+    label = "master secret"
+    seed = cr + sr
+    
+    md5A1 = hmac.new(PMS_first_half,  label+seed, hashlib.md5).digest()
+    md5A2 = hmac.new(PMS_first_half,  md5A1, hashlib.md5).digest()
+    md5A3 = hmac.new(PMS_first_half,  md5A2, hashlib.md5).digest()
+    
+    md5hmac1 = hmac.new(PMS_first_half, md5A1 + label + seed, hashlib.md5).digest()
+    md5hmac2 = hmac.new(PMS_first_half, md5A2 + label + seed, hashlib.md5).digest()
+    md5hmac3 = hmac.new(PMS_first_half, md5A3 + label + seed, hashlib.md5).digest()
+    md5hmac = md5hmac1+md5hmac2+md5hmac3
+    
+    md5hmac_for_MS_first_half = md5hmac[:24]
+    md5hmac_for_MS_second_half = md5hmac[24:48]
+                  
+    b64_cr_sr_hmac_n_e= base64.b64encode(cr+sr+md5hmac_for_MS_first_half+n+e)
+    reply = send_and_recv('cr_sr_hmac_n_e:'+b64_cr_sr_hmac_n_e)
+    
+    if reply[0] != 'success':
+        print ('Failed to receive a reply for cr_sr_hmac_n_e:')
+        return ('Failed to receive a reply for cr_sr_hmac_n_e:')
+    if not reply[1].startswith('rsapms_hmacms_hmacek:'):
+        print ('bad reply. Expected rsapms_hmacms_hmacek_grsapms_ghmac:')
+        return 'bad reply. Expected rsapms_hmacms_hmacek_grsapms_ghmac:'
+    b64_rsapms_hmacms_hmacek = reply[1][len('rsapms_hmacms_hmacek:'):]
+    try:
+        rsapms_hmacms_hmacek = base64.b64decode(b64_rsapms_hmacms_hmacek)    
+    except:
+        print ('base64 decode error in rsapms_hmacms_hmacek')
+        return ('base64 decode error in rsapms_hmacms_hmacek')
+  
+    RSA_PMS_second_half = rsapms_hmacms_hmacek[:256]
+    RSA_PMS_second_half_int = int(RSA_PMS_second_half.encode('hex'), 16)
+    sha1hmac_for_MS_second_half = rsapms_hmacms_hmacek[256:280]
+    md5hmac_for_ek = rsapms_hmacms_hmacek[280:416]
+   
     #RSA encryption without padding: ciphertext = plaintext^e mod n
     RSA_PMS_first_half_int = pow( int(('\x02'+('\x01'*156)+'\x00'+PMS_first_half+('\x00'*24)).encode('hex'), 16) + 1, exponent_int, modulus_int)
     enc_pms_int = (RSA_PMS_second_half_int*RSA_PMS_first_half_int) % modulus_int 
@@ -625,15 +725,15 @@ def process_new_uid(uid):
     sha1hmac_for_ek = (sha1hmac1+sha1hmac2+sha1hmac3+sha1hmac4+sha1hmac5+sha1hmac6+sha1hmac7)[:136]
     
     expanded_keys = bytearray([ord(a) ^ ord(b) for a,b in zip(sha1hmac_for_ek, md5hmac_for_ek)])
-    ek_without_server_mac =  expanded_keys[:20]+ bytearray(os.urandom(20)) + expanded_keys[40:136]  
+    #server mac key == expanded_keys[20:40] contains random garbage from auditor
     
-    with open(os.path.join(nss_patch_dir, 'expanded_keys'+uid), 'wb') as f: f.write(ek_without_server_mac)
+    with open(os.path.join(nss_patch_dir, 'expanded_keys'+uid), 'wb') as f: f.write(expanded_keys)
     with open(os.path.join(nss_patch_dir, 'expanded_keys'+uid+'ready'), 'wb') as f: f.close()
     
     
-    #wait for nss to create the files
+    #wait for nss to create md5 and then sha files
     while True:
-        if not os.path.isfile(os.path.join(nss_patch_dir, 'md5'+uid)) or not os.path.isfile(os.path.join(nss_patch_dir, 'sha'+uid)):
+        if not os.path.isfile(os.path.join(nss_patch_dir, 'sha'+uid)):
             time.sleep(0.1)
         else:
             time.sleep(0.1)
@@ -844,7 +944,7 @@ def start_recording():
     print ('stcppipe is piping from port ' + str(FF_proxy_port) + ' to port ' + str(HTTPS_proxy_port))
     
     #finally let nss patch know we are ready and start monitoring
-    #with open(os.path.join(nss_patch_dir, 'nss_patch_is_active'), "wb") as f: f.close()
+    with open(os.path.join(nss_patch_dir, 'nss_patch_is_active'), "wb") as f: f.close()
     thread = threading.Thread(target= nss_patch_dir_scan_thread)
     thread.daemon = True
     thread.start()
@@ -889,7 +989,7 @@ def receivingThread(my_nick, auditor_nick, IRCsocket):
                 continue
             if not his_seq == receivingThread.last_seq_which_i_acked +1: continue #we did not receive the next seq in order
             #else we got a new seq      
-            if first_chunk=='' and  not msg[5].startswith( ('rsapms_hmacms_hmacek', 'verify_hmac:', 'logsig:') ) : continue         
+            if first_chunk=='' and  not msg[5].startswith( ('grsapms_ghmac', 'rsapms_hmacms_hmacek', 'verify_hmac:', 'logsig:', 'response:') ) : continue         
             #check if this is the first chunk of a chunked message. Only 2 chunks are supported for now
             #'CRLF' is used at the end of the first chunk, 'EOL' is used to show that there are no more chunks
             if msg[-1]=='CRLF':
@@ -915,31 +1015,6 @@ def receivingThread(my_nick, auditor_nick, IRCsocket):
                 IRCsocket.send('PRIVMSG ' + channel_name + ' :' + auditor_nick + ' ack:' + str(his_seq) + ' \r\n')
                 receivingThread.last_seq_which_i_acked = his_seq
                
-
-
-def send_message(header, data, seq):
-    #try 3 times * 10 seconds to send a message and have my shadow user pick it up and put it on the countQueue
-    for i in range (3):
-        #split up data longer than 400 bytes (IRC message limit is 512 bytes including the header data)
-        #'\r\n' must go to the end of each message
-        chunks = len(data)/400 + 1
-        if len(data)%400 == 0: chunks -= 1 #avoid creating an empty chunk if data length is a multiple of 400
-        bytessent = 0
-        for chunk_index in range(chunks) :
-            chunk = data[400*chunk_index:400*(chunk_index+1)]
-            bytessent = IRCsocket.send( header + chunk + (' EOL ' if chunk_index+1==chunks else ' CRLF ') +'\r\n')
-            print('SENT: ' + str(bytessent) + ' ' +  header + chunk + (' EOL ' if chunk_index+1==chunks else ' CRLF ') +'\r\n')
-            try:
-                seq_check = countQueue.get(block=True, timeout=10)
-                if seq == seq_check:
-                    continue
-                else: 
-                    break #try to send the message again
-            except: #nothing showed up on the queue
-                print ('Nothing showed up on the countQueue in 10 secs')
-                break #try to send the message again
-        return #all chunks successfully dispatched
-
 
 
 def start_irc():
@@ -1104,6 +1179,12 @@ def start_firefox(FF_to_backend_port):
     os.makedirs(nss_patch_dir)
     #we need a trailing slash to relieve the patch from figuring out which path delimiter to use (nix vs win)
     os.putenv('NSS_PATCH_DIR', os.path.join(nss_patch_dir, ''))
+    os.putenv('HOME', current_sessiondir) #This is a mega-ugly hack
+    #we want the tracefile upload dialog to open to the dir where the trace zip is located so that the user
+    #doesnt have to click his way through all the nested folders
+    #FF always opens the dialog in $HOME/Desktop (creating the dir Desktop if not present)
+    #second part of this hack is a function in the addon which monitors the presence of Desktop dir and
+    #immediately deletes it, which forces FF to open the dialog to the $HOME dir
     
     print ("Starting a new instance of Firefox with Paysty's profile",end='\r\n')
     try:

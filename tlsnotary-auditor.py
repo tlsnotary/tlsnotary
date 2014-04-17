@@ -20,6 +20,7 @@ import tarfile
 import threading
 import time
 import random
+import urllib2
 
 installdir = os.path.dirname(os.path.realpath(__file__))
 datadir = os.path.join(installdir, 'auditor')
@@ -56,6 +57,7 @@ myPrivateKey = auditeePublicKey = None
 uid = ''
 google_modulus = 0
 google_exponent = 0
+PMS_second_half = ''
 
 recvQueue = Queue.Queue() #all IRC messages are placed on this queue
 ackQueue = Queue.Queue() #count_my_messages_thread places messages' ordinal numbers on this thread 
@@ -124,7 +126,7 @@ def receivingThread():
                 continue
             if not his_seq == receivingThread.last_seq_which_i_acked+1: continue #we did not receive the next seq in order
             #else we got a new seq      
-            if first_chunk=='' and  not msg[5].startswith( ('cr_sr_hmac_n_e_gcr_gsr', 'verify_md5sha:', 'zipsig:') ) : continue         
+            if first_chunk=='' and  not msg[5].startswith( ('cr_sr_hmac_n_e', 'gcr_gsr', 'verify_md5sha:', 'zipsig:', 'link:') ) : continue         
             #check if this is the first chunk of a chunked message. Only 2 chunks are supported for now
             #'CRLF' is used at the end of the first chunk, 'EOL' is used to show that there are no more chunks
             if msg[-1]=='CRLF':
@@ -171,8 +173,12 @@ def send_message(data):
             bWasMessageAcked = False
             ending = ' EOL ' if chunk_index+1==chunks else ' CRLF ' #EOL for the last chunk, otherwise CRLF
             irc_msg = 'PRIVMSG ' + channel_name + ' :' + auditee_nick + ' seq:' + str(send_message.my_seq) + ' ' + chunk + ending +' \r\n'
+            #empty the ack queue. Not using while True: because sometimes an endless loop would happen TODO: find out why
+            for j in range(5):
+                try: ackQueue.get_nowait()
+                except: pass
             bytessent = IRCsocket.send(irc_msg)
-            print('SENT: ' + str(bytessent) + ' ' + irc_msg)
+            print('SENT: ' + str(bytessent) + ' ' + irc_msg)                
             try: ack_check = ackQueue.get(block=True, timeout=3)
             except: continue #send again because ack was not received
             if not str(send_message.my_seq) == ack_check: continue
@@ -189,7 +195,8 @@ def send_message(data):
 def process_messages():
     global auditee_nick
     global uid
-            
+    global PMS_second_half
+    ziphash = ''
     #after the auditee was authorized, entering a regular message processing loop
     while True:
         uid =  ''.join(random.choice('0123456789') for x in range(10)) #unique id is needed to create unique filenames
@@ -197,58 +204,55 @@ def process_messages():
             msg = recvQueue.get(block=True, timeout=1)
         except: continue
         print ('got msg ' + str(msg) + ' from recvQueue')
-        if msg.startswith('zipsig:'): #the user has finished  and send the signature of the trace zipfile
-            b64_zipsig = msg[len('zipsig:'):]
-            try:
-                zipsig = base64.b64decode(b64_zipsig)
-                shahash = zipsig[:64]
-                sig = zipsig[64:]
-                #sanity-check the signature
-                rsa.verify(shahash, sig, auditeePublicKey)
+
+        if msg.startswith('gcr_gsr:'): #the first msg must be 'gcr_gsr'
+            b64_gcr_gsr = msg[len('gcr_gsr:'):]
+            try: gcr_gsr = base64.b64decode(b64_gcr_gsr)
             except:
-                print ('Verification of the auditee\'s hash failed')
-                return 'Verification of the auditee\'s hash failed'
-            with open(os.path.join(current_sessiondir, 'auditor_signed_hash.txt'), 'w') as f: f.write(shahash + '\n' + b64_zipsig)
+                print ('base64 decode error in cr_gcr_gsr')
+                continue               
+            google_cr = gcr_gsr[:32]
+            google_sr = gcr_gsr[32:64]
             
-            #send out sslkeylogfile hash in response
-            sslkeylogfile.close()
-            sslkeylog_data = None
-            with open(os.path.join(current_sessiondir, 'sslkeylogfile'), 'r') as f : sslkeylog_data = f.read()
-            shahash = hashlib.sha256(sslkeylog_data).hexdigest()
-            sig = rsa.sign(shahash, myPrivateKey, 'SHA-1')
-            b64_sig = base64.b64encode(shahash+sig)
-            send_message('logsig:' + b64_sig)
-            progressQueue.put(time.strftime('%H:%M:%S', time.localtime()) + ': The auditee has successfully finished the audit session')
-            progressQueue.put(time.strftime('%H:%M:%S', time.localtime()) + ': All data pertaining to this session can be found at ' + current_sessiondir)
-            progressQueue.put(time.strftime('%H:%M:%S', time.localtime()) + ': You may now close the browser.')
-            break
-        #Note: after the auditor receives the tracefile, he can (optionally "mergecap -w merged *" ) open it in wireshark  
-        #and go to Edit-Preferences-Protocols-HTTP in SSL/TLS Ports enter 1024-65535, 
-        #otherwise wireshark will fail do decrypt even when using the Decode As function
+            PMS_second_half =  os.urandom(secretbytes_amount) + ('\x00' * (24-secretbytes_amount-1)) + '\x01'
+            RSA_PMS_google_int = pow( int(('\x01'+('\x00'*25)+PMS_second_half).encode('hex'),16), google_exponent, google_modulus )
+            grsapms = bigint_to_bytearray(RSA_PMS_google_int)
+            #-------------------BEGIN get sha1hmac for google
+            label = "master secret"
+            seed = google_cr + google_sr        
+            #start the PRF
+            sha1A1 = hmac.new(PMS_second_half,  label+seed, hashlib.sha1).digest()
+            sha1A2 = hmac.new(PMS_second_half,  sha1A1, hashlib.sha1).digest()
+            sha1A3 = hmac.new(PMS_second_half,  sha1A2, hashlib.sha1).digest()
             
-        elif msg.startswith('cr_sr_hmac_n_e_gcr_gsr:'): #the first msg must be 'cr_sr_hmac_n_e_gcr_gsr'
+            sha1hmac1 = hmac.new(PMS_second_half, sha1A1 + label + seed, hashlib.sha1).digest()
+            sha1hmac2 = hmac.new(PMS_second_half, sha1A2 + label + seed, hashlib.sha1).digest()
+            sha1hmac3 = hmac.new(PMS_second_half, sha1A3 + label + seed, hashlib.sha1).digest()
+            ghmac = (sha1hmac1+sha1hmac2+sha1hmac3)[:48]
+            #-------------------END get sha1hmac for google
+            
+            b64_grsapms_ghmac = base64.b64encode(grsapms+ghmac)
+            send_message('grsapms_ghmac:'+ b64_grsapms_ghmac)
+            continue
+         #------------------------------------------------------------------------------------------------------#   
+        elif msg.startswith('cr_sr_hmac_n_e:'): #the first msg must be 'cr_sr_hmac_n_e_gcr_gsr'
             progressQueue.put(time.strftime('%H:%M:%S', time.localtime()) + ': Processing data from the auditee.')
-            b64_cr_sr_hmac_n_e_gcr_gsr = msg[len('cr_sr_hmac_n_e_gcr_gsr:'):]
-            try: cr_sr_hmac_n_e_gcr_gsr = base64.b64decode(b64_cr_sr_hmac_n_e_gcr_gsr)
+            b64_cr_sr_hmac_n_e = msg[len('cr_sr_hmac_n_e:'):]
+            try: cr_sr_hmac_n_e = base64.b64decode(b64_cr_sr_hmac_n_e)
             except:
-                print ('base64 decode error in cr_sr_hmac_n_e_gcr_gsr')
+                print ('base64 decode error in cr_sr_hmac_n_e')
                 continue
                
-            cr = cr_sr_hmac_n_e_gcr_gsr [:32]
-            sr = cr_sr_hmac_n_e_gcr_gsr [32:64]
-            md5hmac_for_MS_first_half=cr_sr_hmac_n_e_gcr_gsr [64:88] #half of MS's 48 bytes
-            n = cr_sr_hmac_n_e_gcr_gsr [88:344]
-            e = cr_sr_hmac_n_e_gcr_gsr [344:347]
-            google_cr = cr_sr_hmac_n_e_gcr_gsr[347:379]
-            google_sr = cr_sr_hmac_n_e_gcr_gsr[379:411]
+            cr = cr_sr_hmac_n_e[:32]
+            sr = cr_sr_hmac_n_e[32:64]
+            md5hmac_for_MS_first_half=cr_sr_hmac_n_e[64:88] #half of MS's 48 bytes
+            n = cr_sr_hmac_n_e[88:344]
+            e = cr_sr_hmac_n_e[344:347]
             n_int = int(n.encode('hex'),16)
             e_int = int(e.encode('hex'),16)
                         
-            PMS_second_half =  os.urandom(secretbytes_amount) + ('\x00' * (24-secretbytes_amount-1)) + '\x01'
             #RSA encryption without padding: ciphertext = plaintext^e mod n
             RSA_PMS_second_half_int = pow( int(('\x01'+('\x00'*25)+PMS_second_half).encode('hex'),16), e_int, n_int )
-            RSA_PMS_google_int = pow( int(('\x01'+('\x00'*25)+PMS_second_half).encode('hex'),16), google_exponent, google_modulus )
-            grsapms = bigint_to_bytearray(RSA_PMS_google_int)
             
             label = "master secret"
             seed = cr + sr        
@@ -266,21 +270,7 @@ def process_messages():
             sha1hmac_for_MS_second_half = sha1hmac[24:48]
             
             MS_first_half = bytearray([ord(a) ^ ord(b) for a,b in zip(md5hmac_for_MS_first_half, sha1hmac_for_MS_first_half)])
-            
-            #-------------------BEGIN get sha1hmac for google
-            label = "master secret"
-            seed = google_cr + google_sr        
-            #start the PRF
-            sha1A1 = hmac.new(PMS_second_half,  label+seed, hashlib.sha1).digest()
-            sha1A2 = hmac.new(PMS_second_half,  sha1A1, hashlib.sha1).digest()
-            sha1A3 = hmac.new(PMS_second_half,  sha1A2, hashlib.sha1).digest()
-            
-            sha1hmac1 = hmac.new(PMS_second_half, sha1A1 + label + seed, hashlib.sha1).digest()
-            sha1hmac2 = hmac.new(PMS_second_half, sha1A2 + label + seed, hashlib.sha1).digest()
-            sha1hmac3 = hmac.new(PMS_second_half, sha1A3 + label + seed, hashlib.sha1).digest()
-            ghmac = (sha1hmac1+sha1hmac2+sha1hmac3)[:48]
-            #-------------------END get sha1hmac for google
-            
+                   
             #master secret key expansion
             #see RFC2246 6.3. Key calculation & 5. HMAC and the pseudorandom function   
             #for AES256-CBC-SHA  (in bytes): mac secret 20, write key 32, IV 16
@@ -314,11 +304,11 @@ def process_messages():
             #fill the place of server MAC with zeroes
             md5hmac_for_ek = md5hmac[:20] + bytearray(os.urandom(20)) + md5hmac[40:136]
             
-            rsapms_hmacms_hmacek_grsapms_ghmac = bigint_to_bytearray(RSA_PMS_second_half_int)+sha1hmac_for_MS_second_half+md5hmac_for_ek+grsapms+ghmac
-            b64_rsapms_hmacms_hmacek_grsapms_ghmac = base64.b64encode(rsapms_hmacms_hmacek_grsapms_ghmac)
-            send_message('rsapms_hmacms_hmacek_grsapms_ghmac:'+ b64_rsapms_hmacms_hmacek_grsapms_ghmac)
+            rsapms_hmacms_hmacek = bigint_to_bytearray(RSA_PMS_second_half_int)+sha1hmac_for_MS_second_half+md5hmac_for_ek
+            b64_rsapms_hmacms_hmacek = base64.b64encode(rsapms_hmacms_hmacek)
+            send_message('rsapms_hmacms_hmacek:'+ b64_rsapms_hmacms_hmacek)
             continue
-            
+        #------------------------------------------------------------------------------------------------------#    
         elif msg.startswith('verify_md5sha:'):
             b64_md5sha = msg[len('verify_md5sha:'):]
             try: md5sha = base64.b64decode(b64_md5sha)
@@ -337,7 +327,49 @@ def process_messages():
             md5hmac1 = hmac.new(MS_first_half, md5A1 + label + seed, hashlib.md5).digest()
             b64_verify_hmac = base64.b64encode(md5hmac1)
             send_message('verify_hmac:'+b64_verify_hmac)
-        
+        #------------------------------------------------------------------------------------------------------#    
+        elif msg.startswith('zipsig:'): #the user has finished  and send the signature of the trace zipfile
+            b64_zipsig = msg[len('zipsig:'):]
+            try:
+                zipsig = base64.b64decode(b64_zipsig)
+                ziphash = zipsig[:32]
+                sig = zipsig[32:]
+                #sanity-check the signature
+                rsa.verify(ziphash, sig, auditeePublicKey)
+            except:
+                print ('Verification of the auditee\'s hash failed')
+                return 'Verification of the auditee\'s hash failed'
+            with open(os.path.join(current_sessiondir, 'auditor_signed_hash.txt'), 'w') as f: f.write(binascii.hexlify(ziphash) + '\n' + b64_zipsig)            
+            #send out sslkeylogfile hash in response
+            sslkeylogfile.close()
+            sslkeylog_data = None
+            with open(os.path.join(current_sessiondir, 'sslkeylogfile'), 'r') as f : sslkeylog_data = f.read()
+            shahash = hashlib.sha256(sslkeylog_data).hexdigest()
+            sig = rsa.sign(shahash, myPrivateKey, 'SHA-1')
+            b64_sig = base64.b64encode(shahash+sig)
+            send_message('logsig:' + b64_sig)
+        #------------------------------------------------------------------------------------------------------#           
+        elif msg.startswith('link:'):
+            b64_link = msg[len('link:'):]
+            try: link = base64.b64decode(b64_link)
+            except:
+                print ('base64 decode error in link')
+                continue
+            req = urllib2.Request(link)
+            resp = urllib2.urlopen(req)
+            linkdata = resp.read()
+            linkdatahash = hashlib.sha256(linkdata).digest()
+            if (linkdatahash == ziphash): 
+                response = 'success'
+                with open(os.path.join(current_sessiondir, 'tracefile.zip'), 'wb') as f : f.write(linkdata)
+            else: response = 'failure'
+            send_message('response:'+response)
+            progressQueue.put(time.strftime('%H:%M:%S', time.localtime()) + ': The auditee has successfully finished the audit session')
+            progressQueue.put(time.strftime('%H:%M:%S', time.localtime()) + ': All data pertaining to this session can be found at ' + current_sessiondir)
+            progressQueue.put(time.strftime('%H:%M:%S', time.localtime()) + ': You may now close the browser.')
+            #Note: after the auditor receives the tracefile, he can (optionally "mergecap -w merged *" ) open it in wireshark  
+            #and go to Edit-Preferences-Protocols-HTTP in SSL/TLS Ports enter 1024-65535, 
+            #otherwise wireshark will fail do decrypt even when using the Decode As function            
       
 #Receive HTTP HEAD requests from FF extension. This is how the extension communicates with python backend.
 class Handler(SimpleHTTPServer.SimpleHTTPRequestHandler):
@@ -539,6 +571,9 @@ def registerAuditeeThread():
     signed_hello = rsa.sign('server_hello', myPrivateKey, 'SHA-1')
     b64_signed_hello = base64.b64encode(signed_hello)
     IRCsocket.send('PRIVMSG ' + channel_name + ' :' + auditee_nick + ' server_hello:'+b64_signed_hello + ' \r\n')
+    time.sleep(2) #send twice because it was observed that the msg would not appear on the chan
+    IRCsocket.send('PRIVMSG ' + channel_name + ' :' + auditee_nick + ' server_hello:'+b64_signed_hello + ' \r\n')
+    
     progressQueue.put(time.strftime('%H:%M:%S', time.localtime()) + ': Auditee has been authorized. Awaiting data...')\
     
     thread = threading.Thread(target= receivingThread)
@@ -604,7 +639,6 @@ class ThreadWithRetval(threading.Thread):
     def __init__(self, target, args=()):
         super(ThreadWithRetval, self).__init__(target=target, args = (self,)+args )
     retval = ''
-
 
 
 if __name__ == "__main__": 
