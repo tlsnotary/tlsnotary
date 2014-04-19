@@ -8,6 +8,7 @@ var reqPreparePMS;
 var port;
 var url_for_recording_full = "";
 var session_path = "";
+var observer;
 
 port = Components.classes["@mozilla.org/process/environment;1"].getService(Components.interfaces.nsIEnvironment).get("FF_to_backend_port");
 //setting homepage should be done from here rather than defaults.js in order to have the desired effect. FF's quirk.
@@ -18,6 +19,7 @@ Components.classes["@mozilla.org/preferences-service;1"].getService(Components.i
 
 //poll the env var to see if IRC started
 //so that we can display a help message on the addon toolbar
+//TODO find out if auditee.html can access XUL ??? then we dont need this
 pollEnvvar();
 function pollEnvvar(){
 	var envvarvalue = Components.classes["@mozilla.org/process/environment;1"].getService(Components.interfaces.nsIEnvironment).get("TLSNOTARY_IRC_STARTED");
@@ -33,6 +35,44 @@ function pollEnvvar(){
 	button_record_disabled.hidden = true;
 	button_record_enabled.hidden = false;
 }
+
+
+function myObserver() {}
+myObserver.prototype = {
+  observe: function(aSubject, topic, data) {
+	 var httpChannel = aSubject.QueryInterface(Components.interfaces.nsIHttpChannel);
+	 var accept = httpChannel.getRequestHeader("Accept");
+	 var url_full = httpChannel.URI.spec;
+	 var regex= /html/;
+	 //remove the leading https:// and only keep the domain.com part
+	 var urlparts1 = url_for_recording_full.slice(8).split("/")[0].split(".");
+	 var url_for_recording_short = urlparts1[urlparts1.length-2] + "." + urlparts1[urlparts1.length-1];
+	 
+	 var urlparts2 = url_full.slice(8).split("/")[0].split(".");
+	 var url_short = urlparts2[urlparts2.length-2] + "." + urlparts2[urlparts2.length-1];
+	 
+	 var url = url_full;
+	 if ( (url_for_recording_short==url_short) && regex.test(accept) && url.startsWith("https://")
+	  && !url.endsWith(".png") && !url.endsWith(".gif") && !url.endsWith(".svg") && !url.endsWith(".css") 
+	  && !url.endsWith(".js") && !url.endsWith(".jpg") && !url.endsWith(".ico") && !url.endsWith(".woff") 
+	  && !url.endsWith(".swf") && !url.contains("favicon.ico#") ) 	{
+		observer.unregister();
+		Components.classes["@mozilla.org/process/environment;1"].getService(Components.interfaces.nsIEnvironment).set("NSS_PATCH_STAGE_ONE", "true");
+		console.log("patch toggled");
+	}
+  },
+  register: function() {
+    var observerService = Components.classes["@mozilla.org/observer-service;1"]
+                          .getService(Components.interfaces.nsIObserverService);
+    observerService.addObserver(this, "http-on-modify-request", false);
+  },
+  unregister: function() {
+    var observerService = Components.classes["@mozilla.org/observer-service;1"]
+                            .getService(Components.interfaces.nsIObserverService);
+    observerService.removeObserver(this, "http-on-modify-request");
+  }
+}
+var observer = new myObserver();
 
 
 function startRecording(){
@@ -135,8 +175,7 @@ function responsePreparePMS(iteration){
 	//else success preparing PMS, resume page reload
 	var help = document.getElementById("help");
 	help.value = "You can navigate to more than one page. When finished, press STOP"
-	//alert("Reloading may take up to one minute, depending on the number of resources on the page.")
-	observer = new myObserver();
+	observer.register();
 	BrowserReloadSkipCache();
 }
 
@@ -199,38 +238,3 @@ function responseStopRecording(iteration){
 	prefs.setIntPref("network.proxy.type", 0);
 	start_jetbytes(); //from jetbytes.js
 }
-
-
-function myObserver() {  this.register();}
-myObserver.prototype = {
-  observe: function(aSubject, topic, data) {
-	 var httpChannel = aSubject.QueryInterface(Components.interfaces.nsIHttpChannel);
-	 var accept = httpChannel.getRequestHeader("Accept");
-	 var url_full = httpChannel.URI.spec;
-	 var regex= /html/;
-	 //remove the leading https:// and only keep the domain.com part
-	 var urlparts1 = url_for_recording_full.slice(8).split("/")[0].split(".");
-	 var url_for_recording_short = urlparts1[urlparts1.length-2] + "." + urlparts1[urlparts1.length-1];
-	 
-	 var urlparts2 = url_full.slice(8).split("/")[0].split(".");
-	 var url_short = urlparts2[urlparts2.length-2] + "." + urlparts2[urlparts2.length-1];
-	 
-	 var url = url_full;
-	 if ( (url_for_recording_short==url_short) && regex.test(accept) && url.startsWith("https://") && !url.endsWith(".png") && !url.endsWith(".gif") && !url.endsWith(".svg") && !url.endsWith(".css") && !url.endsWith(".js") && !url.endsWith(".jpg") && !url.endsWith(".ico") && !url.endsWith(".woff") && !url.endsWith(".swf") && !url.contains("favicon.ico#") ) 	{
-		Components.classes["@mozilla.org/process/environment;1"].getService(Components.interfaces.nsIEnvironment).set("NSS_PATCH_STAGE_ONE", "true");
-		console.log("patch toggled");
-		observer.unregister();
-	}
-  },
-  register: function() {
-    var observerService = Components.classes["@mozilla.org/observer-service;1"]
-                          .getService(Components.interfaces.nsIObserverService);
-    observerService.addObserver(this, "http-on-modify-request", false);
-  },
-  unregister: function() {
-    var observerService = Components.classes["@mozilla.org/observer-service;1"]
-                            .getService(Components.interfaces.nsIObserverService);
-    observerService.removeObserver(this, "http-on-modify-request");
-  }
-}
-var observer = new myObserver();

@@ -126,7 +126,7 @@ def receivingThread():
                 continue
             if not his_seq == receivingThread.last_seq_which_i_acked+1: continue #we did not receive the next seq in order
             #else we got a new seq      
-            if first_chunk=='' and  not msg[5].startswith( ('cr_sr_hmac_n_e', 'gcr_gsr', 'verify_md5sha:', 'zipsig:', 'link:') ) : continue         
+            if first_chunk=='' and  not msg[5].startswith( ('cr_sr_hmac_n_e', 'gcr_gsr', 'verify_md5sha:', 'zipsig:', 'link:', 'commit_hash:') ) : continue         
             #check if this is the first chunk of a chunked message. Only 2 chunks are supported for now
             #'CRLF' is used at the end of the first chunk, 'EOL' is used to show that there are no more chunks
             if msg[-1]=='CRLF':
@@ -310,7 +310,7 @@ def process_messages():
             continue
         #------------------------------------------------------------------------------------------------------#    
         elif msg.startswith('verify_md5sha:'):
-            b64_md5sha = msg[len('verify_md5sha:'):]
+            b64_md5sha = msg[len('verify_md5sha:') : ]
             try: md5sha = base64.b64decode(b64_md5sha)
             except:
                 print ('base64 decode error in verify_md5sha')
@@ -327,6 +327,21 @@ def process_messages():
             md5hmac1 = hmac.new(MS_first_half, md5A1 + label + seed, hashlib.md5).digest()
             b64_verify_hmac = base64.b64encode(md5hmac1)
             send_message('verify_hmac:'+b64_verify_hmac)
+            continue
+        #------------------------------------------------------------------------------------------------------#    
+        elif msg.startswith('commit_hash:'):
+            b64_commit_hash = msg[len('commit_hash:'):]
+            try: commit_hash = base64.b64decode(b64_commit_hash)
+            except: 
+                print ('base64 decode error in commit_hash')
+                continue
+            commited_dir = os.path.join(current_sessiondir, 'commited')
+            if not os.path.exists(commited_dir): os.makedirs(commited_dir)
+            filename = os.path.join(commited_dir, uid)
+            with open(filename, 'wb') as f: f.write(commit_hash)
+            b64_sha1hmac = base64.b64encode(sha1hmac) 
+            send_message('sha1hmac_for_MS:'+b64_sha1hmac)
+            continue
         #------------------------------------------------------------------------------------------------------#    
         elif msg.startswith('zipsig:'): #the user has finished  and send the signature of the trace zipfile
             b64_zipsig = msg[len('zipsig:'):]
@@ -348,6 +363,7 @@ def process_messages():
             sig = rsa.sign(shahash, myPrivateKey, 'SHA-1')
             b64_sig = base64.b64encode(shahash+sig)
             send_message('logsig:' + b64_sig)
+            continue
         #------------------------------------------------------------------------------------------------------#           
         elif msg.startswith('link:'):
             b64_link = msg[len('link:'):]
@@ -367,6 +383,7 @@ def process_messages():
             progressQueue.put(time.strftime('%H:%M:%S', time.localtime()) + ': The auditee has successfully finished the audit session')
             progressQueue.put(time.strftime('%H:%M:%S', time.localtime()) + ': All data pertaining to this session can be found at ' + current_sessiondir)
             progressQueue.put(time.strftime('%H:%M:%S', time.localtime()) + ': You may now close the browser.')
+            continue
             #Note: after the auditor receives the tracefile, he can (optionally "mergecap -w merged *" ) open it in wireshark  
             #and go to Edit-Preferences-Protocols-HTTP in SSL/TLS Ports enter 1024-65535, 
             #otherwise wireshark will fail do decrypt even when using the Decode As function            

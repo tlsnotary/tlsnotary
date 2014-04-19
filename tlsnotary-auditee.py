@@ -3,6 +3,7 @@ from __future__ import print_function
 
 import base64
 import BaseHTTPServer
+import binascii
 import codecs
 import hashlib
 import hmac
@@ -575,13 +576,14 @@ def stop_recording():
         
     #zip up all trace files, sign the zip and give the sig to the auditor
     zipf = zipfile.ZipFile(os.path.join(current_sessiondir, 'mytrace.zip'), 'w')
-    for root, dirs, files in os.walk(os.path.join(current_sessiondir, 'tracelog')):
-        for onefile in files:
-            with open(os.path.join(root, onefile), 'rb') as f: data=f.read()
-            cr_sum = sum([data.count(one_cr) for one_cr in cr_list])
-            if cr_sum  > 1 : raise Exception ('More that one cr found in tracefile')
-            if cr_sum != 1 : continue
-            zipf.write(os.path.join(root, onefile), onefile)
+    tracelogdir = os.path.join(current_sessiondir, 'tracelog')
+    tracelogfiles = os.listdir(tracelogdir)
+    for onefile in tracelogfiles:
+        with open(os.path.join(tracelogdir, onefile), 'rb') as f: data=f.read()
+        cr_sum = sum([data.count(one_cr) for one_cr in cr_list])
+        if cr_sum  > 1 : raise Exception ('More that one cr found in tracefile')
+        if cr_sum != 1 : continue
+        zipf.write(os.path.join(tracelogdir, onefile), onefile)
     zipf.close()
     with open(os.path.join(current_sessiondir, 'mytrace.zip'), 'rb') as f: zipdata = f.read()
     zip_hash = hashlib.sha256(zipdata).digest()
@@ -768,6 +770,54 @@ def process_new_uid(uid):
     
     with open(os.path.join(nss_patch_dir, 'verify_data'+uid), 'wb') as f: f.write(bytearray(verify_data))
     with open(os.path.join(nss_patch_dir, 'verify_data'+uid+'ready'), 'wb') as f: f.close()
+    
+    #now find the corresponding tracefile, wait for the tls connection to finish and commit to the hash
+    #of that tracefile. Construct MS for that tracefile and use tshark to decrypt out the HTML files to be presented to user
+    tracelog_dir = os.path.join(current_sessiondir, 'tracelog')
+    tracelog_files = os.listdir(tracelog_dir)
+    bFoundCR = False
+    for one_file in tracelog_files:
+        with open(os.path.join(tracelog_dir, one_file), 'rb') as f: data=f.read()
+        if not data.count(cr) == 1: continue
+        #else client random found
+        bFoundCR = True
+        break 
+    if bFoundCR == False: raise Exception ('Client random not found in trace files')
+    #check if encrypted close_notify's header is present. The connection is most likely still active, so we sleep until it's not active anymore
+    bFoundClose = False
+    for i in range(30):
+        with open(os.path.join(tracelog_dir, one_file), 'rb') as f: data=f.read() #we need to re-read the file on each iteration
+        time.sleep(1)
+        if not data.count('\x15\x03\x01\x00\x20') == 1: continue
+        #else
+        bFoundClose = True
+        break
+    if bFoundClose == False: raise Exception ('Encrypted close notify not found')
+    #copy the file 
+    commited_dir = os.path.join(current_sessiondir, 'commited')
+    if not os.path.exists(commited_dir): os.makedirs(commited_dir)
+    tracecopy_path = os.path.join(commited_dir, 'trace'+ str(len(cr_list)) )
+    shutil.copyfile(os.path.join(tracelog_dir, one_file), tracecopy_path)
+    #take the hash
+    with open(tracecopy_path, 'rb') as f: data=f.read()
+    commit_hash = hashlib.sha256(data).digest()
+    b64_commit_hash = base64.b64encode(commit_hash)
+    reply = send_and_recv('commit_hash:'+b64_commit_hash)
+    if reply[0] != 'success':
+        return ('Failed to receive a reply')
+    if not reply[1].startswith('sha1hmac_for_MS:'):
+        return 'bad reply. Expected sha1hmac_for_MS:'
+    b64_sha1hmac_for_MS = reply[1][len('sha1hmac_for_MS:'):]
+    try: sha1hmac_for_MS = base64.b64decode(b64_sha1hmac_for_MS)
+    except:  return ('base64 decode error in sha1hmac_for_MS')
+    #construct MS
+    ms = bytearray([ord(a) ^ ord(b) for a,b in zip(md5hmac, sha1hmac_for_MS)][:48])
+    sslkeylog = os.path.join(commited_dir, 'sslkeylog')
+    cr_hexl = binascii.hexlify(cr)
+    ms_hexl = binascii.hexlify(ms)
+    skl_fd = open(sslkeylog, 'wb')
+    skl_fd.write('CLIENT_RANDOM ' + cr_hexl + ' ' + ms_hexl + '\n')
+    skl_fd.close()
     return 'success'
      
 #scan the dir until a new file appears and then spawn a new processing thread
@@ -837,8 +887,8 @@ def new_connection_thread(socket_client, new_address):
     
     last_time_data_was_seen = int(time.time())
     while True:
-        rlist, wlist, xlist = select.select((socket_client, socket_target), (), (socket_client, socket_target), 60)
-        if len(rlist) == len(wlist) == len(xlist) == 0: #60 second timeout
+        rlist, wlist, xlist = select.select((socket_client, socket_target), (), (socket_client, socket_target), 20)
+        if len(rlist) == len(wlist) == len(xlist) == 0: #20 second timeout
             print ('Socket 60 second timeout. Terminating connection')
             socket_client.close()
             socket_target.close()
@@ -860,11 +910,11 @@ def new_connection_thread(socket_client, new_address):
                 if not data: 
                     #this worries me. Why did select() trigger if there was no data?
                     #this overwhelms CPU big time unless we sleep
-                    if int(time.time()) - last_time_data_was_seen > 60: #prevent no-data sockets from looping endlessly
+                    if int(time.time()) - last_time_data_was_seen > 20: #prevent no-data sockets from looping endlessly
                         socket_client.close()
                         socket_target.close()
                         return
-                    #else 60 seconds of datalessness have not elapsed
+                    #else 20 seconds of datalessness have not elapsed
                     time.sleep(0.1)
                     continue 
                 last_time_data_was_seen = int(time.time())
@@ -969,12 +1019,12 @@ def receivingThread(my_nick, auditor_nick, IRCsocket):
         messages = buffer.split('\r\n')
         for onemsg in messages:
             msg = onemsg.split()
-            if len(msg)==0: continue  #stray newline
+            if len(msg) == 0: continue  #stray newline
             if msg[0] == "PING": #check if server have sent ping command
                 IRCsocket.send("PONG %s" % msg[1]) #answer with pong as per RFC 1459
                 continue
             if not len(msg) >= 5: continue
-            if not (msg[1]=='PRIVMSG' and msg[2]==channel_name and msg[3]==':'+my_nick ): continue
+            if not (msg[1] == 'PRIVMSG' and msg[2] == channel_name and msg[3] == ':'+my_nick ): continue
             exclamaitionMarkPosition = msg[0].find('!')
             nick_from_message = msg[0][1:exclamaitionMarkPosition]
             if not auditor_nick == nick_from_message: continue
@@ -989,7 +1039,8 @@ def receivingThread(my_nick, auditor_nick, IRCsocket):
                 continue
             if not his_seq == receivingThread.last_seq_which_i_acked +1: continue #we did not receive the next seq in order
             #else we got a new seq      
-            if first_chunk=='' and  not msg[5].startswith( ('grsapms_ghmac', 'rsapms_hmacms_hmacek', 'verify_hmac:', 'logsig:', 'response:') ) : continue         
+            if first_chunk == '' and  not msg[5].startswith((
+                'grsapms_ghmac', 'rsapms_hmacms_hmacek', 'verify_hmac:', 'logsig:', 'response:', 'sha1hmac_for_MS')) : continue         
             #check if this is the first chunk of a chunked message. Only 2 chunks are supported for now
             #'CRLF' is used at the end of the first chunk, 'EOL' is used to show that there are no more chunks
             if msg[-1]=='CRLF':
