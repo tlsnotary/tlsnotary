@@ -61,7 +61,7 @@ function simulateClick() {
   });
   var iframe = gBrowser.getBrowserForTab(jettab).contentWindow.document.getElementsByClassName("frame")[0]
   var input = iframe.contentDocument.childNodes[2].childNodes[2].childNodes[1].childNodes[3]
-  var prefs = Components.classes["@mozilla.org/preferences-service;1"].getService(Components.interfaces.nsIPrefService);
+  var prefs = Cc["@mozilla.org/preferences-service;1"].getService(Ci.nsIPrefService);
   prefs.setBoolPref("dom.disable_open_during_load", false)   //prevent popup blocker
   input.dispatchEvent(event);
   observer = new myObserver(); //waits for the get response
@@ -73,7 +73,7 @@ function eventHandler_htmlLoad(event){
 		var win = event.originalTarget.defaultView;
 		if (!win.frameElement) {
 			gBrowser.getBrowserForTab(jettab).removeEventListener("load", eventHandler_htmlLoad, true);
-			alert("In the next dialog window, please, choose the file mytrace.zip and press OK.\n\
+			alert("In the next dialog window, please, choose the file mytrace.zip and press Open.\n\
 The file will be immediately forwarded to the auditor.");
 			informBackend();
 		}
@@ -83,23 +83,22 @@ The file will be immediately forwarded to the auditor.");
 function myObserver() {  this.register();}
 myObserver.prototype = {
   observe: function(aSubject, topic, data) {
-	 var httpChannel = aSubject.QueryInterface(Components.interfaces.nsIHttpChannel);
+	 var httpChannel = aSubject.QueryInterface(Ci.nsIHttpChannel);
 	 var url = httpChannel.URI.spec;
 	 if (url.startsWith("http://jetbytes.com/ctl/get_url")){
 		observer.unregister();
 		//we need to wait for the page to fully load
 		setTimeout(getLink, 3000, 0);
 		//TODO find a better way to determine when iframe loaded rather than relying on a 3 sec timeout
+		help.value = "Sending data to auditor and waiting for confirmation"
 	}
   },
   register: function() {
-    var observerService = Components.classes["@mozilla.org/observer-service;1"]
-                          .getService(Components.interfaces.nsIObserverService);
+    var observerService = Cc["@mozilla.org/observer-service;1"].getService(Ci.nsIObserverService);
     observerService.addObserver(this, "http-on-examine-response", false);
   },
   unregister: function() {
-    var observerService = Components.classes["@mozilla.org/observer-service;1"]
-                            .getService(Components.interfaces.nsIObserverService);
+    var observerService = Cc["@mozilla.org/observer-service;1"].getService(Ci.nsIObserverService);
     observerService.removeObserver(this, "http-on-examine-response");
   }
 }
@@ -149,6 +148,8 @@ function responseSendLink(iteration){
 		return;
 	}
 	//else successful response
+	help.value = "Auditing session has finished"
+
 	alert ("Congratulations. Auditor acknowledged successful receipt of the audit data. \n\
 All data pertaining to this audit session are located in " + session_path + "\n\
 You may now close the browser.");
