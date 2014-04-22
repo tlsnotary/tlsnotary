@@ -1,34 +1,38 @@
 var bStartRecordingResponded = false;
 var bStopRecordingResponded = false;
 var bStopPreparePMS = false;
-var bIsRecordngStarted = false;
+var bGetHTMLPaths = false;
+var bIsRecordingStarted = false;
 var reqStartRecording;
 var reqStopRecording;
 var reqPreparePMS;
+var reqGetHTMLPaths;
 var port;
 var url_for_recording_full = "";
 var session_path = "";
 var observer;
+var audited_browser; //the FF's internal browser which contains the audited HTML
+var help;
 
-port = Components.classes["@mozilla.org/process/environment;1"].getService(Components.interfaces.nsIEnvironment).get("FF_to_backend_port");
+port = Cc["@mozilla.org/process/environment;1"].getService(Ci.nsIEnvironment).get("FF_to_backend_port");
 //setting homepage should be done from here rather than defaults.js in order to have the desired effect. FF's quirk.
-Components.classes["@mozilla.org/preferences-service;1"].getService(Components.interfaces.nsIPrefService).getBranch("browser.startup.").setCharPref("homepage", "chrome://tlsnotary/content/auditee.html");
+Cc["@mozilla.org/preferences-service;1"].getService(Ci.nsIPrefService).getBranch("browser.startup.").setCharPref("homepage", "chrome://tlsnotary/content/auditee.html");
 //the 2 prefs below must be set from here rather than defaults.js because TBB overrides them on startup
-Components.classes["@mozilla.org/preferences-service;1"].getService(Components.interfaces.nsIPrefService).getBranch("network.proxy.").setIntPref("type", 0);
-Components.classes["@mozilla.org/preferences-service;1"].getService(Components.interfaces.nsIPrefService).getBranch("network.proxy.").setBoolPref("socks_remote_dns", false);
+Cc["@mozilla.org/preferences-service;1"].getService(Ci.nsIPrefService).getBranch("network.proxy.").setIntPref("type", 0);
+Cc["@mozilla.org/preferences-service;1"].getService(Ci.nsIPrefService).getBranch("network.proxy.").setBoolPref("socks_remote_dns", false);
 
 //poll the env var to see if IRC started
 //so that we can display a help message on the addon toolbar
 //TODO find out if auditee.html can access XUL ??? then we dont need this
 pollEnvvar();
 function pollEnvvar(){
-	var envvarvalue = Components.classes["@mozilla.org/process/environment;1"].getService(Components.interfaces.nsIEnvironment).get("TLSNOTARY_IRC_STARTED");
+	var envvarvalue = Cc["@mozilla.org/process/environment;1"].getService(Ci.nsIEnvironment).get("TLSNOTARY_IRC_STARTED");
 	if (envvarvalue != "true"){
 		setTimeout(pollEnvvar, 1000);
 		return;
 	}
+	help = document.getElementById("help");
 	//else if envvar was set
-	var help = document.getElementById("help");
 	help.value = "Navigate to a webpage and press RECORD. The page will reload automatically.";
 	var button_record_enabled = document.getElementById("button_record_enabled");
 	var button_record_disabled = document.getElementById("button_record_disabled");
@@ -37,10 +41,34 @@ function pollEnvvar(){
 }
 
 
+//copied from https://developer.mozilla.org/en-US/docs/Code_snippets/Progress_Listeners
+const STATE_STOP = Ci.nsIWebProgressListener.STATE_STOP;
+const STATE_IS_WINDOW = Ci.nsIWebProgressListener.STATE_IS_WINDOW;
+//start decrypting the trace as soon as DOM is loaded
+var loadListener = {
+    QueryInterface: XPCOMUtils.generateQI(["nsIWebProgressListener",
+                                           "nsISupportsWeakReference"]),
+
+    onStateChange: function(aWebProgress, aRequest, aFlag, aStatus) {
+        if ((aFlag & STATE_STOP) && (aFlag & STATE_IS_WINDOW) && (aWebProgress.DOMWindow == aWebProgress.DOMWindow.top)) {
+            // This fires when the load finishes
+			audited_browser.removeProgressListener(this);
+			help.value = "Decrypting HTML (will pop up in a new tab)"
+			//sleep at least 2 seconds so that the user could read the text above
+			setTimeout(get_html_paths, 2000);
+        }
+    },
+    onLocationChange: function(aProgress, aRequest, aURI) {},
+    onProgressChange: function(aWebProgress, aRequest, curSelf, maxSelf, curTot, maxTot) {},
+    onStatusChange: function(aWebProgress, aRequest, aStatus, aMessage) {},
+    onSecurityChange: function(aWebProgress, aRequest, aState) {}
+}
+
+
 function myObserver() {}
 myObserver.prototype = {
   observe: function(aSubject, topic, data) {
-	 var httpChannel = aSubject.QueryInterface(Components.interfaces.nsIHttpChannel);
+	 var httpChannel = aSubject.QueryInterface(Ci.nsIHttpChannel);
 	 var accept = httpChannel.getRequestHeader("Accept");
 	 var url_full = httpChannel.URI.spec;
 	 var regex= /html/;
@@ -57,26 +85,78 @@ myObserver.prototype = {
 	  && !url.endsWith(".js") && !url.endsWith(".jpg") && !url.endsWith(".ico") && !url.endsWith(".woff") 
 	  && !url.endsWith(".swf") && !url.contains("favicon.ico#") ) 	{
 		observer.unregister();
-		Components.classes["@mozilla.org/process/environment;1"].getService(Components.interfaces.nsIEnvironment).set("NSS_PATCH_STAGE_ONE", "true");
+		Cc["@mozilla.org/process/environment;1"].getService(Ci.nsIEnvironment).set("NSS_PATCH_STAGE_ONE", "true");
 		console.log("patch toggled");
 	}
   },
   register: function() {
-    var observerService = Components.classes["@mozilla.org/observer-service;1"]
-                          .getService(Components.interfaces.nsIObserverService);
+    var observerService = Cc["@mozilla.org/observer-service;1"].getService(Ci.nsIObserverService);
     observerService.addObserver(this, "http-on-modify-request", false);
   },
   unregister: function() {
-    var observerService = Components.classes["@mozilla.org/observer-service;1"]
-                            .getService(Components.interfaces.nsIObserverService);
+    var observerService = Cc["@mozilla.org/observer-service;1"].getService(Ci.nsIObserverService);
     observerService.removeObserver(this, "http-on-modify-request");
   }
 }
 var observer = new myObserver();
 
+//get paths to decrypted html files on local filesystem and show the html
+function get_html_paths(){
+	reqGetHTMLPaths = new XMLHttpRequest();
+    reqGetHTMLPaths.onload = responseGetHTMLPaths;
+    reqGetHTMLPaths.open("HEAD", "http://127.0.0.1:"+port+"/get_html_paths", true);
+    reqGetHTMLPaths.send();
+    //give 20 secs for escrow to respond
+    setTimeout(responseGetHTMLPaths, 1000, 0);	
+}
+
+function responseGetHTMLPaths(iteration){
+    if (typeof iteration == "number"){
+    //give 5 secs for backend to respond
+        if (iteration > 30){
+            alert("responseGetHTMLPaths timed out");
+            return;
+        }
+        if (!bGetHTMLPaths) setTimeout(responseGetHTMLPaths, 1000, ++iteration)
+        return;
+    }
+    //else: not a timeout but a response from the server
+	bGetHTMLPaths = true;
+    var query = reqGetHTMLPaths.getResponseHeader("response");
+    var status = reqGetHTMLPaths.getResponseHeader("status");
+
+    if (query != "get_html_paths"){
+        alert("Internal error. Wrong response header: " + query);
+        return;
+    }
+	if (status != "success"){
+		alert ("Received an error message: " + status);
+		return;
+	}
+	//else successful response
+	b64_html_paths = reqGetHTMLPaths.getResponseHeader("html_paths");
+	html_paths_string = atob(b64_html_paths);
+	html_paths = html_paths_string.split("&");
+	for (var i=0; i<html_paths.length; i++){
+		if (html_paths[i] == "") continue;
+		gBrowser.addTab(html_paths[i]);
+	}
+	help.value = "Navigate to a webpage and press RECORD. The page will reload automatically.";
+	var button_record_enabled = document.getElementById("button_record_enabled");
+	var button_spinner = document.getElementById("button_spinner");
+	var button_stop_enabled = document.getElementById("button_stop_enabled");
+	var button_stop_disabled = document.getElementById("button_stop_disabled");
+	
+	button_record_enabled.hidden = false;
+	button_spinner.hidden = true;
+	button_stop_disabled.hidden = true;
+	button_stop_enabled.hidden = false;
+}
+
 
 function startRecording(){
-	url_for_recording_full = gBrowser.contentWindow.location.href;
+	audited_browser = gBrowser.selectedBrowser;
+	url_for_recording_full = audited_browser.contentWindow.location.href;
 	if (!url_for_recording_full.startsWith("https://")){
 		alert("You can only record pages which start with https://");
 		return;
@@ -85,16 +165,18 @@ function startRecording(){
 	var button_spinner = document.getElementById("button_spinner");
 	var button_stop_enabled = document.getElementById("button_stop_enabled");
 	var button_stop_disabled = document.getElementById("button_stop_disabled");
+	
+	button_record_enabled.hidden = true;
+	button_spinner.hidden = false;
+	button_stop_disabled.hidden = false;
+	button_stop_enabled.hidden = true;
 
-	if (bIsRecordngStarted){
+	if (bIsRecordingStarted){
 		preparePMS();
 		return;
 	}
-	button_record_enabled.hidden = false;
-	button_spinner.hidden = false;
-	button_stop_disabled.hidden = true;
-	button_stop_enabled.hidden = false;
-
+	
+	help.value = "Initializing the recording software"
 	reqStartRecording = new XMLHttpRequest();
     reqStartRecording.onload = responseStartRecording;
     reqStartRecording.open("HEAD", "http://127.0.0.1:"+port+"/start_recording", true);
@@ -104,6 +186,7 @@ function startRecording(){
 }
 
 function preparePMS(){
+	help.value = "Negotiating cryptographic parameters with auditor"
 	//tell backend to prepare a google-checked PMS
 	reqPreparePMS = new XMLHttpRequest();
     reqPreparePMS.onload = responsePreparePMS;
@@ -137,16 +220,13 @@ function responseStartRecording(iteration){
 		return;
 	}
 	//else successful response
-	bIsRecordngStarted = true;
+	bIsRecordingStarted = true;
 	var proxy_port = reqStartRecording.getResponseHeader("proxy_port");
-	var prefs = Components.classes["@mozilla.org/preferences-service;1"].getService(Components.interfaces.nsIPrefService);
+	var prefs = Cc["@mozilla.org/preferences-service;1"].getService(Ci.nsIPrefService);
 	var port_int = parseInt(proxy_port);
 	prefs.setIntPref("network.proxy.type", 1);
 	prefs.setCharPref("network.proxy.ssl","127.0.0.1");
 	prefs.setIntPref("network.proxy.ssl_port", port_int);
-	var sdr = Components.classes["@mozilla.org/security/sdr;1"].getService(Components.interfaces.nsISecretDecoderRing);
-	sdr.logoutAndTeardown();
-	var help = document.getElementById("help");
 	preparePMS();
 }
 
@@ -173,27 +253,29 @@ function responsePreparePMS(iteration){
 		return;
 	}
 	//else success preparing PMS, resume page reload
-	var help = document.getElementById("help");
-	help.value = "You can navigate to more than one page. When finished, press STOP"
+	help.value = "Waiting for the page to reload fully"
+	var sdr = Cc["@mozilla.org/security/sdr;1"].getService(Ci.nsISecretDecoderRing);
+	sdr.logoutAndTeardown();
 	observer.register();
-	BrowserReloadSkipCache();
+	audited_browser.addProgressListener(loadListener);
+	audited_browser.reloadWithFlags(Ci.nsIWebNavigation.LOAD_FLAGS_BYPASS_CACHE);
 }
 
 
-
-
 function stopRecording(){
+	help.value = "Preparing the data to be sent to auditor"
 	//disable proxy so that we can reach our localhost backend
-	Components.classes["@mozilla.org/preferences-service;1"].getService(Components.interfaces.nsIPrefService).getBranch("network.proxy.").setIntPref("type", 0);
+	Cc["@mozilla.org/preferences-service;1"].getService(Ci.nsIPrefService).getBranch("network.proxy.").setIntPref("type", 0);
 	var button_record_disabled = document.getElementById("button_record_disabled");
+	var button_record_enabled = document.getElementById("button_record_enabled");
 	var button_spinner = document.getElementById("button_spinner");
 	var button_stop_enabled = document.getElementById("button_stop_enabled");
 	var button_stop_disabled = document.getElementById("button_stop_disabled");
 
 	button_spinner.hidden = true;
-	button_record_disabled. hidden = false;
+	button_record_enabled.hidden = true;
 	button_stop_enabled.hidden = true;
-	button_spinner.hidden = false;
+	button_record_disabled.hidden = false;
 
 	reqStopRecording = new XMLHttpRequest();
     reqStopRecording.onload = responseStopRecording;
@@ -234,7 +316,7 @@ function responseStopRecording(iteration){
 		return;
 	}
 	//else successful response, disable proxying
-	var prefs = Components.classes["@mozilla.org/preferences-service;1"].getService(Components.interfaces.nsIPrefService);
+	var prefs = Cc["@mozilla.org/preferences-service;1"].getService(Ci.nsIPrefService);
 	prefs.setIntPref("network.proxy.type", 0);
 	start_jetbytes(); //from jetbytes.js
 }
