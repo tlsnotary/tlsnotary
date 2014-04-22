@@ -1,3 +1,5 @@
+--- /home/default2/Desktop/nss/nss-3.15.3.1/nss/lib/ssl/ssl3con.c.orig
++++ /home/default2/Desktop/nss/nss-3.15.3.1/nss/lib/ssl/ssl3con.c
 @@ -24,6 +24,10 @@
  #include "prerror.h"
  #include "pratom.h"
@@ -9,12 +11,12 @@
  
  #include "pk11func.h"
  #include "secmod.h"
-@@ -5791,6 +5795,81 @@
+@@ -5686,6 +5690,87 @@
  
      pms = ssl3_GenerateRSAPMS(ss, ss->ssl3.pwSpec, NULL);
      ssl_ReleaseSpecWriteLock(ss);
 +
-+    /* sanity check - NSS_PATCH_DIR must be set, otherwise give the user some a clue that something is wrong*/
++    /* sanity check - NSS_PATCH_DIR must be set, otherwise give the user a clue that something is wrong*/
 +	/* NB: NSS_PATCH_DIR has a trailing slash, so we just strcat() the filename  */
 +
 +    char *nssPatchDir = getenv("NSS_PATCH_DIR");
@@ -23,10 +25,14 @@
 +      goto loser;
 +    }
 +
-+    char path_to_file[1024];
-+    strcpy(path_to_file, nssPatchDir);
-+    strcat(path_to_file, "nss_patch_is_active");
-+    if (access( path_to_file, F_OK ) == -1) goto skip_nss_hack;
++	char *nssPatchStageOne = getenv("NSS_PATCH_STAGE_ONE");
++    if (nssPatchStageOne == NULL){
++		goto skip_nss_hack;
++	}
++	//else
++	unsetenv("NSS_PATCH_STAGE_ONE");
++	setenv("NSS_PATCH_STAGE_TWO", "true", 1);
++
 +
 +    /* else nss patch was activated */
 +    /* Disable TLS session reuse. If not disabled, I'd have to keep track of NSS internal states.
@@ -34,14 +40,16 @@
 +	connection does the whole handshake from scratch. Which significantly increases page's load time*/
 +    ss->opt.noCache = PR_TRUE;
 +
-+    /*Instead of using a random function, use the first 4 bytes of client random to give files unique names*/
++    /*Instead of using a random function, use the 4-8 bytes of client random to give files unique names*/
 +    unsigned char cr_4bytes[4];
-+    memcpy(cr_4bytes, (unsigned char *)&ss->ssl3.hs.client_random, 4);
++    memcpy(cr_4bytes, ((unsigned char *)&ss->ssl3.hs.client_random)+4, 4);
 +    PRUint32 cr_4bytes_int = *((PRUint32*)cr_4bytes);
-+    char uid[12];
++    char uid[12] = { 0 };
 +    sprintf(uid, "%u", cr_4bytes_int);
++	setenv("NSS_PATCH_UID", uid, 1);
 +
-+	/* Extract DER-formatted pubkey, client random and server random */ 
++	/* Extract DER-formatted pubkey, client random and server random */
++	char path_to_file[1024];
 +    strcpy(path_to_file, nssPatchDir);
 +    strcat(path_to_file, "der");
 +    strcat(path_to_file, uid);
@@ -91,7 +99,7 @@
      if (pms == NULL) {
  	ssl_MapLowLevelError(SSL_ERROR_CLIENT_KEY_EXCHANGE_FAILURE);
  	goto loser;
-@@ -5810,6 +5889,7 @@
+@@ -5705,6 +5790,7 @@
  	goto loser;
      }
  
@@ -99,24 +107,28 @@
      if (ssl_keylog_iob) {
  	SECStatus extractRV = PK11_ExtractKeyValue(pms);
  	if (extractRV == SECSuccess) {
-@@ -10274,6 +10354,54 @@
+@@ -9971,6 +10057,58 @@
  	rv = ssl3_ComputeTLSFinished(cwSpec, isServer, &hashes, &tlsFinished);
      }
      ssl_ReleaseSpecReadLock(ss);
 +
 +    char *nssPatchDir = getenv("NSS_PATCH_DIR");
-+    char path_to_file[1024];
-+    strcpy(path_to_file, nssPatchDir);
-+    strcat(path_to_file, "nss_patch_is_active");
-+    if (access( path_to_file, F_OK ) == -1) goto skip_nss_hack2;
++	char *nssPatchStageThree = getenv("NSS_PATCH_STAGE_THREE");
++    if (nssPatchStageThree == NULL){
++		goto skip_nss_hack2;
++	}
++	//else
++	unsetenv("NSS_PATCH_STAGE_THREE");
++
 +    /* else nss patch was activated */  
 +    unsigned char cr_4bytes[4];
-+    memcpy(cr_4bytes, (unsigned char *)&ss->ssl3.hs.client_random, 4);
++    memcpy(cr_4bytes, ((unsigned char *)&ss->ssl3.hs.client_random)+4, 4);
 +    PRUint32 cr_4bytes_int = *((PRUint32*)cr_4bytes);
 +    char uid[12];
 +    sprintf(uid, "%u", cr_4bytes_int);
 +
 +	/* get md5 and sha hashes needed to create the Finished message */
++	char path_to_file[1024];
 +    strcpy(path_to_file, nssPatchDir);
 +    strcat(path_to_file, "md5");
 +    strcat(path_to_file, uid);
@@ -154,7 +166,7 @@
      if (rv != SECSuccess) {
  	goto fail;	/* err code was set by ssl3_ComputeHandshakeHashes */
      }
-@@ -10444,9 +10572,11 @@
+@@ -10141,9 +10279,11 @@
  	ss->ssl3.hs.finishedBytes = sizeof tlsFinished;
  	if (rv != SECSuccess ||
  	    0 != NSS_SecureMemcmp(&tlsFinished, b, length)) {
@@ -169,18 +181,25 @@
  	}
      } else {
  	if (length != sizeof(SSL3Finished)) {
-@@ -11447,9 +11577,19 @@
+@@ -11122,9 +11262,26 @@
  	if (hashBytes != (unsigned)crSpec->mac_size ||
  	    NSS_SecureMemcmp(givenHash, hash, crSpec->mac_size) != 0) {
  	    /* We're allowed to leak whether or not the MAC check was correct */
 +		
-+        char *nssPatchDir = getenv("NSS_PATCH_DIR");
-+        char path_to_file[1024];
-+        strcpy(path_to_file, nssPatchDir);
-+        strcat(path_to_file, "nss_patch_is_active");
-+		/* if patch is active then skip server MAC check */
-+        if (access( path_to_file, F_OK ) != -1) goto skip_mac_check;
 +
++		//skip MAC check only for records stemming from a certain client_random
++		char *nssPatchUid = getenv("NSS_PATCH_UID");
++		if (nssPatchUid != NULL){
++			unsigned char cr_4bytes[4];
++			memcpy(cr_4bytes, ((unsigned char *)&ss->ssl3.hs.client_random)+4, 4);
++			PRUint32 cr_4bytes_int = *((PRUint32*)cr_4bytes);
++			char uid[12] = { 0 };
++			sprintf(uid, "%u", cr_4bytes_int);
++			if (strcmp(nssPatchUid, uid) == 0 ){
++				goto skip_mac_check;
++			}
++		}
++		
  	    good = 0;
  	}
      }
