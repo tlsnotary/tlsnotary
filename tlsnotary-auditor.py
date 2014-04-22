@@ -21,6 +21,7 @@ import threading
 import time
 import random
 import urllib2
+import zipfile
 
 installdir = os.path.dirname(os.path.realpath(__file__))
 datadir = os.path.join(installdir, 'auditor')
@@ -342,7 +343,8 @@ def process_messages():
             b64_sha1hmac = base64.b64encode(sha1hmac) 
             send_message('sha1hmac_for_MS:'+b64_sha1hmac)
             continue
-        #------------------------------------------------------------------------------------------------------#    
+        #------------------------------------------------------------------------------------------------------#
+        #OBSOLETE command
         elif msg.startswith('zipsig:'): #the user has finished  and send the signature of the trace zipfile
             b64_zipsig = msg[len('zipsig:'):]
             try:
@@ -374,13 +376,29 @@ def process_messages():
             req = urllib2.Request(link)
             resp = urllib2.urlopen(req)
             linkdata = resp.read()
-            linkdatahash = hashlib.sha256(linkdata).digest()
-            if (linkdatahash == ziphash): 
-                response = 'success'
-                with open(os.path.join(current_sessiondir, 'tracefile.zip'), 'wb') as f : f.write(linkdata)
-            else: response = 'failure'
+            with open(os.path.join(current_sessiondir, 'auditeetrace.zip'), 'wb') as f : f.write(linkdata)
+            zipf = zipfile.ZipFile(os.path.join(current_sessiondir, 'auditeetrace.zip'), 'r')
+            auditeetrace_dir = os.path.join(current_sessiondir, 'auditeetrace')
+            zipf.extractall(auditeetrace_dir)
+            #get a list of all hashes committed to
+            committed_hashes = []
+            commited_dir_list = os.listdir(commited_dir)
+            for one_hash_name in commited_dir_list:
+                with open(os.path.join(commited_dir, one_hash_name), 'rb') as f: one_hash_data = f.read()
+                committed_hashes.append(one_hash_data)
+            #make sure that each tracefile's hash is in the commited list
+            auditeetrace_dir_list = os.listdir(auditeetrace_dir)
+            response = 'success' #unless overridden by a hash not being in the committed list
+            for onetrace_name in auditeetrace_dir_list:
+                with open(os.path.join(auditeetrace_dir, onetrace_name), 'rb') as f: onetrace_data = f.read()
+                onetrace_hash = hashlib.sha256(onetrace_data).digest()
+                if not onetrace_hash in committed_hashes:
+                    response = 'failure'                
             send_message('response:'+response)
-            progressQueue.put(time.strftime('%H:%M:%S', time.localtime()) + ': The auditee has successfully finished the audit session')
+            if response == 'success':
+                progressQueue.put(time.strftime('%H:%M:%S', time.localtime()) + ': The auditee has successfully finished the audit session')
+            else:
+                progressQueue.put(time.strftime('%H:%M:%S', time.localtime()) + ': WARNING!!! The auditee FAILED the audit session')
             progressQueue.put(time.strftime('%H:%M:%S', time.localtime()) + ': All data pertaining to this session can be found at ' + current_sessiondir)
             progressQueue.put(time.strftime('%H:%M:%S', time.localtime()) + ': You may now close the browser.')
             continue
