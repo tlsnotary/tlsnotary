@@ -72,6 +72,7 @@ secretbytes_amount=13
 PMS_first_half = '' #made global because of google check. TODO: start creating classes
 bIsStcppipeStarted = False
 cr_list = [] #a list of all client_randoms for recorded pages. Used to narrow down stcppipe's dump to only those files which auditor needs.
+md5hmac = '' #used in get_html_paths to construct the full MS after committing to a hash
 
 def bigint_to_bytearray(bigint):
     m_bytes = []
@@ -114,6 +115,8 @@ class HandlerClass(SimpleHTTPServer.SimpleHTTPRequestHandler):
         print ('minihttp received ' + self.path + ' request',end='\r\n')
         # example HEAD string "/command?parameter=124value1&para2=123value2"    
         # we need to adhere to CORS and add extra Access-Control-* headers in server replies
+        
+        #--------------------------------------------------------------------------------------------------------------------------------------------#
         if self.path.startswith('/get_recent_keys'):
             #this is the very first command that addon issues
             #If this is the very first time tlsnotary is run, there will be no saved keys
@@ -143,7 +146,7 @@ class HandlerClass(SimpleHTTPServer.SimpleHTTPRequestHandler):
             self.end_headers()
             return
              
-             
+        #--------------------------------------------------------------------------------------------------------------------------------------------#     
         if self.path.startswith('/new_keypair'):
             #generate a new keypair for me. Usually we can simple reuse the keys from the previous audit,
             #but for privacy reason the auditee may generate a new key
@@ -151,14 +154,14 @@ class HandlerClass(SimpleHTTPServer.SimpleHTTPRequestHandler):
             myPrivateKey = privkey
             my_pem_pubkey = pubkey.save_pkcs1()
             my_pem_privkey = privkey.save_pkcs1()
-            #------------------------------------------
+
             with open(os.path.join(current_sessiondir, 'myprivkey'), 'wb') as f: f.write(my_pem_privkey)
             with open(os.path.join(current_sessiondir, 'mypubkey'), 'wb') as f: f.write(my_pem_pubkey)
             #also save the keys as recent, so that they could be reused in the next session
             if not os.path.exists(os.path.join(datadir, 'recentkeys')): os.makedirs(os.path.join(datadir, 'recentkeys'))
             with open(os.path.join(datadir, 'recentkeys' , 'myprivkey'), 'wb') as f: f.write(my_pem_privkey)
             with open(os.path.join(datadir, 'recentkeys', 'mypubkey'), 'wb') as f: f.write(my_pem_pubkey)
-            #---------------------------------------------
+
             self.send_response(200)
             self.send_header("Access-Control-Allow-Origin", "*")
             self.send_header("Access-Control-Expose-Headers", "response, pubkey")
@@ -168,7 +171,8 @@ class HandlerClass(SimpleHTTPServer.SimpleHTTPRequestHandler):
             self.send_header("status", "success")
             self.end_headers()
             return
-
+        
+        #--------------------------------------------------------------------------------------------------------------------------------------------#
         if self.path.startswith('/import_auditor_pubkey'):
             #whatever key was pasted into the Auditor's key textarea ends up here.
             arg_str = self.path.split('?', 1)[1]
@@ -193,7 +197,7 @@ class HandlerClass(SimpleHTTPServer.SimpleHTTPRequestHandler):
                 with open(os.path.join(datadir, 'recentkeys' , 'auditorpubkey'), 'wb') as f: f.write(auditor_pubkey_pem)
             except:
                 status = 'Error importing pubkey. Did you copy-paste it correctly?'
-            #-----------------------------------------
+
             self.send_response(200)
             self.send_header("Access-Control-Allow-Origin", "*")
             self.send_header("Access-Control-Expose-Headers", "response, status")
@@ -202,6 +206,7 @@ class HandlerClass(SimpleHTTPServer.SimpleHTTPRequestHandler):
             self.end_headers()
             return
         
+        #--------------------------------------------------------------------------------------------------------------------------------------------#
         if self.path.startswith('/start_irc'):
             rv = start_irc()
             self.send_response(200)
@@ -212,6 +217,7 @@ class HandlerClass(SimpleHTTPServer.SimpleHTTPRequestHandler):
             self.end_headers()
             return
         
+        #--------------------------------------------------------------------------------------------------------------------------------------------#
         if self.path.startswith('/start_recording'):
             if not bIsStcppipeStarted:
                 bIsStcppipeStarted = True
@@ -234,6 +240,7 @@ class HandlerClass(SimpleHTTPServer.SimpleHTTPRequestHandler):
             self.end_headers()
             return
         
+        #--------------------------------------------------------------------------------------------------------------------------------------------#
         if self.path.startswith('/stop_recording'):
             rv = stop_recording()
             if rv != 'success':
@@ -248,6 +255,7 @@ class HandlerClass(SimpleHTTPServer.SimpleHTTPRequestHandler):
             self.end_headers()
             return
         
+        #--------------------------------------------------------------------------------------------------------------------------------------------#
         if self.path.startswith('/terminate'):
             rv = 'terminate()'
             self.send_response(200)
@@ -258,6 +266,7 @@ class HandlerClass(SimpleHTTPServer.SimpleHTTPRequestHandler):
             self.end_headers()
             return
         
+        #--------------------------------------------------------------------------------------------------------------------------------------------#
         if self.path.startswith('/prepare_pms'):
             rv = prepare_pms()
             if rv != 'success':
@@ -271,6 +280,7 @@ class HandlerClass(SimpleHTTPServer.SimpleHTTPRequestHandler):
             self.end_headers()
             return
         
+        #--------------------------------------------------------------------------------------------------------------------------------------------#
         if self.path.startswith('/inform_backend'):
             prepare_to_delete_folder()
             self.send_response(200)
@@ -281,6 +291,7 @@ class HandlerClass(SimpleHTTPServer.SimpleHTTPRequestHandler):
             self.end_headers()
             return
         
+        #--------------------------------------------------------------------------------------------------------------------------------------------#
         if self.path.startswith('/send_link'):
             filelink = self.path.split('?', 1)[1]
             rv = send_link(filelink)
@@ -292,6 +303,23 @@ class HandlerClass(SimpleHTTPServer.SimpleHTTPRequestHandler):
             self.end_headers()
             return
         
+        #--------------------------------------------------------------------------------------------------------------------------------------------#
+        if self.path.startswith('/get_html_paths'):
+            rv = get_html_paths()
+            if rv[0] != 'success':
+                self.send_response(400)
+            else:
+                b64_paths = base64.b64encode(rv[1])
+                self.send_response(200)
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.send_header("Access-Control-Expose-Headers", "response, status, html_paths")
+            self.send_header("response", "get_html_paths")
+            self.send_header("status", rv[0])
+            self.send_header("html_paths", b64_paths)
+            self.end_headers()
+            return            
+        
+        #--------------------------------------------------------------------------------------------------------------------------------------------#
         else:
             self.send_response(200)
             self.send_header("Access-Control-Allow-Origin", "*")
@@ -300,6 +328,131 @@ class HandlerClass(SimpleHTTPServer.SimpleHTTPRequestHandler):
             self.end_headers()
             return
 
+def get_html_paths():
+    cr = cr_list[-1]
+    #now find the corresponding tracefile, wait for the tls connection to finish and commit to the hash
+    #of that tracefile. Construct MS for that tracefile and use tshark to decrypt out the HTML files to be presented to user
+    tracelog_dir = os.path.join(current_sessiondir, 'tracelog')
+    tracelog_files = os.listdir(tracelog_dir)
+    bFoundCR = False
+    for one_file in tracelog_files:
+        with open(os.path.join(tracelog_dir, one_file), 'rb') as f: data=f.read()
+        if not data.count(cr) == 1: continue
+        #else client random found
+        bFoundCR = True
+        break 
+    if not bFoundCR: raise Exception ('Client random not found in trace files')
+    #copy the file 
+    commited_dir = os.path.join(current_sessiondir, 'commited')
+    if not os.path.exists(commited_dir): os.makedirs(commited_dir)
+    tracecopy_path = os.path.join(commited_dir, 'trace'+ str(len(cr_list)) )
+    shutil.copyfile(os.path.join(tracelog_dir, one_file), tracecopy_path)
+    #take the hash
+    with open(tracecopy_path, 'rb') as f: data=f.read()
+    commit_hash = hashlib.sha256(data).digest()
+    b64_commit_hash = base64.b64encode(commit_hash)
+    reply = send_and_recv('commit_hash:'+b64_commit_hash)
+    if reply[0] != 'success':
+        raise Exception ('Failed to receive a reply')
+    if not reply[1].startswith('sha1hmac_for_MS:'):
+        raise Exception ('bad reply. Expected sha1hmac_for_MS')
+    b64_sha1hmac_for_MS = reply[1][len('sha1hmac_for_MS:'):]
+    try: sha1hmac_for_MS = base64.b64decode(b64_sha1hmac_for_MS)
+    except:  raise Exception ('base64 decode error in sha1hmac_for_MS')
+    #construct MS
+    ms = bytearray([ord(a) ^ ord(b) for a,b in zip(md5hmac, sha1hmac_for_MS)])[:48]
+    sslkeylog = os.path.join(commited_dir, 'sslkeylog')
+    cr_hexl = binascii.hexlify(cr)
+    ms_hexl = binascii.hexlify(ms)
+    skl_fd = open(sslkeylog, 'wb')
+    skl_fd.write('CLIENT_RANDOM ' + cr_hexl + ' ' + ms_hexl + '\n')
+    skl_fd.close()
+    #use tshark to extract HTML
+    output = subprocess.check_output(['tshark', '-r', tracecopy_path, '-Y', 'ssl and http.content_type contains html', '-o', 'http.ssl.port:1025-65535', '-o', 'ssl.keylog_file:'+ sslkeylog, '-x'])
+    if output == '': raise Exception ("Failed to find HTML in escrowtrace")
+    #output may contain multiple frames with HTML, we examine them one-by-one
+    separator = re.compile('Frame ' + re.escape('(') + '[0-9]{2,7} bytes' + re.escape(')') + ':')
+    #ignore the first split element which is always an empty string
+    frames = re.split(separator, output)[1:]    
+    html_paths = ''
+    for index,oneframe in enumerate(frames):
+        html = get_html_from_asciidump(oneframe)
+        path = os.path.join(commited_dir, 'html-' + str(len(cr_list)) + '-' + str(index))
+        with open(path, 'wb') as f: f.write(html)
+        html_paths += path + "&"    
+    return ('success', html_paths)
+    
+    
+#look at tshark's ascii dump (option '-x') to better understand the parsing taking place
+def get_html_from_asciidump(ascii_dump):
+    hexdigits = set('0123456789abcdefABCDEF')
+    binary_html = bytearray()
+
+    if ascii_dump == '':
+        print ('empty frame dump',end='\r\n')
+        return -1
+
+    #We are interested in
+    # "Uncompressed entity body" for compressed HTML (both chunked and not chunked). If not present, then
+    # "De-chunked entity body" for no-compression, chunked HTML. If not present, then
+    # "Reassembled SSL" for no-compression no-chunks HTML in multiple SSL segments, If not present, then
+    # "Decrypted SSL data" for no-compression no-chunks HTML in a single SSL segment.
+    
+    uncompr_pos = ascii_dump.rfind('Uncompressed entity body')
+    if uncompr_pos != -1:
+        for line in ascii_dump[uncompr_pos:].split('\n')[1:]:
+            #convert ascii representation of hex into binary so long as first 4 chars are hexdigits
+            if all(c in hexdigits for c in line [:4]):
+                try: m_array = bytearray.fromhex(line[6:54])
+                except: break
+                binary_html += m_array
+            else:
+                #if first 4 chars are not hexdigits, we reached the end of the section
+                break
+        return binary_html
+    
+    #else      
+    dechunked_pos = ascii_dump.rfind('De-chunked entity body')
+    if dechunked_pos != -1:
+        for line in ascii_dump[dechunked_pos:].split('\n')[1:]:
+            if all(c in hexdigits for c in line [:4]):
+                try: m_array = bytearray.fromhex(line[6:54])
+                except: break
+                binary_html += m_array
+            else:
+                break
+        return binary_html
+            
+    #else
+    reassembled_pos = ascii_dump.rfind('Reassembled SSL')
+    if reassembled_pos != -1:
+        for line in ascii_dump[reassembled_pos:].split('\n')[1:]:
+            if all(c in hexdigits for c in line [:4]):
+                try: m_array = bytearray.fromhex(line[6:54])
+                except: break
+                binary_html += m_array
+            else:
+                #http HEADER is delimited from HTTP body with '\r\n\r\n'
+                if binary_html.find('\r\n\r\n') == -1:
+                    return -1
+                break
+        return binary_html.split('\r\n\r\n', 1)[1]
+
+    #else
+    decrypted_pos = ascii_dump.rfind('Decrypted SSL data')
+    if decrypted_pos != -1:       
+        for line in ascii_dump[decrypted_pos:].split('\n')[1:]:
+            if all(c in hexdigits for c in line [:4]):
+                try: m_array = bytearray.fromhex(line[6:54])
+                except: break
+                binary_html += m_array
+            else:
+                #http HEADER is delimited from HTTP body with '\r\n\r\n'
+                if binary_html.find('\r\n\r\n') == -1:
+                    return -1
+                break
+        return binary_html.split('\r\n\r\n', 1)[1]    
+    
 
 def send_link(filelink):
     b64_link = base64.b64encode(filelink)
@@ -343,10 +496,9 @@ def prepare_to_delete_folder():
 def prepare_pms():
     global PMS_first_half
     bIsCheckSuccessfull = False
-    PMS_first_half = '\x03\x01'+os.urandom(secretbytes_amount) + ('\x00' * (24-2-secretbytes_amount))
     
     for i in range(5): #try 5 times until google check succeeds
-        #------------------------------connect to google and get cr and sr
+        #first 4 bytes of client random are unix time
         cr_time = bigint_to_bytearray(int(time.time()))
         gcr = cr_time + os.urandom(28)
         client_hello = '\x16\x03\x01\x00\x2d\x01\x00\x00\x29\x03\x01' + gcr + '\x00\x00\x02\x00\x35\x01\x00'
@@ -354,46 +506,46 @@ def prepare_pms():
         tlssock.settimeout(10)
         tlssock.connect(('google.com', 443))
         tlssock.send(client_hello)
+        #we must get 3 tls handshake messages in response:
+        #sh --> server_hello, cert --> certificate, shd --> server_hello_done
         time.sleep(1)
-        serverhello_certificate_serverhellodone = tlssock.recv(8192*2)  #google sends a ridiculously long cert chain of 10KB+
+        sh_cert_shd = tlssock.recv(8192*2)  #google sends a ridiculously long cert chain of 10KB+
         #server hello starts with 16 03 01 * * 02
         #certificate starts with 16 03 01 * * 0b
-        serverhellodone = '\x16\x03\x01\x00\x04\x0e\x00\x00\x00'   
-        if not re.match(re.compile(b'\x16\x03\x01..\x02'), serverhello_certificate_serverhellodone):
-            print ('Invalid server hello')
-            exit(1)
-        if not serverhello_certificate_serverhellodone.endswith(serverhellodone):
-            print ('invalid server hello done')
-            exit(1)
+        shd = '\x16\x03\x01\x00\x04\x0e\x00\x00\x00'
+        sh_magic = re.compile(b'\x16\x03\x01..\x02')
+        if not re.match(sh_magic, sh_cert_shd):
+            raise Exception ('Invalid server hello')
+        if not sh_cert_shd.endswith(shd):
+            raise Exception ('invalid server hello done')
         #find the beginning of certificate message
-        cert_match = re.search(re.compile(b'\x16\x03\x01..\x0b'), serverhello_certificate_serverhellodone)
+        cert_magic = re.compile(b'\x16\x03\x01..\x0b')
+        cert_match = re.search(cert_magic, sh_cert_shd)
         if not cert_match:
-            print ('Invalid certificate message')
-            exit(1)
+            raise Exception ('Invalid certificate message')
         cert_start_position = cert_match.start()
-        serverhello = serverhello_certificate_serverhellodone[:cert_start_position]
-        certificate = serverhello_certificate_serverhellodone[cert_start_position : -len(serverhellodone)]
-        gsr = serverhello[11:43]
+        sh = sh_cert_shd[:cert_start_position]
+        cert = sh_cert_shd[cert_start_position : -len(shd)]
+        #extract google_server_random from server_hello
+        gsr = sh[11:43]
         
         b64_gcr_gsr = base64.b64encode(gcr+gsr)
         reply = send_and_recv('gcr_gsr:'+b64_gcr_gsr)
         
         if reply[0] != 'success':
-            print ('Failed to receive a reply for gcr+gsr:')
-            return ('Failed to receive a reply for gcr+gsr:')
+            raise Exception ('Failed to receive a reply for gcr+gsr:')
         if not reply[1].startswith('grsapms_ghmac:'):
-            print ('bad reply. Expected rsapms_ghmac:')
-            return 'bad reply. Expected grsapms_ghmac:'
+            raise Exception ('bad reply. Expected rsapms_ghmac:')
     
         b64_grsapms_ghmac = reply[1][len('grsapms_ghmac:'):]
         try:
             grsapms_ghmac = base64.b64decode(b64_grsapms_ghmac)    
         except:
-            print ('base64 decode error in grsapms_ghmac')
-            return ('base64 decode error in grsapms_ghmac')
+            raise Exception ('base64 decode error in grsapms_ghmac')
         
         RSA_PMS_second_half_google = grsapms_ghmac[:256]
         sha1hmac_google = grsapms_ghmac[256:304]
+        PMS_first_half = '\x03\x01'+os.urandom(secretbytes_amount) + ('\x00' * (24-2-secretbytes_amount))
         
         label = "master secret"
         seed = gcr + gsr
@@ -473,7 +625,7 @@ def prepare_pms():
         change_cipher_spec = '\x14\x03\01\x00\x01\x01'
         
         #calculate verify data. get hashes of all handshakes
-        handshake_messages = client_hello[5:]+serverhello[5:]+certificate[5:]+serverhellodone[5:]+client_key_exchange[5:]
+        handshake_messages = client_hello[5:]+sh[5:]+cert[5:]+shd[5:]+client_key_exchange[5:]
         sha = hashlib.sha1(handshake_messages).digest()
         md5 = hashlib.md5(handshake_messages).digest()
         #calculate verify_data for Finished message
@@ -501,8 +653,7 @@ def prepare_pms():
         client_encryption_key_list =  bigint_to_list(int(str(client_encryption_key).encode('hex'),16))
         client_iv_list =  bigint_to_list(int(str(client_iv).encode('hex'),16))
         
-        padded_cleartext = cleartext + ('\x0b' * 12) #this is violation of PKCS7 padding, because we are adding 12bytes, yet the padding char is 0x0b==11
-        #This must be investigated
+        padded_cleartext = cleartext + ('\x0b' * 12) #this is TLS CBC padding, it is not PKCS7
         try:
             mode, orig_len, encrypted_verify_data_and_hmac_for_verify_data = moo.encrypt( str(padded_cleartext), moo.modeOfOperation["CBC"], client_encryption_key_list, moo.aes.keySize["SIZE_256"], client_iv_list)
         except Exception, e: # TODO find out why I once got TypeError: 'NoneType' object is not iterable.  It helps to catch an exception here
@@ -523,7 +674,7 @@ def prepare_pms():
         bIsCheckSuccessfull = False
         return 'success' #successfull pms check        
     #no dice after 5 tries
-    return 'failure'
+    raise Exception ('Could not check PMS with google after 5 tries')
 
     
 
@@ -566,59 +717,27 @@ def send_and_recv (data):
     return ('failure', '')
 
 
-
-
 def stop_recording():
     global bReceivingThreadStopFlagIsSet
     os.kill(stcppipe_proc.pid, signal.SIGTERM)
     #TODO stop https proxy. 
-    #pick out only those trace files which contain client_random of recorded pages
-        
-    #zip up all trace files, sign the zip and give the sig to the auditor
-    zipf = zipfile.ZipFile(os.path.join(current_sessiondir, 'mytrace.zip'), 'w')
-    tracelogdir = os.path.join(current_sessiondir, 'tracelog')
-    tracelogfiles = os.listdir(tracelogdir)
-    for onefile in tracelogfiles:
-        with open(os.path.join(tracelogdir, onefile), 'rb') as f: data=f.read()
-        cr_sum = sum([data.count(one_cr) for one_cr in cr_list])
-        if cr_sum  > 1 : raise Exception ('More that one cr found in tracefile')
-        if cr_sum != 1 : continue
-        zipf.write(os.path.join(tracelogdir, onefile), onefile)
-    zipf.close()
-    with open(os.path.join(current_sessiondir, 'mytrace.zip'), 'rb') as f: zipdata = f.read()
-    zip_hash = hashlib.sha256(zipdata).digest()
 
-    signed_zip_hash = rsa.sign(zip_hash, myPrivateKey, 'SHA-1')
-    b64_signed_zip_hash = base64.b64encode(zip_hash + signed_zip_hash)
-    with open(os.path.join(current_sessiondir, 'my_signed_hash.txt'), 'wb') as f: f.write(zip_hash + '\n' + b64_signed_zip_hash)    
- 
-    reply = send_and_recv('zipsig:'+b64_signed_zip_hash)
-    if reply[0] != 'success':
-        print ('Failed to receive a reply')
-        return ('Failed to receive a reply')
-    if not reply[1].startswith('logsig:'):
-        print ('bad reply')
-        return ('bad reply')
-    
-    #stop IRC receiving thread
-    #bReceivingThreadStopFlagIsSet = True
-    
-    b64_logsig  = reply[1][len('logsig:'):]
-    try:
-        logsig = base64.b64decode(b64_logsig)
-        shahash = logsig[:64]
-        sig = logsig[64:]
-        #sanity check. is the signature correct?
-        rsa.verify(shahash, sig, auditorPublicKey)
-    except:
-        print ('Verification of the auditor\'s hash failed')
-        return 'Verification of the auditor\'s hash failed'
-    with open(os.path.join(current_sessiondir, 'auditor_signed_hash.txt'), 'wb') as f: f.write(shahash + '\n' + sig)
+    #trace* files in committed dir is what auditor needs
+    zipf = zipfile.ZipFile(os.path.join(current_sessiondir, 'mytrace.zip'), 'w')
+    committed_dir = os.path.join(current_sessiondir, 'commited')
+    com_dir_files = os.listdir(committed_dir)
+    for onefile in com_dir_files:
+        if not onefile.startswith('trace'): continue
+        zipf.write(os.path.join(committed_dir, onefile), onefile)
+    zipf.close()
     return 'success'
+
+
     
 #The NSS patch has created a new file in the nss_patch_dir
 def process_new_uid(uid): 
-    global current_client_random
+    global md5hmac
+    
     with  open(os.path.join(nss_patch_dir, 'der'+uid), 'rb') as fd: der = fd.read()
     #TODO: find out why on windows \r\n newline makes its way into der encoding
     if OS=='mswin': der = der.replace('\r\n', '\n')
@@ -770,56 +889,9 @@ def process_new_uid(uid):
     
     with open(os.path.join(nss_patch_dir, 'verify_data'+uid), 'wb') as f: f.write(bytearray(verify_data))
     with open(os.path.join(nss_patch_dir, 'verify_data'+uid+'ready'), 'wb') as f: f.close()
-    
-    #now find the corresponding tracefile, wait for the tls connection to finish and commit to the hash
-    #of that tracefile. Construct MS for that tracefile and use tshark to decrypt out the HTML files to be presented to user
-    tracelog_dir = os.path.join(current_sessiondir, 'tracelog')
-    tracelog_files = os.listdir(tracelog_dir)
-    bFoundCR = False
-    for one_file in tracelog_files:
-        with open(os.path.join(tracelog_dir, one_file), 'rb') as f: data=f.read()
-        if not data.count(cr) == 1: continue
-        #else client random found
-        bFoundCR = True
-        break 
-    if bFoundCR == False: raise Exception ('Client random not found in trace files')
-    #check if encrypted close_notify's header is present. The connection is most likely still active, so we sleep until it's not active anymore
-    bFoundClose = False
-    for i in range(30):
-        with open(os.path.join(tracelog_dir, one_file), 'rb') as f: data=f.read() #we need to re-read the file on each iteration
-        time.sleep(1)
-        if not data.count('\x15\x03\x01\x00\x20') == 1: continue
-        #else
-        bFoundClose = True
-        break
-    if bFoundClose == False: raise Exception ('Encrypted close notify not found')
-    #copy the file 
-    commited_dir = os.path.join(current_sessiondir, 'commited')
-    if not os.path.exists(commited_dir): os.makedirs(commited_dir)
-    tracecopy_path = os.path.join(commited_dir, 'trace'+ str(len(cr_list)) )
-    shutil.copyfile(os.path.join(tracelog_dir, one_file), tracecopy_path)
-    #take the hash
-    with open(tracecopy_path, 'rb') as f: data=f.read()
-    commit_hash = hashlib.sha256(data).digest()
-    b64_commit_hash = base64.b64encode(commit_hash)
-    reply = send_and_recv('commit_hash:'+b64_commit_hash)
-    if reply[0] != 'success':
-        return ('Failed to receive a reply')
-    if not reply[1].startswith('sha1hmac_for_MS:'):
-        return 'bad reply. Expected sha1hmac_for_MS:'
-    b64_sha1hmac_for_MS = reply[1][len('sha1hmac_for_MS:'):]
-    try: sha1hmac_for_MS = base64.b64decode(b64_sha1hmac_for_MS)
-    except:  return ('base64 decode error in sha1hmac_for_MS')
-    #construct MS
-    ms = bytearray([ord(a) ^ ord(b) for a,b in zip(md5hmac, sha1hmac_for_MS)][:48])
-    sslkeylog = os.path.join(commited_dir, 'sslkeylog')
-    cr_hexl = binascii.hexlify(cr)
-    ms_hexl = binascii.hexlify(ms)
-    skl_fd = open(sslkeylog, 'wb')
-    skl_fd.write('CLIENT_RANDOM ' + cr_hexl + ' ' + ms_hexl + '\n')
-    skl_fd.close()
     return 'success'
-     
+    
+   
 #scan the dir until a new file appears and then spawn a new processing thread
 def nss_patch_dir_scan_thread():
     uidsAlreadyProcessed = []
