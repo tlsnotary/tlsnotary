@@ -25,7 +25,7 @@ pref("security.ssl3.ecdhe_rsa_aes_128_sha",false);
 pref("security.ssl3.ecdhe_rsa_aes_256_sha",false);
 pref("security.ssl3.ecdhe_rsa_des_ede3_sha",false);
 pref("security.ssl3.ecdhe_rsa_rc4_128_sha",false);
-pref("security.ssl3.rsa_aes_128_sha",true);
+pref("security.ssl3.rsa_aes_128_sha",false);
 pref("security.ssl3.rsa_aes_256_sha",true);
 pref("security.ssl3.rsa_camellia_128_sha",false);
 pref("security.ssl3.rsa_camellia_256_sha",false);
