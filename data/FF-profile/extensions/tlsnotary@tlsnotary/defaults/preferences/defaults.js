@@ -52,7 +52,9 @@ pref("network.http.use-cache", false);
 pref("browser.shell.checkDefaultBrowser", false);
 pref("startup.homepage_welcome_url", "");
 pref("browser.rights.3.shown", true)
-pref("extensions.checkCompatibility", false); 
+pref("extensions.checkCompatibility", false);
+pref("browser.link.open_newwindow", 3); //open new window in a new tab
+pref("browser.link.open_newwindow.restriction", 0); // enforce the above rule without exceptions
 // The last version of the browser to successfully load extensions. 
 //Used to determine whether or not to disable extensions due to possible incompatibilities. 
 pref("extensions.lastAppVersion", "100.0.0"); //gets overriden by tbb
