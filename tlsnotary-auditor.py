@@ -336,9 +336,9 @@ def process_messages():
             except: 
                 print ('base64 decode error in commit_hash')
                 continue
-            commited_dir = os.path.join(current_sessiondir, 'commited')
-            if not os.path.exists(commited_dir): os.makedirs(commited_dir)
-            filename = os.path.join(commited_dir, uid)
+            committed_dir = os.path.join(current_sessiondir, 'committed')
+            if not os.path.exists(committed_dir): os.makedirs(committed_dir)
+            filename = os.path.join(committed_dir, uid)
             with open(filename, 'wb') as f: f.write(commit_hash)
             b64_sha1hmac = base64.b64encode(sha1hmac) 
             send_message('sha1hmac_for_MS:'+b64_sha1hmac)
@@ -382,11 +382,11 @@ def process_messages():
             zipf.extractall(auditeetrace_dir)
             #get a list of all hashes committed to
             committed_hashes = []
-            commited_dir_list = os.listdir(commited_dir)
-            for one_hash_name in commited_dir_list:
-                with open(os.path.join(commited_dir, one_hash_name), 'rb') as f: one_hash_data = f.read()
+            committed_dir_list = os.listdir(committed_dir)
+            for one_hash_name in committed_dir_list:
+                with open(os.path.join(committed_dir, one_hash_name), 'rb') as f: one_hash_data = f.read()
                 committed_hashes.append(one_hash_data)
-            #make sure that each tracefile's hash is in the commited list
+            #make sure that each tracefile's hash is in the committed list
             auditeetrace_dir_list = os.listdir(auditeetrace_dir)
             response = 'success' #unless overridden by a hash not being in the committed list
             for onetrace_name in auditeetrace_dir_list:

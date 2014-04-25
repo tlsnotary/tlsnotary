@@ -343,9 +343,9 @@ def get_html_paths():
         break 
     if not bFoundCR: raise Exception ('Client random not found in trace files')
     #copy the file 
-    commited_dir = os.path.join(current_sessiondir, 'commited')
-    if not os.path.exists(commited_dir): os.makedirs(commited_dir)
-    tracecopy_path = os.path.join(commited_dir, 'trace'+ str(len(cr_list)) )
+    committed_dir = os.path.join(current_sessiondir, 'committed')
+    if not os.path.exists(committed_dir): os.makedirs(committed_dir)
+    tracecopy_path = os.path.join(committed_dir, 'trace'+ str(len(cr_list)) )
     shutil.copyfile(os.path.join(tracelog_dir, one_file), tracecopy_path)
     #take the hash
     with open(tracecopy_path, 'rb') as f: data=f.read()
@@ -361,7 +361,7 @@ def get_html_paths():
     except:  raise Exception ('base64 decode error in sha1hmac_for_MS')
     #construct MS
     ms = bytearray([ord(a) ^ ord(b) for a,b in zip(md5hmac, sha1hmac_for_MS)])[:48]
-    sslkeylog = os.path.join(commited_dir, 'sslkeylog')
+    sslkeylog = os.path.join(committed_dir, 'sslkeylog')
     cr_hexl = binascii.hexlify(cr)
     ms_hexl = binascii.hexlify(ms)
     skl_fd = open(sslkeylog, 'wb')
@@ -377,7 +377,7 @@ def get_html_paths():
     html_paths = ''
     for index,oneframe in enumerate(frames):
         html = get_html_from_asciidump(oneframe)
-        path = os.path.join(commited_dir, 'html-' + str(len(cr_list)) + '-' + str(index))
+        path = os.path.join(committed_dir, 'html-' + str(len(cr_list)) + '-' + str(index))
         with open(path, 'wb') as f: f.write(html)
         html_paths += path + "&"    
     return ('success', html_paths)
@@ -724,7 +724,7 @@ def stop_recording():
 
     #trace* files in committed dir is what auditor needs
     zipf = zipfile.ZipFile(os.path.join(current_sessiondir, 'mytrace.zip'), 'w')
-    committed_dir = os.path.join(current_sessiondir, 'commited')
+    committed_dir = os.path.join(current_sessiondir, 'committed')
     com_dir_files = os.listdir(committed_dir)
     for onefile in com_dir_files:
         if not onefile.startswith('trace'): continue
