@@ -338,8 +338,20 @@ def process_messages():
                 continue
             committed_dir = os.path.join(current_sessiondir, 'committed')
             if not os.path.exists(committed_dir): os.makedirs(committed_dir)
-            filename = os.path.join(committed_dir, uid)
-            with open(filename, 'wb') as f: f.write(commit_hash)
+            #file names are assigned sequentially hash1, hash2 etc.
+            #The auditee must provide tracefiles trace1, trace2 corresponding to these sequence numbers
+            last_seqno = 0
+            cd_list = os.listdir(committed_dir)
+            for onetrace in cd_list:
+                if not onetrace.startswith('hash'): continue
+                this_seqno = int( onetrace[len('hash'):] )
+                if not this_seqno > last_seqno: continue
+                last_seqno = this_seqno
+            my_seqno = last_seqno+1
+            hash_path = os.path.join(committed_dir, 'hash'+str(my_seqno))
+            with open(hash_path, 'wb') as f: f.write(commit_hash)
+            hmac_path = os.path.join(committed_dir, 'sha1hmac_for_ms'+str(my_seqno))
+            with open(hmac_path, 'wb') as f: f.write(sha1hmac)
             b64_sha1hmac = base64.b64encode(sha1hmac) 
             send_message('sha1hmac_for_MS:'+b64_sha1hmac)
             continue
@@ -380,20 +392,37 @@ def process_messages():
             zipf = zipfile.ZipFile(os.path.join(current_sessiondir, 'auditeetrace.zip'), 'r')
             auditeetrace_dir = os.path.join(current_sessiondir, 'auditeetrace')
             zipf.extractall(auditeetrace_dir)
-            #get a list of all hashes committed to
-            committed_hashes = []
-            committed_dir_list = os.listdir(committed_dir)
-            for one_hash_name in committed_dir_list:
-                with open(os.path.join(committed_dir, one_hash_name), 'rb') as f: one_hash_data = f.read()
-                committed_hashes.append(one_hash_data)
-            #make sure that each tracefile's hash is in the committed list
-            auditeetrace_dir_list = os.listdir(auditeetrace_dir)
-            response = 'success' #unless overridden by a hash not being in the committed list
-            for onetrace_name in auditeetrace_dir_list:
-                with open(os.path.join(auditeetrace_dir, onetrace_name), 'rb') as f: onetrace_data = f.read()
-                onetrace_hash = hashlib.sha256(onetrace_data).digest()
-                if not onetrace_hash in committed_hashes:
-                    response = 'failure'                
+            response = 'success' #unless overridden by a failure in sanity check
+            #sanity: all trace names must be unique and their hashes must correspond to the
+            #hashes which the auditee committed to earlier
+            ad_list = os.listdir(auditeetrace_dir)
+            seqnos = []
+            for onetrace in ad_list:
+                if not onetrace.startswith('trace'): continue
+                try: this_seqno = int(onetrace[len('trace'):])
+                except:
+                    print ('WARNING: Could not cast trace\'s tail to int')
+                    response = 'failure'
+                    break
+                if this_seqno in seqnos:
+                    print ('WARNING: multiple tracefiles names detected')
+                    response = 'failure'
+                    break
+                saved_hash_path = os.path.join(committed_dir, 'hash'+str(this_seqno))
+                if not os.path.exists(saved_hash_path):
+                    print ('WARNING: Auditee gave a trace number which doesn\'t have a committed hash')
+                    response = 'failure'
+                    break
+                with open(saved_hash_path, 'rb') as f: saved_hash = f.read()
+                with open(os.path.join(auditeetrace_dir, onetrace), 'rb') as f: tracedata = f.read()
+                trace_hash = hashlib.sha256(tracedata).digest()
+                if not saved_hash == trace_hash:
+                    print ('WARNING: Trace\'s hash doesn\'t match the hash committed to')
+                    response = 'failure'
+                    break
+                #elif no errors
+                seqnos.append(this_seqno)
+                continue
             send_message('response:'+response)
             if response == 'success':
                 progressQueue.put(time.strftime('%H:%M:%S', time.localtime()) + ': The auditee has successfully finished the audit session')
