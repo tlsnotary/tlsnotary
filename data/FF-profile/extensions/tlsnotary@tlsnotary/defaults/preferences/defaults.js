@@ -65,6 +65,8 @@ pref("datareporting.policy.dataSubmissionEnabled", false)
 //Override Tor Browser Bundle's 
 //NB network.proxy.* prefs do not override from here, we call them from within addon's JS
 pref("network.proxy.type", 0);
+pref("network.proxy.socks_port", 0);
+pref("network.security.ports.banned", 0);
 //if socks_remote_dns is true even with proxy.type == 0, TBB still tries to use proxy
 //That's a TBB/Firefox24ESR bug (not present if FF27, though)
 pref("network.proxy.socks_remote_dns", false);
