@@ -1395,17 +1395,20 @@ if __name__ == "__main__":
     
     #On first run, make sure that torbrowser installfile is in the same directory and extract it
     if not os.path.exists(os.path.join(datadir, 'firefoxcopy')):
-        print ('Extracting Tor Browser Bundle ...')
+        print ('Extracting Firefox ...')
         if OS=='linux':
+            #github doesn't allow to upload .tar.xz, so we add extension now
             if platform.machine() == 'x86_64':
-                zipname = 'tor-browser-linux64-3.5.2.1_en-US.tar.xz'
+                zipname = 'firefox-linux64'
             else:
-                zipname = 'tor-browser-linux32-3.5.2.1_en-US.tar.xz'
-            if os.path.exists(os.path.join(installdir, zipname)):
-                torbrowser_zip_path = os.path.join(installdir, zipname)
-            else:
-                print ('Couldn\'t find '+zipname+' Make sure it is located in the installdir')
-                exit (CANT_FIND_TORBROWSER)
+                zipname = 'firefox-linux32'
+            fullpath = os.path.join(installdir, zipname)
+            if os.path.exists(fullpath): 
+                os.rename(fullpath, fullpath + ".tar.xz")
+            elif not os.path.exists(fullpath + ".tar.xz"):
+                print ('Couldn\'t find either '+zipname+' or '+zipname+'.tar.xz'+' Make sure one of them is located in the installdir')
+                exit (CANT_FIND_TORBROWSER)            
+            torbrowser_zip_path = fullpath + '.tar.xz'              
             try:
                 subprocess.check_output(['xz', '-d', '-k', torbrowser_zip_path]) #extract and keep the sourcefile
             except:
@@ -1413,9 +1416,9 @@ if __name__ == "__main__":
                 exit (CANT_FIND_XZ)
             #by default the result of the extraction will be tor-browser-linux32-3.5.2.1_en-US.tar
             if platform.machine() == 'x86_64':
-                tarball_path = os.path.join(installdir, 'tor-browser-linux64-3.5.2.1_en-US.tar')
+                tarball_path = os.path.join(installdir, 'firefox-linux64.tar')
             else:
-                tarball_path = os.path.join(installdir, 'tor-browser-linux32-3.5.2.1_en-US.tar')
+                tarball_path = os.path.join(installdir, 'firefox-linux32.tar')
             tbbtar = tarfile.open(tarball_path)
             #tarball extracts into current working dir
             os.mkdir(os.path.join(datadir, 'tmpextract'))
