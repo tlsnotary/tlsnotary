@@ -31,7 +31,7 @@ nsslibdir = os.path.join(datadir, 'nsslibs')
 sessionsdir = os.path.join(datadir, 'sessions')
 
 sys.path.append(os.path.join(datadir, 'python', 'slowaes'))
-from aes import AESModeOfOperation
+from slowaes import AESModeOfOperation
 
 m_platform = platform.system()
 if m_platform == 'Windows':
