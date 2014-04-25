@@ -101,10 +101,8 @@ def receivingThread():
         try: buffer = IRCsocket.recv(1024)
         except: continue #1 sec timeout
         if not buffer: continue
-        print ('RECEIVED: ' + buffer)
         messages = buffer.split('\r\n')  #sometimes the server packs multiple PRIVMSGs into one message separated with \r\n
-        for onemsg in messages:
-            
+        for onemsg in messages:            
             msg = onemsg.split()
             if len(msg)==0 : continue  #stray newline
             if msg[0] == "PING":
@@ -116,6 +114,7 @@ def receivingThread():
             exclamaitionMarkPosition = msg[0].find('!')
             nick_from_message = msg[0][1:exclamaitionMarkPosition]
             if not auditee_nick == nick_from_message: continue
+            print ('RECEIVED: ' + buffer)
             if len(msg)==5 and msg[4].startswith('ack:'):
                 ackQueue.put(msg[4][len('ack:'):])
                 continue

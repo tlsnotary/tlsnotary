@@ -1089,7 +1089,6 @@ def receivingThread(my_nick, auditor_nick, IRCsocket):
         try: buffer = IRCsocket.recv(1024)
         except: continue #1 sec timeout
         if not buffer: continue
-        print (buffer)
         #sometimes the IRC server may pack multiple PRIVMSGs into one message separated with /r/n/
         messages = buffer.split('\r\n')
         for onemsg in messages:
@@ -1103,6 +1102,7 @@ def receivingThread(my_nick, auditor_nick, IRCsocket):
             exclamaitionMarkPosition = msg[0].find('!')
             nick_from_message = msg[0][1:exclamaitionMarkPosition]
             if not auditor_nick == nick_from_message: continue
+            print ('RECEIVED:' + buffer)
             if len(msg)==5 and msg[4].startswith('ack:'):
                 ackQueue.put(msg[4][len('ack:'):])
                 continue
