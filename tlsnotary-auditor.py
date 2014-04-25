@@ -336,22 +336,27 @@ def process_messages():
             except: 
                 print ('base64 decode error in commit_hash')
                 continue
-            committed_dir = os.path.join(current_sessiondir, 'committed')
-            if not os.path.exists(committed_dir): os.makedirs(committed_dir)
+            trace_hash = commit_hash[:32]
+            md5hmac_hash = commit_hash[32:64]
+            commit_dir = os.path.join(current_sessiondir, 'commit')
+            if not os.path.exists(commit_dir): os.makedirs(commit_dir)
             #file names are assigned sequentially hash1, hash2 etc.
             #The auditee must provide tracefiles trace1, trace2 corresponding to these sequence numbers
             last_seqno = 0
-            cd_list = os.listdir(committed_dir)
-            for onetrace in cd_list:
-                if not onetrace.startswith('hash'): continue
-                this_seqno = int( onetrace[len('hash'):] )
+            commdir_list = os.listdir(commit_dir)
+            for one_trace in commdir_list:
+                if not one_trace.startswith('tracehash'): continue
+                this_seqno = int( one_trace[len('tracehash'):] )
                 if not this_seqno > last_seqno: continue
                 last_seqno = this_seqno
+                continue
             my_seqno = last_seqno+1
-            hash_path = os.path.join(committed_dir, 'hash'+str(my_seqno))
-            with open(hash_path, 'wb') as f: f.write(commit_hash)
-            hmac_path = os.path.join(committed_dir, 'sha1hmac_for_ms'+str(my_seqno))
-            with open(hmac_path, 'wb') as f: f.write(sha1hmac)
+            trace_hash_path = os.path.join(commit_dir, 'tracehash'+str(my_seqno))
+            md5hmac_hash_path =  os.path.join(commit_dir, 'md5hmac_hash'+str(my_seqno))
+            with open(trace_hash_path, 'wb') as f: f.write(trace_hash)
+            with open(md5hmac_hash_path, 'wb') as f: f.write(md5hmac_hash)
+            sha1hmac_path = os.path.join(commit_dir, 'sha1hmac'+str(my_seqno))
+            with open(sha1hmac_path, 'wb') as f: f.write(sha1hmac)
             b64_sha1hmac = base64.b64encode(sha1hmac) 
             send_message('sha1hmac_for_MS:'+b64_sha1hmac)
             continue
@@ -395,11 +400,11 @@ def process_messages():
             response = 'success' #unless overridden by a failure in sanity check
             #sanity: all trace names must be unique and their hashes must correspond to the
             #hashes which the auditee committed to earlier
-            ad_list = os.listdir(auditeetrace_dir)
+            adir_list = os.listdir(auditeetrace_dir)
             seqnos = []
-            for onetrace in ad_list:
-                if not onetrace.startswith('trace'): continue
-                try: this_seqno = int(onetrace[len('trace'):])
+            for one_trace in adir_list:
+                if not one_trace.startswith('trace'): continue
+                try: this_seqno = int(one_trace[len('trace'):])
                 except:
                     print ('WARNING: Could not cast trace\'s tail to int')
                     response = 'failure'
@@ -408,16 +413,28 @@ def process_messages():
                     print ('WARNING: multiple tracefiles names detected')
                     response = 'failure'
                     break
-                saved_hash_path = os.path.join(committed_dir, 'hash'+str(this_seqno))
+                saved_hash_path = os.path.join(commit_dir, 'tracehash'+str(this_seqno))
                 if not os.path.exists(saved_hash_path):
                     print ('WARNING: Auditee gave a trace number which doesn\'t have a committed hash')
                     response = 'failure'
                     break
                 with open(saved_hash_path, 'rb') as f: saved_hash = f.read()
-                with open(os.path.join(auditeetrace_dir, onetrace), 'rb') as f: tracedata = f.read()
+                with open(os.path.join(auditeetrace_dir, one_trace), 'rb') as f: tracedata = f.read()
                 trace_hash = hashlib.sha256(tracedata).digest()
                 if not saved_hash == trace_hash:
                     print ('WARNING: Trace\'s hash doesn\'t match the hash committed to')
+                    response = 'failure'
+                    break
+                md5hmac_path = os.path.join(auditeetrace_dir, 'md5_hmac'+str(this_seqno))
+                if not os.path.exists(md5hmac_path):
+                    print ('WARNING: Could not find md5_hmac in auditeetrace')
+                    response = 'failure'
+                    break
+                with open(md5hmac_path, 'rb') as f: md5hmac_data = f.read()
+                md5hmac_hash = hashlib.sha256(md5hmac_data).digest()
+                with open(os.path.join(commit_dir, 'md5hmac_hash'+str(this_seqno)), 'rb') as f: commited_md5hmac_hash = f.read()
+                if not md5hmac_hash == commited_md5hmac_hash:
+                    print ('WARNING: mismatch in committed md5hmac hashes')
                     response = 'failure'
                     break
                 #elif no errors

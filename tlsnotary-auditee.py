@@ -330,27 +330,30 @@ class HandlerClass(SimpleHTTPServer.SimpleHTTPRequestHandler):
 
 def get_html_paths():
     cr = cr_list[-1]
-    #now find the corresponding tracefile, wait for the tls connection to finish and commit to the hash
-    #of that tracefile. Construct MS for that tracefile and use tshark to decrypt out the HTML files to be presented to user
+    #find tracefile containing cr and commit to its hash as well as the hash of md5hmac (for MS)
+    #Construct MS and decrypt HTML files to be presented to auditee for approval
     tracelog_dir = os.path.join(current_sessiondir, 'tracelog')
     tracelog_files = os.listdir(tracelog_dir)
     bFoundCR = False
-    for one_file in tracelog_files:
-        with open(os.path.join(tracelog_dir, one_file), 'rb') as f: data=f.read()
+    for one_trace in tracelog_files:
+        with open(os.path.join(tracelog_dir, one_trace), 'rb') as f: data=f.read()
         if not data.count(cr) == 1: continue
         #else client random found
         bFoundCR = True
         break 
     if not bFoundCR: raise Exception ('Client random not found in trace files')
-    #copy the file 
-    committed_dir = os.path.join(current_sessiondir, 'committed')
-    if not os.path.exists(committed_dir): os.makedirs(committed_dir)
-    tracecopy_path = os.path.join(committed_dir, 'trace'+ str(len(cr_list)) )
-    shutil.copyfile(os.path.join(tracelog_dir, one_file), tracecopy_path)
-    #take the hash
+    #copy the tracefile to a new location, b/c stcppipe may still be appending it 
+    commit_dir = os.path.join(current_sessiondir, 'commit')
+    if not os.path.exists(commit_dir): os.makedirs(commit_dir)
+    tracecopy_path = os.path.join(commit_dir, 'trace'+ str(len(cr_list)) )
+    md5hmac_path = os.path.join(commit_dir, 'md5_hmac'+ str(len(cr_list)) )
+    with open(md5hmac_path, 'wb') as f: f.write(md5hmac)
+    shutil.copyfile(os.path.join(tracelog_dir, one_trace), tracecopy_path)
+    #send the hash of tracefile and md5hmac
     with open(tracecopy_path, 'rb') as f: data=f.read()
     commit_hash = hashlib.sha256(data).digest()
-    b64_commit_hash = base64.b64encode(commit_hash)
+    md5hmac_hash = hashlib.sha256(md5hmac).digest()  
+    b64_commit_hash = base64.b64encode(commit_hash+md5hmac_hash)
     reply = send_and_recv('commit_hash:'+b64_commit_hash)
     if reply[0] != 'success':
         raise Exception ('Failed to receive a reply')
@@ -361,7 +364,7 @@ def get_html_paths():
     except:  raise Exception ('base64 decode error in sha1hmac_for_MS')
     #construct MS
     ms = bytearray([ord(a) ^ ord(b) for a,b in zip(md5hmac, sha1hmac_for_MS)])[:48]
-    sslkeylog = os.path.join(committed_dir, 'sslkeylog')
+    sslkeylog = os.path.join(commit_dir, 'sslkeylog')
     cr_hexl = binascii.hexlify(cr)
     ms_hexl = binascii.hexlify(ms)
     skl_fd = open(sslkeylog, 'wb')
@@ -377,7 +380,7 @@ def get_html_paths():
     html_paths = ''
     for index,oneframe in enumerate(frames):
         html = get_html_from_asciidump(oneframe)
-        path = os.path.join(committed_dir, 'html-' + str(len(cr_list)) + '-' + str(index))
+        path = os.path.join(commit_dir, 'html-' + str(len(cr_list)) + '-' + str(index))
         with open(path, 'wb') as f: f.write(html)
         html_paths += path + "&"    
     return ('success', html_paths)
@@ -724,11 +727,11 @@ def stop_recording():
 
     #trace* files in committed dir is what auditor needs
     zipf = zipfile.ZipFile(os.path.join(current_sessiondir, 'mytrace.zip'), 'w')
-    committed_dir = os.path.join(current_sessiondir, 'committed')
-    com_dir_files = os.listdir(committed_dir)
+    commit_dir = os.path.join(current_sessiondir, 'commit')
+    com_dir_files = os.listdir(commit_dir)
     for onefile in com_dir_files:
-        if not onefile.startswith('trace'): continue
-        zipf.write(os.path.join(committed_dir, onefile), onefile)
+        if not onefile.startswith(('trace', 'md5_hmac')): continue
+        zipf.write(os.path.join(commit_dir, onefile), onefile)
     zipf.close()
     return 'success'
 
