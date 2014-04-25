@@ -714,7 +714,7 @@ def send_and_recv (data):
     
     #receive a response
     for i in range(3):
-        try: onemsg = recvQueue.get(block=True, timeout=3)
+        try: onemsg = recvQueue.get(block=True, timeout=5)
         except:  continue #try to receive again
         return ('success', onemsg)
     return ('failure', '')
