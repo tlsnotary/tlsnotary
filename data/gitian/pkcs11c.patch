@@ -1,14 +1,15 @@
 --- /home/default2/Desktop/nss/nss-3.15.3.1/nss/lib/softoken/pkcs11c.c.orig
 +++ /home/default2/Desktop/nss/nss-3.15.3.1/nss/lib/softoken/pkcs11c.c
-@@ -33,6 +33,7 @@
+@@ -33,6 +33,8 @@
  #include "softoken.h"
  #include "secasn1.h"
  #include "secerr.h"
 +#include <unistd.h>
++#include <stdlib.h> //for setenv()
  
  #include "prprf.h"
  
-@@ -5860,6 +5861,45 @@
+@@ -5860,6 +5862,45 @@
  	      block_bytes += outLen;
  	    }
  	}

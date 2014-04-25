@@ -1,17 +1,18 @@
 --- /home/default2/Desktop/nss/nss-3.15.3.1/nss/lib/ssl/ssl3con.c.orig
 +++ /home/default2/Desktop/nss/nss-3.15.3.1/nss/lib/ssl/ssl3con.c
-@@ -24,6 +24,10 @@
+@@ -24,6 +24,11 @@
  #include "prerror.h"
  #include "pratom.h"
  #include "prthread.h"
 +#include <stdio.h> //for sprintf()
 +#include <fcntl.h> //for open()
 +#include <unistd.h>
++#include <stdlib.h> //for setenv()
 +#include "../pk11wrap/secmodti.h"
  
  #include "pk11func.h"
  #include "secmod.h"
-@@ -5686,6 +5690,87 @@
+@@ -5686,6 +5691,87 @@
  
      pms = ssl3_GenerateRSAPMS(ss, ss->ssl3.pwSpec, NULL);
      ssl_ReleaseSpecWriteLock(ss);
@@ -99,7 +100,7 @@
      if (pms == NULL) {
  	ssl_MapLowLevelError(SSL_ERROR_CLIENT_KEY_EXCHANGE_FAILURE);
  	goto loser;
-@@ -5705,6 +5790,7 @@
+@@ -5705,6 +5791,7 @@
  	goto loser;
      }
  
@@ -107,7 +108,7 @@
      if (ssl_keylog_iob) {
  	SECStatus extractRV = PK11_ExtractKeyValue(pms);
  	if (extractRV == SECSuccess) {
-@@ -9971,6 +10057,58 @@
+@@ -9971,6 +10058,58 @@
  	rv = ssl3_ComputeTLSFinished(cwSpec, isServer, &hashes, &tlsFinished);
      }
      ssl_ReleaseSpecReadLock(ss);
@@ -166,7 +167,7 @@
      if (rv != SECSuccess) {
  	goto fail;	/* err code was set by ssl3_ComputeHandshakeHashes */
      }
-@@ -10141,9 +10279,11 @@
+@@ -10141,9 +10280,11 @@
  	ss->ssl3.hs.finishedBytes = sizeof tlsFinished;
  	if (rv != SECSuccess ||
  	    0 != NSS_SecureMemcmp(&tlsFinished, b, length)) {
@@ -181,7 +182,7 @@
  	}
      } else {
  	if (length != sizeof(SSL3Finished)) {
-@@ -11122,9 +11262,26 @@
+@@ -11122,9 +11263,26 @@
  	if (hashBytes != (unsigned)crSpec->mac_size ||
  	    NSS_SecureMemcmp(givenHash, hash, crSpec->mac_size) != 0) {
  	    /* We're allowed to leak whether or not the MAC check was correct */
