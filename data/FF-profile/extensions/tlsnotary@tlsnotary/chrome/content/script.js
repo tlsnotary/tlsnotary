@@ -16,12 +16,10 @@ var help;
 
 port = Cc["@mozilla.org/process/environment;1"].getService(Ci.nsIEnvironment).get("FF_to_backend_port");
 //setting homepage should be done from here rather than defaults.js in order to have the desired effect. FF's quirk.
-Cc["@mozilla.org/preferences-service;1"].getService(Ci.nsIPrefService).setCharPref("browser.startup.homepage", "chrome://tlsnotary/content/auditee.html");
+Cc["@mozilla.org/preferences-service;1"].getService(Ci.nsIPrefService).getBranch("browser.startup.").setCharPref("homepage", "chrome://tlsnotary/content/auditee.html");
 //the 2 prefs below must be set from here rather than defaults.js because TBB overrides them on startup
-Cc["@mozilla.org/preferences-service;1"].getService(Ci.nsIPrefService).setIntPref("network.proxy.type", 0);
-Cc["@mozilla.org/preferences-service;1"].getService(Ci.nsIPrefService).setIntPref("network.proxy.socks_port", 0);
-Cc["@mozilla.org/preferences-service;1"].getService(Ci.nsIPrefService).setIntPref("network.security.ports.banned", 0);
-Cc["@mozilla.org/preferences-service;1"].getService(Ci.nsIPrefService).setBoolPref("network.proxy.socks_remote_dns", false);
+Cc["@mozilla.org/preferences-service;1"].getService(Ci.nsIPrefService).getBranch("network.proxy.").setIntPref("type", 0);
+Cc["@mozilla.org/preferences-service;1"].getService(Ci.nsIPrefService).getBranch("network.proxy.").setBoolPref("socks_remote_dns", false);
 
 //poll the env var to see if IRC started
 //so that we can display a help message on the addon toolbar
