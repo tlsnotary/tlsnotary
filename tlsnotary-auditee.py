@@ -364,7 +364,7 @@ def get_html_paths():
     except:  raise Exception ('base64 decode error in sha1hmac_for_MS')
     #construct MS
     ms = bytearray([ord(a) ^ ord(b) for a,b in zip(md5hmac, sha1hmac_for_MS)])[:48]
-    sslkeylog = os.path.join(commit_dir, 'sslkeylog')
+    sslkeylog = os.path.join(commit_dir, 'sslkeylog' + str(len(cr_list)))
     cr_hexl = binascii.hexlify(cr)
     ms_hexl = binascii.hexlify(ms)
     skl_fd = open(sslkeylog, 'wb')
@@ -746,6 +746,14 @@ def process_new_uid(uid):
     if OS=='mswin': der = der.replace('\r\n', '\n')
     with  open(os.path.join(nss_patch_dir, 'cr'+uid), 'rb') as fd: cr = fd.read()
     with open(os.path.join(nss_patch_dir, 'sr'+uid), 'rb') as fd: sr = fd.read()
+    with open(os.path.join(nss_patch_dir, 'cipher_suite'+uid), 'rb') as fd: cs = fd.read() #2 bytes long in network byte order, we need only the first byte
+    cipher_suite_first_byte = cs[:1]
+    cipher_suite_int = int(cipher_suite_first_byte.encode('hex'), 16)
+    if cipher_suite_int == 4: cipher_suite = 'RC4MD5'
+    elif cipher_suite_int == 5: cipher_suite = 'RC4SHA'
+    elif cipher_suite_int == 47: cipher_suite = 'AES128'
+    elif cipher_suite_int == 53: cipher_suite = 'AES256'
+    else: raise Exception ('invalid cipher sute')
     cr_list.append(cr)
     
     #extract n and e from the pubkey
@@ -793,7 +801,7 @@ def process_new_uid(uid):
     md5hmac_for_MS_first_half = md5hmac[:24]
     md5hmac_for_MS_second_half = md5hmac[24:48]
                   
-    b64_cr_sr_hmac_n_e= base64.b64encode(cr+sr+md5hmac_for_MS_first_half+n+e)
+    b64_cr_sr_hmac_n_e= base64.b64encode(cipher_suite_first_byte+cr+sr+md5hmac_for_MS_first_half+n+e)
     reply = send_and_recv('cr_sr_hmac_n_e:'+b64_cr_sr_hmac_n_e)
     
     if reply[0] != 'success':
@@ -812,8 +820,15 @@ def process_new_uid(uid):
     RSA_PMS_second_half = rsapms_hmacms_hmacek[:256]
     RSA_PMS_second_half_int = int(RSA_PMS_second_half.encode('hex'), 16)
     sha1hmac_for_MS_second_half = rsapms_hmacms_hmacek[256:280]
-    md5hmac_for_ek = rsapms_hmacms_hmacek[280:416]
-   
+    if cipher_suite == 'AES256': 
+        md5hmac_for_ek = rsapms_hmacms_hmacek[280:416]
+    elif cipher_suite == 'AES128': 
+        md5hmac_for_ek = rsapms_hmacms_hmacek[280:384]
+    elif cipher_suite == 'RC4SHA': 
+        md5hmac_for_ek = rsapms_hmacms_hmacek[280:352]
+    elif cipher_suite == 'RC4MD5': 
+        md5hmac_for_ek = rsapms_hmacms_hmacek[280:344]
+       
     #RSA encryption without padding: ciphertext = plaintext^e mod n
     RSA_PMS_first_half_int = pow( int(('\x02'+('\x01'*156)+'\x00'+PMS_first_half+('\x00'*24)).encode('hex'), 16) + 1, exponent_int, modulus_int)
     enc_pms_int = (RSA_PMS_second_half_int*RSA_PMS_first_half_int) % modulus_int 
@@ -823,10 +838,14 @@ def process_new_uid(uid):
     
     MS_second_half = bytearray([ord(a) ^ ord(b) for a,b in zip(md5hmac_for_MS_second_half, sha1hmac_for_MS_second_half)])
     #master secret key expansion
-    #see RFC2246 6.3. Key calculation & 5. HMAC and the pseudorandom function   
-    #for AES-CBC-SHA  (in bytes): mac secret 20, write key 32, IV 16
-    #hence we need to generate 2*(20+32+16)= 136 bytes
-    # 7 sha hmacs * 20 = 140 and 9 md5 hmacs * 16 = 144
+    #see RFC2246 6.3. Key calculation & 5. HMAC and the pseudorandom function
+    #The amount of key material for each ciphersuite:
+    #AES256-CBC-SHA: mac key 20*2, encryption key 32*2, IV 16*2 == 136bytes
+    #AES128-CBC-SHA: mac key 20*2, encryption key 16*2, IV 16*2 == 104bytes
+    #RC4128_SHA: mac key 20*2, encryption key 16*2 == 72bytes
+    #RC4128_MD5: mac key 16*2, encryption key 16*2 == 64 bytes
+
+    #Regardless of theciphersuite, we generate the max key material we'd ever need which is 136 bytes
     label = "key expansion"
     seed = sr + cr
     #this is not optimized in a loop on purpose. I want people to see exactly what is going on   
@@ -846,15 +865,23 @@ def process_new_uid(uid):
     sha1hmac6 = hmac.new(MS_second_half, sha1A6 + label + seed, hashlib.sha1).digest()
     sha1hmac7 = hmac.new(MS_second_half, sha1A7 + label + seed, hashlib.sha1).digest()
     
-    sha1hmac_for_ek = (sha1hmac1+sha1hmac2+sha1hmac3+sha1hmac4+sha1hmac5+sha1hmac6+sha1hmac7)[:136]
-    
+    sha1hmac140bytes = sha1hmac1+sha1hmac2+sha1hmac3+sha1hmac4+sha1hmac5+sha1hmac6+sha1hmac7
+    #this if/else is purely for expliciteness, we could simply xor the 140bytes with however long the md5hmac is
+    if cipher_suite == 'AES256': 
+        sha1hmac_for_ek = sha1hmac140bytes[:136]
+    elif cipher_suite == 'AES128':
+        sha1hmac_for_ek = sha1hmac140bytes[:104]
+    elif cipher_suite == 'RC4SHA':
+        sha1hmac_for_ek = sha1hmac140bytes[:72]
+    elif cipher_suite == 'RC4MD5': 
+        sha1hmac_for_ek = sha1hmac140bytes[:64]
+            
     expanded_keys = bytearray([ord(a) ^ ord(b) for a,b in zip(sha1hmac_for_ek, md5hmac_for_ek)])
-    #server mac key == expanded_keys[20:40] contains random garbage from auditor
+    #server mac key == expanded_keys[20:40]( or [16:32] for RC4MD5) contains random garbage from auditor
     
     with open(os.path.join(nss_patch_dir, 'expanded_keys'+uid), 'wb') as f: f.write(expanded_keys)
     with open(os.path.join(nss_patch_dir, 'expanded_keys'+uid+'ready'), 'wb') as f: f.close()
-    
-    
+      
     #wait for nss to create md5 and then sha files
     while True:
         if not os.path.isfile(os.path.join(nss_patch_dir, 'sha'+uid)):

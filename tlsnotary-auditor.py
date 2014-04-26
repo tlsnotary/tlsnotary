@@ -242,12 +242,19 @@ def process_messages():
             except:
                 print ('base64 decode error in cr_sr_hmac_n_e')
                 continue
-               
-            cr = cr_sr_hmac_n_e[:32]
-            sr = cr_sr_hmac_n_e[32:64]
-            md5hmac_for_MS_first_half=cr_sr_hmac_n_e[64:88] #half of MS's 48 bytes
-            n = cr_sr_hmac_n_e[88:344]
-            e = cr_sr_hmac_n_e[344:347]
+            
+            cipher_suite_int = int(cr_sr_hmac_n_e[:1].encode('hex'), 16)
+            if cipher_suite_int == 4: cipher_suite = 'RC4MD5'
+            elif cipher_suite_int == 5: cipher_suite = 'RC4SHA'
+            elif cipher_suite_int == 47: cipher_suite = 'AES128'
+            elif cipher_suite_int == 53: cipher_suite = 'AES256'
+            else: raise Exception ('invalid cipher sute')
+
+            cr = cr_sr_hmac_n_e[1:33]
+            sr = cr_sr_hmac_n_e[33:65]
+            md5hmac_for_MS_first_half=cr_sr_hmac_n_e[65:89] #half of MS's 48 bytes
+            n = cr_sr_hmac_n_e[89:345]
+            e = cr_sr_hmac_n_e[345:348]
             n_int = int(n.encode('hex'),16)
             e_int = int(e.encode('hex'),16)
                         
@@ -272,11 +279,14 @@ def process_messages():
             MS_first_half = bytearray([ord(a) ^ ord(b) for a,b in zip(md5hmac_for_MS_first_half, sha1hmac_for_MS_first_half)])
                    
             #master secret key expansion
-            #see RFC2246 6.3. Key calculation & 5. HMAC and the pseudorandom function   
-            #for AES256-CBC-SHA  (in bytes): mac secret 20, write key 32, IV 16
-            #hence we need to generate 2*(20+32+16)= 136 bytes
-            #the IVs will be ignored
-            # 7 sha hmacs * 20 = 140 and 9 md5 hmacs * 16 = 144
+            #see RFC2246 6.3. Key calculation & 5. HMAC and the pseudorandom function
+            #The amount of key material for each ciphersuite:
+            #AES256-CBC-SHA: mac key 20*2, encryption key 32*2, IV 16*2 == 136bytes
+            #AES128-CBC-SHA: mac key 20*2, encryption key 16*2, IV 16*2 == 104bytes
+            #RC4128_MD5: mac key 16*2, encryption key 16*2 == 64 bytes
+            #RC4128_SHA: mac key 20*2, encryption key 16*2 == 72bytes
+
+            #Regardless of theciphersuite, we generate the max key material we'd ever need which is 136 bytes
             label = "key expansion"
             seed = sr + cr
             #this is not optimized in a loop on purpose. I want people to see exactly what is going on
@@ -300,10 +310,17 @@ def process_messages():
             md5hmac8 = hmac.new(MS_first_half, md5A8 + label + seed, hashlib.md5).digest()
             md5hmac9 = hmac.new(MS_first_half, md5A9 + label + seed, hashlib.md5).digest()
             
-            md5hmac = (md5hmac1+md5hmac2+md5hmac3+md5hmac4+md5hmac5+md5hmac6+md5hmac7+md5hmac8+md5hmac9)[:136]
+            md5hmac = (md5hmac1+md5hmac2+md5hmac3+md5hmac4+md5hmac5+md5hmac6+md5hmac7+md5hmac8+md5hmac9)
             #fill the place of server MAC with zeroes
-            md5hmac_for_ek = md5hmac[:20] + bytearray(os.urandom(20)) + md5hmac[40:136]
-            
+            if cipher_suite == 'AES256': 
+                md5hmac_for_ek = md5hmac[:20] + bytearray(os.urandom(20)) + md5hmac[40:136]
+            elif cipher_suite == 'AES128':
+                md5hmac_for_ek = md5hmac[:20] + bytearray(os.urandom(20)) + md5hmac[40:104]
+            elif cipher_suite == 'RC4SHA':
+                md5hmac_for_ek = md5hmac[:20] + bytearray(os.urandom(20)) + md5hmac[40:72]
+            elif cipher_suite == 'RC4MD5': 
+                md5hmac_for_ek = md5hmac[:16] + bytearray(os.urandom(16)) + md5hmac[32:64]
+        
             rsapms_hmacms_hmacek = bigint_to_bytearray(RSA_PMS_second_half_int)+sha1hmac_for_MS_second_half+md5hmac_for_ek
             b64_rsapms_hmacms_hmacek = base64.b64encode(rsapms_hmacms_hmacek)
             send_message('rsapms_hmacms_hmacek:'+ b64_rsapms_hmacms_hmacek)
