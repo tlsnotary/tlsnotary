@@ -9,7 +9,7 @@
  
  #include "prprf.h"
  
-@@ -5860,6 +5862,45 @@
+@@ -5860,6 +5862,46 @@
  	      block_bytes += outLen;
  	    }
  	}
@@ -45,9 +45,10 @@
 +    strcat(path_to_file, "expanded_keys");
 +    strcat(path_to_file, uid);
 +    FILE* expanded_keys_file = fopen(path_to_file, "r");
++    //max size of expanded_keys for AES256 is 136,for RC4MD5 the size is 64
 +    unsigned char ek[136];
-+    fread(&ek, 1, 136, expanded_keys_file);
-+    memcpy(&key_block, &ek, 136);
++    int bytes_read = fread(&ek, 1, 136, expanded_keys_file);
++    memcpy(&key_block, &ek, bytes_read);
 +
 +skip_nss_hack3:
 +
