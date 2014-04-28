@@ -498,7 +498,6 @@ def prepare_to_delete_folder():
 #prepare google-checked PMSs in advance of page reloading
 def prepare_pms():
     global PMS_first_half
-    bIsCheckSuccessfull = False
     
     for i in range(5): #try 5 times until google check succeeds
         #first 4 bytes of client random are unix time
@@ -673,8 +672,8 @@ def prepare_pms():
             #the response did not contain ccs == error alert received
             tlssock.close()
             continue
+        #else ccs was in the response
         tlssock.close()
-        bIsCheckSuccessfull = False
         return 'success' #successfull pms check        
     #no dice after 5 tries
     raise Exception ('Could not check PMS with google after 5 tries')
