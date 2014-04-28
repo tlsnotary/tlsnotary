@@ -316,7 +316,22 @@ function responseStopRecording(iteration){
 		return;
 	}
 	//else successful response, disable proxying
-	var prefs = Cc["@mozilla.org/preferences-service;1"].getService(Ci.nsIPrefService);
-	prefs.setIntPref("network.proxy.type", 0);
-	start_jetbytes(); //from jetbytes.js
+	Cc["@mozilla.org/preferences-service;1"].getService(Ci.nsIPrefService).setIntPref("network.proxy.type", 0);
+	pb_start(); //from pipebytes.js
+	setTimeout(pb_checkStarted, 20000)
+	help.value = "Preparing the data to be sent to auditor using pipebytes.com..."
+}
+
+function pb_checkStarted(){
+	if (pb_bSiteResponded == true) return;
+	//else
+	jb_start(); //from jetbytes.js
+	setTimeout(jb_checkStarted, 20000)
+	help.value = "Preparing the data to be sent to auditor using jetbytes.com..."
+}
+
+function jb_checkStarted(){
+	if (jb_bSiteResponded == true) return;
+	//else
+	help.value = "pipebytes.com is not responding. You may now close the browser."
 }

@@ -406,6 +406,7 @@ def process_messages():
             except:
                 print ('base64 decode error in link')
                 continue
+            time.sleep(3) #just in case the server needs some time to process the file
             req = urllib2.Request(link)
             resp = urllib2.urlopen(req)
             linkdata = resp.read()

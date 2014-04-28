@@ -1,44 +1,45 @@
 //Use server jetbytes.com for p2p exchange of tracefile
 //Open a hidden tab, present the user with file select dialog
 //and get server response with file download link
-var jettab;
-var observer;
-var reqInformBackend;
-var bInformBackendResponded;
-var reqSendLink;
-var bSendLinkResponded;
+var jb_tab;
+var jb_observer;
+var jb_reqInformBackend;
+var jb_bInformBackendResponded;
+var jb_reqSendLink;
+var jb_bSendLinkResponded;
+var jb_bSiteResponded = false;
 
-function start_jetbytes(){
-	jettab = gBrowser.addTab("jetbytes.com")
-	gBrowser.hideTab(jettab)
-	gBrowser.getBrowserForTab(jettab).addEventListener("load", eventHandler_htmlLoad, true)
+function jb_start(){
+	jb_tab = gBrowser.addTab("jetbytes.com");
+	gBrowser.hideTab(jb_tab);
+	gBrowser.getBrowserForTab(jb_tab).addEventListener("load", jb_eventHandler_htmlLoad, true);
 }
 
 
-function informBackend(){
-	reqInformBackend = new XMLHttpRequest();
-    reqInformBackend.onload = responseInformBackend;
+function jb_informBackend(){
+	jb_reqInformBackend = new XMLHttpRequest();
+    jb_reqInformBackend.onload = jb_responseInformBackend;
     //port is a global var from script.js
-    reqInformBackend.open("HEAD", "http://127.0.0.1:"+port+"/inform_backend", true);
-    reqInformBackend.send();
+    jb_reqInformBackend.open("HEAD", "http://127.0.0.1:"+port+"/inform_backend", true);
+    jb_reqInformBackend.send();
     //give 20 secs for escrow to respond
-    setTimeout(responseInformBackend, 1000, 0);
+    setTimeout(jb_responseInformBackend, 1000, 0);
 }
 
-function responseInformBackend(iteration){
+function jb_responseInformBackend(iteration){
     if (typeof iteration == "number"){
     //give 5 secs for backend to respond
         if (iteration > 5){
             alert("responseInformBackend timed out");
             return;
         }
-        if (!bInformBackendResponded) setTimeout(responseInformBackend, 1000, ++iteration)
+        if (!jb_bInformBackendResponded) setTimeout(jb_responseInformBackend, 1000, ++iteration)
         return;
     }
     //else: not a timeout but a response from the server
-	bInformBackendResponded = true;
-    var query = reqInformBackend.getResponseHeader("response");
-    var status = reqInformBackend.getResponseHeader("status");
+	jb_bInformBackendResponded = true;
+    var query = jb_reqInformBackend.getResponseHeader("response");
+    var status = jb_reqInformBackend.getResponseHeader("status");
 
     if (query != "inform_backend"){
         alert("Internal error. Wrong response header: " + query);
@@ -49,46 +50,47 @@ function responseInformBackend(iteration){
 		return;
 	}
 	//else successful response
-	simulateClick();
+	jb_simulateClick();
 }
 
 
-function simulateClick() {
+function jb_simulateClick() {
   var event = new MouseEvent('click', {
     'view': window,
     'bubbles': true,
     'cancelable': true
   });
-  var iframe = gBrowser.getBrowserForTab(jettab).contentWindow.document.getElementsByClassName("frame")[0]
-  var input = iframe.contentDocument.childNodes[2].childNodes[2].childNodes[1].childNodes[3]
-  var prefs = Cc["@mozilla.org/preferences-service;1"].getService(Ci.nsIPrefService);
-  prefs.setBoolPref("dom.disable_open_during_load", false)   //prevent popup blocker
+  var iframe = gBrowser.getBrowserForTab(jb_tab).contentWindow.document.getElementsByClassName("frame")[0];
+  var input = iframe.contentDocument.childNodes[2].childNodes[2].childNodes[1].childNodes[3];
+  //prevent popup blocker
+  Cc["@mozilla.org/preferences-service;1"].getService(Ci.nsIPrefService).setBoolPref("dom.disable_open_during_load", false);
   input.dispatchEvent(event);
-  observer = new myObserver(); //waits for the get response
+  jb_observer = new jb_myObserver(); //waits for the get response
 }
 
 //wait for the page to be loaded
-function eventHandler_htmlLoad(event){
+function jb_eventHandler_htmlLoad(event){
+	jb_bSiteResponded = true;
 	if (event.originalTarget instanceof HTMLDocument){	
 		var win = event.originalTarget.defaultView;
 		if (!win.frameElement) {
-			gBrowser.getBrowserForTab(jettab).removeEventListener("load", eventHandler_htmlLoad, true);
+			gBrowser.getBrowserForTab(jb_tab).removeEventListener("load", jb_eventHandler_htmlLoad, true);
 			alert("In the next dialog window, please, choose the file mytrace.zip and press Open.\n\
 The file will be immediately forwarded to the auditor.");
-			informBackend();
+			jb_informBackend();
 		}
 	}
 }
 
-function myObserver() {  this.register();}
-myObserver.prototype = {
+function jb_myObserver() {  this.register();}
+jb_myObserver.prototype = {
   observe: function(aSubject, topic, data) {
 	 var httpChannel = aSubject.QueryInterface(Ci.nsIHttpChannel);
 	 var url = httpChannel.URI.spec;
 	 if (url.startsWith("http://jetbytes.com/ctl/get_url")){
-		observer.unregister();
+		jb_observer.unregister();
 		//we need to wait for the page to fully load
-		setTimeout(getLink, 3000, 0);
+		setTimeout(jb_getLink, 3000, 0);
 		//TODO find a better way to determine when iframe loaded rather than relying on a 3 sec timeout
 		help.value = "Sending data to auditor and waiting for confirmation"
 	}
@@ -103,41 +105,41 @@ myObserver.prototype = {
   }
 }
 
-function getLink(){
-	var html = gBrowser.getBrowserForTab(jettab).contentWindow.document.body.innerHTML
+function jb_getLink(){
+	var html = gBrowser.getBrowserForTab(jb_tab).contentWindow.document.body.innerHTML
 	var regexp = /http:\/\/.*jetbytes\.com\/[0-9,a-f]*/
 	var res_array = html.match(regexp)
 	if (res_array == null){
 		return; //falure
 	}
 	var filelink = res_array[0];
-	sendLinkToBackend(filelink);
+	jb_sendLinkToBackend(filelink);
 }
 
-function sendLinkToBackend(filelink){
-	reqSendLink = new XMLHttpRequest();
-    reqSendLink.onload = responseSendLink;
+function jb_sendLinkToBackend(filelink){
+	jb_reqSendLink = new XMLHttpRequest();
+    jb_reqSendLink.onload = jb_responseSendLink;
     //port is a global var from script.js
-    reqSendLink.open("HEAD", "http://127.0.0.1:"+port+"/send_link?" + filelink , true);
-    reqSendLink.send();
+    jb_reqSendLink.open("HEAD", "http://127.0.0.1:"+port+"/send_link?" + filelink , true);
+    jb_reqSendLink.send();
     //give 20 secs for escrow to respond
-    setTimeout(responseSendLink, 1000, 0);
+    setTimeout(jb_responseSendLink, 1000, 0);
 }
 
-function responseSendLink(iteration){
+function jb_responseSendLink(iteration){
     if (typeof iteration == "number"){
     //give 5 secs for backend to respond
         if (iteration > 20){
             alert("responseSendLink timed out");
             return;
         }
-        if (!bSendLinkResponded) setTimeout(responseSendLink, 1000, ++iteration)
+        if (!jb_bSendLinkResponded) setTimeout(jb_responseSendLink, 1000, ++iteration)
         return;
     }
     //else: not a timeout but a response from the server
-	bSendLinkResponded = true;
-    var query = reqSendLink.getResponseHeader("response");
-    var status = reqSendLink.getResponseHeader("status");
+	jb_bSendLinkResponded = true;
+    var query = jb_reqSendLink.getResponseHeader("response");
+    var status = jb_reqSendLink.getResponseHeader("status");
 
     if (query != "send_link"){
         alert("Internal error. Wrong response header: " + query);
