@@ -317,6 +317,15 @@ function responseStopRecording(iteration){
 	}
 	//else successful response, disable proxying
 	Cc["@mozilla.org/preferences-service;1"].getService(Ci.nsIPrefService).setIntPref("network.proxy.type", 0);
+	ss_start(); //from sendspace.js
+	setTimeout(ss_checkStarted, 20000)
+	help.value = "Preparing the data to be sent to auditor using sendspace.com..."
+}
+
+
+function ss_checkStarted(){
+	if (ss_bSiteResponded == true) return;
+	//else
 	pb_start(); //from pipebytes.js
 	setTimeout(pb_checkStarted, 20000)
 	help.value = "Preparing the data to be sent to auditor using pipebytes.com..."
@@ -333,5 +342,5 @@ function pb_checkStarted(){
 function jb_checkStarted(){
 	if (jb_bSiteResponded == true) return;
 	//else
-	help.value = "pipebytes.com is not responding. You may now close the browser."
+	help.value = "Failed to transfer the file to auditor. You will have to do it manually"
 }
