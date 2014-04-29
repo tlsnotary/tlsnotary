@@ -54,8 +54,7 @@ my_nick = ''
 auditee_nick = ''
 channel_name = '#tlsnotary'
 myPrivateKey = auditeePublicKey = None
-#uid used to create a unique name when logging each set of messages
-uid = ''
+
 google_modulus = 0
 google_exponent = 0
 PMS_second_half = ''
@@ -194,12 +193,9 @@ def send_message(data):
 #Receive messages from auditee, perform calculations, and respond to them accordingly
 def process_messages():
     global auditee_nick
-    global uid
     global PMS_second_half
-    ziphash = ''
     #after the auditee was authorized, entering a regular message processing loop
     while True:
-        uid =  ''.join(random.choice('0123456789') for x in range(10)) #unique id is needed to create unique filenames
         try:
             msg = recvQueue.get(block=True, timeout=1)
         except: continue
