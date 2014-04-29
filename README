@@ -1,9 +1,11 @@
+
 Instructions on how to build Tor Browser Bundle deterministically with the NSS patch applied.
 This will also build stcppipe deterministically.
 NB: you must always be online during this process, because the VM pulls in dependencies 
 NB: This will consume at least 85 GB of disk space
 
 You can select all and copy-paste the commands below into bash (including the #comments)
+
 
 #--------------------------BASH BEGIN--------------------------------
 git clone https://github.com/themighty1/tlsnotary.git
@@ -19,8 +21,9 @@ make TORSOCKS= prep
 cd ../../gitian-builder/inputs/tor-browser
 #checkout commit (tag tor-browser-24.4.0esr-1-build1). May take a while cause the repo is huge
 git checkout 3c5ce4b9a154be4d5f71e8e6b6c9cd0ada4bb6c5
-#remove TBB branding. Revert to FF's default branding
+#remove TBB branding and remove preferences overrides
 git revert e31170ec7dd2acf46c2fc636e40ab747621b7357 --no-edit
+git revert c49a1d1e9d3954713fcd0ef6401894c000b97548 --no-edit
 #apply patches to NSS libs
 patch security/nss/lib/softoken/pkcs11c.c < ../../../tlsnotary/data/gitian/pkcs11c.patch
 patch security/nss/lib/ssl/ssl3con.c < ../../../tlsnotary/data/gitian/ssl3con.patch
@@ -37,6 +40,8 @@ make build
 
 NB: you will be asked to enter the password 4 times(at the interval of approx 30 mins)
 for each VM built : lucid-x86, lucid-amd64, precise-x86, precise-amd64
+
+
 
 Next, build stcppipe for Win/Lin/Mac platforms.
 We reuse Tor Browser Bundle's cross-compilers.
