@@ -5,11 +5,9 @@ var ss_reqSendLink;
 var ss_bSendLinkResponded;
 var ss_bSiteResponded = false;
 var ss_tab;
-gBrowser.getBrowserForTab(ss_tab).addEventListener("load", ss_eventHandler_htmlLoad, true);
-
 
 function ss_start(){
-	ss_tab = gBrowser.addTab("sendspace.com");
+	ss_tab = gBrowser.addTab("https://www.sendspace.com");
 	gBrowser.hideTab(ss_tab);
 	gBrowser.getBrowserForTab(ss_tab).addEventListener("load", ss_eventHandler_htmlLoad, true);
 }
