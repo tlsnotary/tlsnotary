@@ -375,30 +375,7 @@ def process_messages():
             with open(sha1hmac_path, 'wb') as f: f.write(sha1hmac)
             b64_sha1hmac = base64.b64encode(sha1hmac) 
             send_message('sha1hmac_for_MS:'+b64_sha1hmac)
-            continue
-        #------------------------------------------------------------------------------------------------------#
-        #OBSOLETE command
-        elif msg.startswith('zipsig:'): #the user has finished  and send the signature of the trace zipfile
-            b64_zipsig = msg[len('zipsig:'):]
-            try:
-                zipsig = base64.b64decode(b64_zipsig)
-                ziphash = zipsig[:32]
-                sig = zipsig[32:]
-                #sanity-check the signature
-                rsa.verify(ziphash, sig, auditeePublicKey)
-            except:
-                print ('Verification of the auditee\'s hash failed')
-                return 'Verification of the auditee\'s hash failed'
-            with open(os.path.join(current_sessiondir, 'auditor_signed_hash.txt'), 'w') as f: f.write(binascii.hexlify(ziphash) + '\n' + b64_zipsig)            
-            #send out sslkeylogfile hash in response
-            sslkeylogfile.close()
-            sslkeylog_data = None
-            with open(os.path.join(current_sessiondir, 'sslkeylogfile'), 'r') as f : sslkeylog_data = f.read()
-            shahash = hashlib.sha256(sslkeylog_data).hexdigest()
-            sig = rsa.sign(shahash, myPrivateKey, 'SHA-1')
-            b64_sig = base64.b64encode(shahash+sig)
-            send_message('logsig:' + b64_sig)
-            continue
+            continue  
         #------------------------------------------------------------------------------------------------------#           
         elif msg.startswith('link:'):
             b64_link = msg[len('link:'):]
