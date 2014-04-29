@@ -9,6 +9,7 @@ import hmac
 import os
 import platform
 import Queue
+import re
 import shutil
 import SimpleHTTPServer
 import socket
@@ -64,6 +65,7 @@ ackQueue = Queue.Queue() #count_my_messages_thread places messages' ordinal numb
 progressQueue = Queue.Queue() #messages intended to be displayed by the frontend are placed here
 
 secretbytes_amount=8
+bTerminateAllThreads = False
 
 def bigint_to_bytearray(bigint):
     m_bytes = []
@@ -81,12 +83,76 @@ class StoppableThreadedHttpServer (ThreadingMixIn, BaseHTTPServer.HTTPServer):
     def serve_forever (self):
         """Handle one request at a time until stopped. Optionally return a value"""
         self.stop = False
+        self.socket.settimeout(1)
         while not self.stop:
                 self.handle_request()
         return self.retval;
     
 
-
+#look at tshark's ascii dump (option '-x') to better understand the parsing taking place
+def get_html_from_asciidump(ascii_dump):
+    hexdigits = set('0123456789abcdefABCDEF')
+    binary_html = bytearray()
+    if ascii_dump == '':
+        print ('empty frame dump',end='\r\n')
+        return -1
+    #We are interested in
+    # "Uncompressed entity body" for compressed HTML (both chunked and not chunked). If not present, then
+    # "De-chunked entity body" for no-compression, chunked HTML. If not present, then
+    # "Reassembled SSL" for no-compression no-chunks HTML in multiple SSL segments, If not present, then
+    # "Decrypted SSL data" for no-compression no-chunks HTML in a single SSL segment.
+    uncompr_pos = ascii_dump.rfind('Uncompressed entity body')
+    if uncompr_pos != -1:
+        for line in ascii_dump[uncompr_pos:].split('\n')[1:]:
+            #convert ascii representation of hex into binary so long as first 4 chars are hexdigits
+            if all(c in hexdigits for c in line [:4]):
+                try: m_array = bytearray.fromhex(line[6:54])
+                except: break
+                binary_html += m_array
+            else:
+                #if first 4 chars are not hexdigits, we reached the end of the section
+                break
+        return binary_html    
+    #else ------------------------------------------------------------------------------------------------------------#
+    dechunked_pos = ascii_dump.rfind('De-chunked entity body')
+    if dechunked_pos != -1:
+        for line in ascii_dump[dechunked_pos:].split('\n')[1:]:
+            if all(c in hexdigits for c in line [:4]):
+                try: m_array = bytearray.fromhex(line[6:54])
+                except: break
+                binary_html += m_array
+            else:
+                break
+        return binary_html          
+    #else ------------------------------------------------------------------------------------------------------------#
+    reassembled_pos = ascii_dump.rfind('Reassembled SSL')
+    if reassembled_pos != -1:
+        for line in ascii_dump[reassembled_pos:].split('\n')[1:]:
+            if all(c in hexdigits for c in line [:4]):
+                try: m_array = bytearray.fromhex(line[6:54])
+                except: break
+                binary_html += m_array
+            else:
+                #http HEADER is delimited from HTTP body with '\r\n\r\n'
+                if binary_html.find('\r\n\r\n') == -1:
+                    return -1
+                break
+        return binary_html.split('\r\n\r\n', 1)[1]
+    #else ------------------------------------------------------------------------------------------------------------#
+    decrypted_pos = ascii_dump.rfind('Decrypted SSL data')
+    if decrypted_pos != -1:       
+        for line in ascii_dump[decrypted_pos:].split('\n')[1:]:
+            if all(c in hexdigits for c in line [:4]):
+                try: m_array = bytearray.fromhex(line[6:54])
+                except: break
+                binary_html += m_array
+            else:
+                #http HEADER is delimited from HTTP body with '\r\n\r\n'
+                if binary_html.find('\r\n\r\n') == -1:
+                    return -1
+                break
+        return binary_html.split('\r\n\r\n', 1)[1]    
+    
 
 #respond to PING messages and put all the other messages onto the recvQueue
 def receivingThread():
@@ -267,7 +333,7 @@ def process_messages():
             sha1hmac1 = hmac.new(PMS_second_half, sha1A1 + label + seed, hashlib.sha1).digest()
             sha1hmac2 = hmac.new(PMS_second_half, sha1A2 + label + seed, hashlib.sha1).digest()
             sha1hmac3 = hmac.new(PMS_second_half, sha1A3 + label + seed, hashlib.sha1).digest()
-            sha1hmac = sha1hmac1+sha1hmac2+sha1hmac3
+            sha1hmac = (sha1hmac1+sha1hmac2+sha1hmac3)[:48]
 
             sha1hmac_for_MS_first_half = sha1hmac[:24]
             sha1hmac_for_MS_second_half = sha1hmac[24:48]
@@ -369,6 +435,8 @@ def process_messages():
             with open(md5hmac_hash_path, 'wb') as f: f.write(md5hmac_hash)
             sha1hmac_path = os.path.join(commit_dir, 'sha1hmac'+str(my_seqno))
             with open(sha1hmac_path, 'wb') as f: f.write(sha1hmac)
+            cr_path = os.path.join(commit_dir, 'cr'+str(my_seqno))
+            with open(cr_path, 'wb') as f: f.write(cr)
             b64_sha1hmac = base64.b64encode(sha1hmac) 
             send_message('sha1hmac_for_MS:'+b64_sha1hmac)
             continue  
@@ -415,9 +483,9 @@ def process_messages():
                     print ('WARNING: Trace\'s hash doesn\'t match the hash committed to')
                     response = 'failure'
                     break
-                md5hmac_path = os.path.join(auditeetrace_dir, 'md5_hmac'+str(this_seqno))
+                md5hmac_path = os.path.join(auditeetrace_dir, 'md5hmac'+str(this_seqno))
                 if not os.path.exists(md5hmac_path):
-                    print ('WARNING: Could not find md5_hmac in auditeetrace')
+                    print ('WARNING: Could not find md5hmac in auditeetrace')
                     response = 'failure'
                     break
                 with open(md5hmac_path, 'rb') as f: md5hmac_data = f.read()
@@ -435,12 +503,39 @@ def process_messages():
                 progressQueue.put(time.strftime('%H:%M:%S', time.localtime()) + ': The auditee has successfully finished the audit session')
             else:
                 progressQueue.put(time.strftime('%H:%M:%S', time.localtime()) + ': WARNING!!! The auditee FAILED the audit session')
-            progressQueue.put(time.strftime('%H:%M:%S', time.localtime()) + ': All data pertaining to this session can be found at ' + current_sessiondir)
+            progressQueue.put(time.strftime('%H:%M:%S', time.localtime()) + ': Decrypting  auditee\'s data')
+
+            #decrypt  the tracefiles
+            decr_dir = os.path.join(current_sessiondir, 'decrypted')
+            os.makedirs(decr_dir)
+            for one_trace in adir_list:
+                if not one_trace.startswith('trace'): continue
+                seqno = one_trace[len('trace'):]
+                with open(os.path.join(auditeetrace_dir, 'md5hmac'+seqno)) as f: md5hmac = f.read()
+                with open(os.path.join(commit_dir, 'sha1hmac'+seqno)) as f: sha1hmac = f.read()
+                with open(os.path.join(commit_dir, 'cr'+seqno)) as f: cr = f.read()
+                ms = bytearray( [ord(a) ^ ord(b) for a,b in zip(md5hmac, sha1hmac)] )#xoring
+                sslkeylog = os.path.join(decr_dir, 'sslkeylog'+seqno)
+                cr_hexl = binascii.hexlify(cr)
+                ms_hexl = binascii.hexlify(ms)
+                skl_fd = open(sslkeylog, 'wb')
+                skl_fd.write('CLIENT_RANDOM ' + cr_hexl + ' ' + ms_hexl + '\n')
+                skl_fd.close()
+                output = subprocess.check_output(['tshark', '-r', os.path.join(auditeetrace_dir, one_trace), '-Y', 'ssl and http.content_type contains html', '-o', 'http.ssl.port:1025-65535', '-o', 'ssl.keylog_file:'+ sslkeylog, '-x'])
+                if output == '': raise Exception ("Failed to find HTML in escrowtrace")
+                #output may contain multiple frames with HTML, we examine them one-by-one
+                separator = re.compile('Frame ' + re.escape('(') + '[0-9]{2,7} bytes' + re.escape(')') + ':')
+                #ignore the first split element which is always an empty string
+                frames = re.split(separator, output)[1:]    
+                html_paths = ''
+                for index,oneframe in enumerate(frames):
+                    html = get_html_from_asciidump(oneframe)
+                    path = os.path.join(decr_dir, 'html-'+seqno+'-'+str(index))
+                    with open(path, 'wb') as f: f.write(html)
+            progressQueue.put(time.strftime('%H:%M:%S', time.localtime()) + ': All decrypted HTML can be found in ' + decr_dir)
             progressQueue.put(time.strftime('%H:%M:%S', time.localtime()) + ': You may now close the browser.')
             continue
-            #Note: after the auditor receives the tracefile, he can (optionally "mergecap -w merged *" ) open it in wireshark  
-            #and go to Edit-Preferences-Protocols-HTTP in SSL/TLS Ports enter 1024-65535, 
-            #otherwise wireshark will fail do decrypt even when using the Decode As function            
+
       
 #Receive HTTP HEAD requests from FF extension. This is how the extension communicates with python backend.
 class Handler(SimpleHTTPServer.SimpleHTTPRequestHandler):
@@ -590,9 +685,8 @@ def registerAuditeeThread():
     myPublicKey = rsa.PublicKey.load_pkcs1(my_pubkey_pem)
     myModulus = bigint_to_bytearray(myPublicKey.n)[:10]
     bIsAuditeeRegistered = False
-    chunk1 = ''
     IRCsocket.settimeout(1)
-    while not bIsAuditeeRegistered: 
+    while not (bIsAuditeeRegistered or bTerminateAllThreads):
         buffer = ''
         try: buffer = IRCsocket.recv(1024)
         except: continue #1 sec timeout
@@ -713,7 +807,6 @@ class ThreadWithRetval(threading.Thread):
 
 
 if __name__ == "__main__": 
-
     #On first run, unpack rsa and pyasn1 archives, check hashes
     rsa_dir = os.path.join(datadir, 'python', 'rsa-3.1.4')
     if not os.path.exists(rsa_dir):
@@ -801,3 +894,4 @@ if __name__ == "__main__":
             time.sleep(.1)
     except KeyboardInterrupt:
         print ('Interrupted by user')
+        bTerminateAllThreads = True

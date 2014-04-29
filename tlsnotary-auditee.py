@@ -346,7 +346,7 @@ def get_html_paths():
     commit_dir = os.path.join(current_sessiondir, 'commit')
     if not os.path.exists(commit_dir): os.makedirs(commit_dir)
     tracecopy_path = os.path.join(commit_dir, 'trace'+ str(len(cr_list)) )
-    md5hmac_path = os.path.join(commit_dir, 'md5_hmac'+ str(len(cr_list)) )
+    md5hmac_path = os.path.join(commit_dir, 'md5hmac'+ str(len(cr_list)) )
     with open(md5hmac_path, 'wb') as f: f.write(md5hmac)
     shutil.copyfile(os.path.join(tracelog_dir, one_trace), tracecopy_path)
     #send the hash of tracefile and md5hmac
@@ -537,7 +537,7 @@ def prepare_pms():
         if reply[0] != 'success':
             raise Exception ('Failed to receive a reply for gcr+gsr:')
         if not reply[1].startswith('grsapms_ghmac:'):
-            raise Exception ('bad reply. Expected rsapms_ghmac:')
+            raise Exception ('bad reply. Expected grsapms_ghmac:')
     
         b64_grsapms_ghmac = reply[1][len('grsapms_ghmac:'):]
         try:
@@ -729,7 +729,7 @@ def stop_recording():
     commit_dir = os.path.join(current_sessiondir, 'commit')
     com_dir_files = os.listdir(commit_dir)
     for onefile in com_dir_files:
-        if not onefile.startswith(('trace', 'md5_hmac')): continue
+        if not onefile.startswith(('trace', 'md5hmac')): continue
         zipf.write(os.path.join(commit_dir, onefile), onefile)
     zipf.close()
     return 'success'
