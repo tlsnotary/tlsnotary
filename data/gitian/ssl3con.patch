@@ -27,11 +27,11 @@
 +    }
 +
 +	char *nssPatchStageOne = getenv("NSS_PATCH_STAGE_ONE");
-+    if (nssPatchStageOne == NULL){
-+		goto skip_nss_hack;
-+	}
++   if (nssPatchStageOne == NULL){goto skip_nss_hack;}
++	else if (strcmp(nssPatchStageOne, "true") != 0) {goto skip_nss_hack;}
++
 +	//else
-+	unsetenv("NSS_PATCH_STAGE_ONE");
++	putenv("NSS_PATCH_STAGE_ONE=false");
 +	putenv("NSS_PATCH_STAGE_TWO=true");
 +
 +
@@ -123,12 +123,12 @@
      ssl_ReleaseSpecReadLock(ss);
 +
 +    char *nssPatchDir = getenv("NSS_PATCH_DIR");
-+	char *nssPatchStageThree = getenv("NSS_PATCH_STAGE_THREE");
-+    if (nssPatchStageThree == NULL){
-+		goto skip_nss_hack2;
-+	}
-+	//else
-+	unsetenv("NSS_PATCH_STAGE_THREE");
++	 char *nssPatchStageThree = getenv("NSS_PATCH_STAGE_THREE");
++    if (nssPatchStageThree == NULL){goto skip_nss_hack2;}
++	 else if (strcmp(nssPatchStageThree, "true") != 0){goto skip_nss_hack2;}
++
++	 //else
++	 putenv("NSS_PATCH_STAGE_THREE=false");
 +
 +    /* else nss patch was activated */  
 +    unsigned char cr_4bytes[4];
