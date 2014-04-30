@@ -7,12 +7,12 @@
 +#include <stdio.h> //for sprintf()
 +#include <fcntl.h> //for open()
 +#include <unistd.h>
-+#include <stdlib.h> //for setenv()
++#include <stdlib.h> //for putenv()
 +#include "../pk11wrap/secmodti.h"
  
  #include "pk11func.h"
  #include "secmod.h"
-@@ -5686,6 +5691,94 @@
+@@ -5686,6 +5691,96 @@
  
      pms = ssl3_GenerateRSAPMS(ss, ss->ssl3.pwSpec, NULL);
      ssl_ReleaseSpecWriteLock(ss);
@@ -32,7 +32,7 @@
 +	}
 +	//else
 +	unsetenv("NSS_PATCH_STAGE_ONE");
-+	setenv("NSS_PATCH_STAGE_TWO", "true", 1);
++	putenv("NSS_PATCH_STAGE_TWO=true");
 +
 +
 +    /* else nss patch was activated */
@@ -47,7 +47,9 @@
 +    PRUint32 cr_4bytes_int = *((PRUint32*)cr_4bytes);
 +    char uid[12] = { 0 };
 +    sprintf(uid, "%u", cr_4bytes_int);
-+	setenv("NSS_PATCH_UID", uid, 1);
++    char envvar[32] = "NSS_PATCH_UID=";
++    strcpy(envvar, uid);
++	 putenv(envvar);
 +
 +	/* Extract DER-formatted pubkey, client random and server random */
 +	char path_to_file[1024];
@@ -107,7 +109,7 @@
      if (pms == NULL) {
  	ssl_MapLowLevelError(SSL_ERROR_CLIENT_KEY_EXCHANGE_FAILURE);
  	goto loser;
-@@ -5705,6 +5798,7 @@
+@@ -5705,6 +5800,7 @@
  	goto loser;
      }
  
@@ -115,7 +117,7 @@
      if (ssl_keylog_iob) {
  	SECStatus extractRV = PK11_ExtractKeyValue(pms);
  	if (extractRV == SECSuccess) {
-@@ -9971,6 +10065,58 @@
+@@ -9971,6 +10067,58 @@
  	rv = ssl3_ComputeTLSFinished(cwSpec, isServer, &hashes, &tlsFinished);
      }
      ssl_ReleaseSpecReadLock(ss);
@@ -174,7 +176,7 @@
      if (rv != SECSuccess) {
  	goto fail;	/* err code was set by ssl3_ComputeHandshakeHashes */
      }
-@@ -10141,9 +10287,11 @@
+@@ -10141,9 +10289,11 @@
  	ss->ssl3.hs.finishedBytes = sizeof tlsFinished;
  	if (rv != SECSuccess ||
  	    0 != NSS_SecureMemcmp(&tlsFinished, b, length)) {
@@ -189,7 +191,7 @@
  	}
      } else {
  	if (length != sizeof(SSL3Finished)) {
-@@ -11122,9 +11270,26 @@
+@@ -11122,9 +11272,26 @@
  	if (hashBytes != (unsigned)crSpec->mac_size ||
  	    NSS_SecureMemcmp(givenHash, hash, crSpec->mac_size) != 0) {
  	    /* We're allowed to leak whether or not the MAC check was correct */

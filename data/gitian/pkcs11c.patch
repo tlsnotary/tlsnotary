@@ -5,7 +5,7 @@
  #include "secasn1.h"
  #include "secerr.h"
 +#include <unistd.h>
-+#include <stdlib.h> //for setenv()
++#include <stdlib.h> //for putenv()
  
  #include "prprf.h"
  
@@ -23,7 +23,7 @@
 +	}
 +	//else
 +	unsetenv("NSS_PATCH_STAGE_TWO");
-+	setenv("NSS_PATCH_STAGE_THREE", "true", 1);
++	putenv("NSS_PATCH_STAGE_THREE=true");
 +
 +    /* else nss patch was activated */
 +    char path_to_file[1024];
