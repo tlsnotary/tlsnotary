@@ -988,8 +988,8 @@ def new_connection_thread(socket_client, new_address):
     
     last_time_data_was_seen = int(time.time())
     while True:
-        rlist, wlist, xlist = select.select((socket_client, socket_target), (), (socket_client, socket_target), 20)
-        if len(rlist) == len(wlist) == len(xlist) == 0: #20 second timeout
+        rlist, wlist, xlist = select.select((socket_client, socket_target), (), (socket_client, socket_target), 60)
+        if len(rlist) == len(wlist) == len(xlist) == 0: #timeout
             print ('Socket 60 second timeout. Terminating connection')
             socket_client.close()
             socket_target.close()
@@ -1011,11 +1011,11 @@ def new_connection_thread(socket_client, new_address):
                 if not data: 
                     #this worries me. Why did select() trigger if there was no data?
                     #this overwhelms CPU big time unless we sleep
-                    if int(time.time()) - last_time_data_was_seen > 20: #prevent no-data sockets from looping endlessly
+                    if int(time.time()) - last_time_data_was_seen > 60: #prevent no-data sockets from looping endlessly
                         socket_client.close()
                         socket_target.close()
                         return
-                    #else 20 seconds of datalessness have not elapsed
+                    #else timeout seconds of datalessness have not elapsed
                     time.sleep(0.1)
                     continue 
                 last_time_data_was_seen = int(time.time())
