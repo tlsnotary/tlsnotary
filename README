@@ -35,7 +35,7 @@ git commit -a -m "tlsnotary patch"
 git tag -a tlsnotary_build -m "tlsnotary tag"
 cd ../../../tor-browser-bundle/gitian
 #tell gitian to build our custom tag and ignore that our tag is not signed
-sed -i '8s/tor-browser-${FIREFOX_VERSION}-1-build1/tlsnotary_build/' versions
+sed -i '8s/tor-browser-${FIREFOX_VERSION}-1-build3/tlsnotary_build/' versions
 sed -i '46s/exit 1/#exit 1/' verify-tags.sh
 
 sudo -s #without sudo, you will be asked to enter password 8 times 
