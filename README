@@ -6,28 +6,31 @@ NB: This will consume at least 85 GB of disk space
 
 You can select all and copy-paste the commands below into bash (including the #comments)
 
-
 #--------------------------BASH BEGIN--------------------------------
+sudo apt-get install torsocks tor ruby apache2 git apt-cacher-ng python-vm-builder virt-what lxc lxctl fakeroot faketime zip unzip subversion
 git clone https://github.com/themighty1/tlsnotary.git
 git clone https://git.torproject.org/builders/tor-browser-bundle.git
 git clone -b tor-browser-builder-3 https://git.torproject.org/builders/gitian-builder.git
 cd tor-browser-bundle
-#we checkout a specific commit (tag tbb-3.6beta2-build3) against which these instructions are written
-git checkout 47dba349261163d41bcd0102f1e712fa2fe43f35
+#checkout a specific commit (tag tbb-3.6-build4)
+git checkout 793a4cd404516b032bc696b4b0e6bb43bafb2e18
 cd gitian
 export USE_LXC=1
 make TORSOCKS= prep
 
 cd ../../gitian-builder/inputs/tor-browser
-#checkout commit (tag tor-browser-24.4.0esr-1-build1). May take a while cause the repo is huge
-git checkout 3c5ce4b9a154be4d5f71e8e6b6c9cd0ada4bb6c5
+git config user.name "someone"
+git config user.email "someone@someplace.com"
+#checkout commit (tag tor-browser-24.5.0esr-1-build3)
+git checkout e3a8d5fdd5dad12a0bcb6d2290553914457dd91e
 #remove TBB branding and remove preferences overrides
 git revert e31170ec7dd2acf46c2fc636e40ab747621b7357 --no-edit
-git revert c49a1d1e9d3954713fcd0ef6401894c000b97548 --no-edit
+#overwrite all tbb's prefs with a single line needed for building
+echo "pref("torbrowser.version", "UNKNOWN");" > browser/app/profile/000-tor-browser.js
+git add browser/app/profile/000-tor-browser.js
 #apply patches to NSS libs
 patch security/nss/lib/softoken/pkcs11c.c < ../../../tlsnotary/data/gitian/pkcs11c.patch
 patch security/nss/lib/ssl/ssl3con.c < ../../../tlsnotary/data/gitian/ssl3con.patch
-#commit the changes, create a new tag. May take a couple of minutes cause the repo is huge
 git commit -a -m "tlsnotary patch"
 git tag -a tlsnotary_build -m "tlsnotary tag"
 cd ../../../tor-browser-bundle/gitian
@@ -35,20 +38,15 @@ cd ../../../tor-browser-bundle/gitian
 sed -i '8s/tor-browser-${FIREFOX_VERSION}-1-build1/tlsnotary_build/' versions
 sed -i '46s/exit 1/#exit 1/' verify-tags.sh
 
+sudo -s #without sudo, you will be asked to enter password 8 times 
+export USE_LXC=1
 make build
-#--------------------------BASH END--------------------------------
 
-NB: you will be asked to enter the password 4 times(at the interval of approx 30 mins)
-for each VM built : lucid-x86, lucid-amd64, precise-x86, precise-amd64
-
-
-
-Next, build stcppipe for Win/Lin/Mac platforms.
-We reuse Tor Browser Bundle's cross-compilers.
-#--------------------------BASH BEGIN--------------------------------
+#build stcppipe reusing TBB's tools
 cd ../..
-cp tlsnotary/data/gitian/stcppipe.zip gitian-builder/
+cp tlsnotary/data/gitian/stcppipe.zip gitian-builder/inputs
 cd gitian-builder/
-#--commit tor=HEAD is a dummy which does nothing. This is because gitian expects a git repo in order to work
-./bin/gbuild --commit tor=HEAD ../tlsnotary/data/gitian/stcppipe.yml
+#--commit tor=HEAD is a dummy (gitian expects a git repo)
+./bin/gbuild --commit tor=HEAD ../tlsnotary/data/gitian/stcppipe_i386.yml
+./bin/gbuild --commit tor=HEAD ../tlsnotary/data/gitian/stcppipe_amd64.yml
 #--------------------------BASH END--------------------------------
