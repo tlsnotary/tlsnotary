@@ -645,10 +645,14 @@ class Handler(SimpleHTTPServer.SimpleHTTPRequestHandler):
         if self.path.startswith('/progress_update'):
             #receive this command in a loop, blocking for 30 seconds until there is something to respond with
             update = 'no update'
-            try :
-                update = progressQueue.get(block=True, timeout=30)
-            except:
-                pass
+            time_started = int(time.time())
+            while int(time.time()) - time_started < 30:
+                try: 
+                    update = progressQueue.get(block=False)
+                    break #something in the queue
+                except:
+                    if bTerminateAllThreads: break
+                    time.sleep(1) #nothing in the queue
             self.send_response(200)
             self.send_header("Access-Control-Allow-Origin", "*")
             self.send_header("Access-Control-Expose-Headers", "response, update")
