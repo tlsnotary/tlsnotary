@@ -1,0 +1,23 @@
+---
+name: "stcppipe"
+suites:
+- "precise"
+architectures:
+- "amd64"
+packages: 
+- "unzip"
+- "faketime"
+reference_datetime: "2000-01-01 00:00:00"
+files:
+- "stcppipe.zip"
+remotes:
+- "url": "none"
+  "dir": "tor"
+script: |
+  echo "3fe9e52633d923733841f7d20d1c447f0ec2e85557f68bac3f25ec2824b724e8  stcppipe.zip" | sha256sum -c
+  #####LINUX
+  export LD_PRELOAD=/usr/lib/faketime/libfaketime.so.1
+  unzip stcppipe.zip
+  gcc stcppipe.c -DDISABLE_SSL -lpthread -o stcppipe64_linux
+  strip stcppipe64_linux
+  cp stcppipe64_linux $OUTDIR/
