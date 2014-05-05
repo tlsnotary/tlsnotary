@@ -24,7 +24,7 @@ git config user.email "someone@someplace.com"
 #checkout commit (tag tor-browser-24.5.0esr-1-build3)
 git checkout e3a8d5fdd5dad12a0bcb6d2290553914457dd91e
 #remove TBB branding and remove preferences overrides
-git revert e31170ec7dd2acf46c2fc636e40ab747621b7357 --no-edit
+#FIXME: this breaks mac build: git revert e31170ec7dd2acf46c2fc636e40ab747621b7357 --no-edit
 #overwrite all tbb's prefs with a single line needed for building
 echo "pref("torbrowser.version", "UNKNOWN");" > browser/app/profile/000-tor-browser.js
 git add browser/app/profile/000-tor-browser.js
@@ -34,9 +34,8 @@ patch security/nss/lib/ssl/ssl3con.c < ../../../tlsnotary/data/gitian/ssl3con.pa
 git commit -a -m "tlsnotary patch"
 git tag -a tlsnotary_build -m "tlsnotary tag"
 cd ../../../tor-browser-bundle/gitian
-#tell gitian to build our custom tag and ignore that our tag is not signed
-sed -i '8s/tor-browser-${FIREFOX_VERSION}-1-build3/tlsnotary_build/' versions
-sed -i '46s/exit 1/#exit 1/' verify-tags.sh
+sed -i '4s/VERIFY_TAGS=1/VERIFY_TAGS=0/' versions
+sed -i '8s/tor-browser-${FIREFOX_VERSION}.*/tlsnotary_build/' versions
 
 sudo -s #without sudo, you will be asked to enter password 8 times 
 export USE_LXC=1
