@@ -1464,13 +1464,13 @@ if __name__ == "__main__":
             shutil.rmtree(os.path.join(datadir, 'tmpextract'))
             
         if OS=='mswin':
-            exename = 'torbrowser-install-3.5.2.1_en-US.exe'
+            exename = 'firefox-windows'
             tbbinstaller_exe_path = os.path.join(installdir, exename)
             if not os.path.exists(tbbinstaller_exe_path):
                 print ('Couldn\'t find '+exename+' Make sure it is located in the installdir')
                 exit (CANT_FIND_TORBROWSER)
             os.chdir(installdir) #installer silently extract into the current working dir
-            tbbinstaller_proc = subprocess.Popen([tbbinstaller_exe_path, '/S', '/D='+os.path.join(datadir, 'tmpextract')]) #silently extract into destination
+            tbbinstaller_proc = subprocess.Popen(tbbinstaller_exe_path + ' /S' + ' /D='+os.path.join(datadir, 'tmpextract')) #silently extract into destination
             bInstallerFinished = False
             for i in range(30): #give the installer 30 secs to extract the files and exit
                 if tbbinstaller_proc.poll() != None:
