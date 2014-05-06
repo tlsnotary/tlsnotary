@@ -83,7 +83,7 @@ class StoppableThreadedHttpServer (ThreadingMixIn, BaseHTTPServer.HTTPServer):
     def serve_forever (self):
         """Handle one request at a time until stopped. Optionally return a value"""
         self.stop = False
-        self.socket.settimeout(1)
+        self.socket.setblocking(1)
         while not self.stop:
                 self.handle_request()
         return self.retval;
