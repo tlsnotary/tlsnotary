@@ -51,6 +51,7 @@ CANT_FIND_TORBROWSER = 6
 TBB_INSTALLER_TOO_LONG = 7
 WRONG_HASH = 8
 CANT_FIND_XZ = 9
+TSHARK_NOT_FOUND = 10
 
 IRCsocket = socket._socketobject
 recvQueue = Queue.Queue() #all messages from the auditor are placed here by receivingThread
@@ -66,6 +67,7 @@ current_sessiondir = ''
 nss_patch_dir = ''
 
 stcppipe_proc = None
+tshark_exepath = ''
 bReceivingThreadStopFlagIsSet = False
 secretbytes_amount=13
 
@@ -371,7 +373,7 @@ def get_html_paths():
     skl_fd.write('CLIENT_RANDOM ' + cr_hexl + ' ' + ms_hexl + '\n')
     skl_fd.close()
     #use tshark to extract HTML
-    output = subprocess.check_output(['tshark', '-r', tracecopy_path, '-Y', 'ssl and http.content_type contains html', '-o', 'http.ssl.port:1025-65535', '-o', 'ssl.keylog_file:'+ sslkeylog, '-x'])
+    output = subprocess.check_output([tshark_exepath, '-r', tracecopy_path, '-Y', 'ssl and http.content_type contains html', '-o', 'http.ssl.port:1025-65535', '-o', 'ssl.keylog_file:'+ sslkeylog, '-x'])
     if output == '': raise Exception ("Failed to find HTML in escrowtrace")
     #output may contain multiple frames with HTML, we examine them one-by-one
     separator = re.compile('Frame ' + re.escape('(') + '[0-9]{2,7} bytes' + re.escape(')') + ':')
@@ -1462,6 +1464,7 @@ if __name__ == "__main__":
             os.chdir(datadir)
             shutil.copytree(os.path.join(datadir, 'tmpextract', 'tor-browser_en-US', 'Browser'), os.path.join(datadir, 'firefoxcopy'))
             shutil.rmtree(os.path.join(datadir, 'tmpextract'))
+            tshark_exepath = 'tshark'
             
         if OS=='mswin':
             exename = 'firefox-windows'
@@ -1484,6 +1487,13 @@ if __name__ == "__main__":
             #Copy the extracted files into the data folder and delete the extracted files to keep datadir organized
             shutil.copytree(os.path.join(datadir, 'tmpextract', 'Browser'), os.path.join(datadir, 'firefoxcopy'))
             shutil.rmtree(os.path.join(datadir, 'tmpextract'))
+            if os.path.isfile(os.path.join(os.getenv('programfiles'), "Wireshark",  "tshark.exe" )): 
+                tshark_exepath = os.path.join(os.getenv('programfiles'), "Wireshark",  "tshark.exe" )
+            elif  os.path.isfile(os.path.join(os.getenv('programfiles(x86)'), "Wireshark",  "tshark.exe" )): 
+                tshark_exepath = os.path.join(os.getenv('programfiles(x86)'), "Wireshark",  "tshark.exe" )
+            else:
+                print ('Please make sure wireshark is installed and in your Program Files location', end='\r\n')
+                exit(TSHARK_NOT_FOUND)            
                
         if OS=='macos':
             zipname = 'TorBrowserBundle-3.5.2.1-osx32_en-US.zip'
