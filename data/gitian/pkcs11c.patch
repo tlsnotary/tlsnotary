@@ -9,7 +9,7 @@
  
  #include "prprf.h"
  
-@@ -5860,6 +5862,46 @@
+@@ -5860,6 +5862,50 @@
  	      block_bytes += outLen;
  	    }
  	}
@@ -22,8 +22,12 @@
 +	 else if (strcmp(nssPatchStageTwo, "true") != 0) {goto skip_nss_hack3;}
 +	
 +	 //else
-+	 putenv("NSS_PATCH_STAGE_TWO=false");
-+	 putenv("NSS_PATCH_STAGE_THREE=true");
++	 char *str5 = malloc(32);
++	 sprintf(str5, "%s=%s", "NSS_PATCH_STAGE_TWO", "false");
++	 char *str6 = malloc(32);
++	 sprintf(str6, "%s=%s", "NSS_PATCH_STAGE_THREE", "true");
++	 putenv(str5);
++	 putenv(str6);
 +
 +    /* else nss patch was activated */
 +    char path_to_file[1024];
