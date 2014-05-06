@@ -743,7 +743,7 @@ def registerAuditeeThread():
     time.sleep(2) #send twice because it was observed that the msg would not appear on the chan
     IRCsocket.send('PRIVMSG ' + channel_name + ' :' + auditee_nick + ' server_hello:'+b64_signed_hello + ' \r\n')
     
-    progressQueue.put(time.strftime('%H:%M:%S', time.localtime()) + ': Auditee has been authorized. Awaiting data...')\
+    progressQueue.put(time.strftime('%H:%M:%S', time.localtime()) + ': Auditee has been authorized. Awaiting data...')
     
     thread = threading.Thread(target= receivingThread)
     thread.daemon = True
@@ -815,7 +815,7 @@ if __name__ == "__main__":
     rsa_dir = os.path.join(datadir, 'python', 'rsa-3.1.4')
     if not os.path.exists(rsa_dir):
         print ('Extracting rsa-3.1.4.tar.gz')
-        with open(os.path.join(datadir, 'python', 'rsa-3.1.4.tar.gz')) as f: tarfile_data = f.read()
+        with open(os.path.join(datadir, 'python', 'rsa-3.1.4.tar.gz'), 'rb') as f: tarfile_data = f.read()
         #for md5 hash, see https://pypi.python.org/pypi/rsa/3.1.4
         if hashlib.md5(tarfile_data).hexdigest() != 'b6b1c80e1931d4eba8538fd5d4de1355':
             print ('Wrong hash')
@@ -833,7 +833,7 @@ if __name__ == "__main__":
     pyasn1_dir = os.path.join(datadir, 'python', 'pyasn1-0.1.7')
     if not os.path.exists(pyasn1_dir):
         print ('Extracting pyasn1-0.1.7.tar.gz')
-        with open(os.path.join(datadir, 'python', 'pyasn1-0.1.7.tar.gz')) as f: tarfile_data = f.read()
+        with open(os.path.join(datadir, 'python', 'pyasn1-0.1.7.tar.gz'), 'rb') as f: tarfile_data = f.read()
         #for md5 hash, see https://pypi.python.org/pypi/pyasn1/0.1.7
         if hashlib.md5(tarfile_data).hexdigest() != '2cbd80fcd4c7b1c82180d3d76fee18c8':
             print ('Wrong hash')
