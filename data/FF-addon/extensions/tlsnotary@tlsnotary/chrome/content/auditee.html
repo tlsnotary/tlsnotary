@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>tlsnotary</title>
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+</head>
+
+<body onload="homepageLoaded()">
+
+<div class="hero-unit">
+<p  style="margin-left:0;margin-bottom:0;margin-top:0;">In order to be audited please do the following.
+</p>
+<ol>
+<li>Give the auditor your key</li>
+<li>Paste the Auditor's key</li>
+<li>Wait for the auditor to inform you that they are ready to audit you</li>
+<li>Press "Connect to IRC"</li>
+</ol>
+
+<table>
+<tr>
+<td>
+<button id="start_button" autofocus="autofocus" class="btn btn-primary btn-lg" style="width:100%;" onclick="startPressed()">Connect to IRC</button>
+</td>
+</tr>
+<tr>
+<td>
+<progress id="progress_bar" value="0" max="100"></progress>
+</td>
+</tr>
+</table>
+
+
+</div>
+
+
+<div>
+<p>Your key:</p>
+<textarea id="textarea_mykey" cols="40" rows="2" type="text" name="key" style="width:60%;resize:none;" autocomplete="off" oninput="inputReceived()" readonly>
+</textarea>
+<button id="new_keypair" class="btn btn-primary btn-lg" style="margin-bottom:30px;" onclick="newKeypair()">Generate a new key</button>
+</div>
+<p>Auditor's key:</p>
+<textarea id="textarea_auditorkey" cols="40" rows="2" type="text" name="key" style="width:60%;resize:none;" autocomplete="off" oninput="inputReceived()">
+</textarea>
+</div>
+
+
+<script>
+
+var port = Components.classes["@mozilla.org/process/environment;1"].getService(Components.interfaces.nsIEnvironment).get("FF_to_backend_port");	
+var bGetRecentKeysResponded = false;
+var bImportAuditorPubkeyResponded = false;
+var bStartIRCResponded = false;
+var bNewKeypairResponded = false;
+var reqGetRecentKeys;
+var reqImportAuditorPubkey;
+var reqStartIRC;
+var reqNewKeypair;
+
+
+
+
+function inputReceived(){
+    var start_button = document.getElementById("start_button");
+    var input_fields = document.getElementsByName("key");
+    for (var i = 0; i < input_fields.length; i++) {
+        if (input_fields[i].value == ""){
+            start_button.setAttribute("disabled", "true");
+            return;
+        }
+    }
+    //activate the button only when all fields contain some text
+    start_button.removeAttribute("disabled");
+}
+
+
+function homepageLoaded () {
+	reqGetRecentKeys = new XMLHttpRequest();
+    reqGetRecentKeys.onload = responseGetRecentKeys;
+    reqGetRecentKeys.open("HEAD", "http://127.0.0.1:"+port+"/get_recent_keys", true);
+    reqGetRecentKeys.send();
+    setTimeout(responseGetRecentKeys, 1000, 0);
+}
+
+function responseGetRecentKeys(iteration){
+    if (typeof iteration == "number"){
+    //give 5 secs for backend to respond
+        if (iteration > 5){
+            alert("responseGetRecentKeys timed out");
+            return;
+        }
+        if (!bGetRecentKeysResponded){ setTimeout(responseGetRecentKeys, 1000, ++iteration); }
+        return;
+    }
+    //else: not a timeout but a response from the server
+	bGetRecentKeysResponded = true;
+    var query = reqGetRecentKeys.getResponseHeader("response");
+    var mypubkey = reqGetRecentKeys.getResponseHeader("mypubkey");
+    var auditorpubkey = reqGetRecentKeys.getResponseHeader("auditorpubkey");
+
+    if (query != "get_recent_keys"){
+        alert("Internal error. Wrong response header: "+query);
+        return;
+    }
+	//else correct response
+	var textarea_mykey = document.getElementById("textarea_mykey");
+    textarea_mykey.value = mypubkey;
+	var textarea_auditorkey = document.getElementById("textarea_auditorkey");
+    textarea_auditorkey.value = auditorpubkey;
+	//we get an empty pubkey on the very first run, request a new pubkey
+	if (mypubkey == null){
+		newKeypair();
+	}
+}
+
+function startPressed(){
+	//use the auditor pubkey, regardless if it is a newly-pasted key
+	//or one of the recent keys. We still import it explicitely
+	//rather than relying on the backend to remember which keys were
+	//provided during the get_recent_keys() call. Makes life simpler.
+	var textarea_auditorkey = document.getElementById("textarea_auditorkey");
+    var auditorpubkey = textarea_auditorkey.value;
+	if (auditorpubkey.length != 173){
+		alert("Wrong auditee pubkey length. Expected 173 characters");
+		return;
+	}
+	reqImportAuditorPubkey = new XMLHttpRequest();
+    reqImportAuditorPubkey.onload = responseImportAuditorPubkey;
+    reqImportAuditorPubkey.open("HEAD", "http://127.0.0.1:"+port+"/import_auditor_pubkey?pubkey="+auditorpubkey, true);
+    reqImportAuditorPubkey.send();
+    setTimeout(responseImportAuditorPubkey, 1000, 0);
+	//the response function will also call startIRC()
+}
+
+function responseImportAuditorPubkey(iteration){
+    if (typeof iteration == "number"){
+    //give 5 secs for backend to respond
+        if (iteration > 5){
+            alert("responseImportAuditorPubkey timed out");
+            return;
+        }
+        if (!bImportAuditorPubkeyResponded) setTimeout(responseImportAuditorPubkey, 1000, ++iteration)
+        return;
+    }
+    //else: not a timeout but a response from the server
+	bImportAuditorPubkeyResponded = true;
+    var query = reqImportAuditorPubkey.getResponseHeader("response");
+    var status = reqImportAuditorPubkey.getResponseHeader("status");
+
+    if (query != "import_auditor_pubkey"){
+        alert("Internal error. Wrong response header: "+query);
+        return;
+    }
+	if (status != "success"){
+		alert ("Received an error message: " + status);
+		return;
+	}
+	//else successful response
+	startIRC();
+}
+
+function progressBar(){
+	var progress_bar = document.getElementById("progress_bar");
+	if (progress_bar.value >= 100){
+		return;
+	} 
+	progress_bar.value += 1;
+	setTimeout(progressBar, 150);
+}
+
+function startIRC(){
+	setTimeout(progressBar, 1);
+	var button_start_button = document.getElementById("start_button");
+	button_start_button.setAttribute("disabled", "true");
+	var button_new_keypair = document.getElementById("new_keypair");
+	button_new_keypair.setAttribute("disabled", "true");
+	var progress_bar = document.getElementById("progress_bar");
+	progress_bar.setAttribute("disabled", "true");
+	var help = document.getElementById("help");
+
+	reqStartIRC = new XMLHttpRequest();
+    reqStartIRC.onload = responseStartIRC;
+    reqStartIRC.open("HEAD", "http://127.0.0.1:"+port+"/start_irc", true);
+    reqStartIRC.send();
+    //give 20 secs for escrow to respond
+    setTimeout(responseStartIRC, 1000, 0);
+}
+
+function responseStartIRC(iteration){
+    if (typeof iteration == "number"){
+    //give ample time to connect to IRC server and report back
+        if (iteration > 20){
+            alert("responseStartIRC timed out")
+            return
+        }
+        if (!bStartIRCResponded) setTimeout(responseStartIRC, 1000, ++iteration)
+        return;
+    }
+    //else: not a timeout but a response from the server
+	bStartIRCResponded = true;
+    var query = reqStartIRC.getResponseHeader("response");
+    var status = reqStartIRC.getResponseHeader("status");
+
+    if (query != "start_irc"){
+        alert("Internal error. Wrong response header: "+query);
+        return;
+    }
+	if (status != "success"){
+		alert ("Received an error message: " + status);
+		return;
+	}
+	//else successful response
+	var progress_bar = document.getElementById("progress_bar");
+	progress_bar.value = 100;
+	//inform the addon. We use env var as IPC
+	//NB: we can set envvar from this JS code only because this file is part of the addon
+	//When debugging this file by simple loading into the browser, we won't be able to access env vars
+	Components.classes["@mozilla.org/process/environment;1"].getService(Components.interfaces.nsIEnvironment).set("TLSNOTARY_IRC_STARTED", "true");	 
+	alert("You are now connected to IRC. The auditor is ready to start the auditing session. You may now open a new tab, type in a URL, navigate to a webpage you need, and press the RECORD button");
+
+}
+
+function newKeypair() {
+	reqNewKeypair = new XMLHttpRequest();
+    reqNewKeypair.onload = responseNewKeypair;
+    reqNewKeypair.open("HEAD", "http://127.0.0.1:"+port+"/new_keypair", true);
+    reqNewKeypair.send();
+    //give 20 secs for escrow to respond
+    setTimeout(responseNewKeypair, 1000, 0);
+}
+
+function responseNewKeypair(iteration){
+    if (typeof iteration == "number"){
+    //give 5 secs for backend to respond
+        if (iteration > 5){
+            alert("responseNewKeypair timed out");
+            return;
+        }
+        if (!bNewKeypairResponded) setTimeout(responseNewKeypair, 1000, ++iteration)
+        return;
+    }
+    //else: not a timeout but a response from the server
+	bNewKeypairResponded = true;
+    var query = reqNewKeypair.getResponseHeader("response");
+    var status = reqNewKeypair.getResponseHeader("status");
+    var mypubkey = reqNewKeypair.getResponseHeader("pubkey");
+
+    if (query != "new_keypair"){
+        alert("Internal error. Wrong response header: "+query);
+        return;
+    }
+	if (status != "success"){
+		alert ("Received an error message: " + status);
+		return;
+	}
+	//else successful response
+	var textarea_mykey = document.getElementById("textarea_mykey");
+    textarea_mykey.value = mypubkey;
+}
+
+
+
+</script>
+
+<script src="jquery-2.0.3.min.js"></script>
+<script src="bootstrap-modal.js"></script>
+<script src="bootstrap-transition.js"></script>
+</body>
+</html>
