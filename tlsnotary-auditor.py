@@ -523,7 +523,12 @@ def process_messages():
                 skl_fd = open(sslkeylog, 'wb')
                 skl_fd.write('CLIENT_RANDOM ' + cr_hexl + ' ' + ms_hexl + '\n')
                 skl_fd.close()
-                output = subprocess.check_output([tshark_exepath, '-r', os.path.join(auditeetrace_dir, one_trace), '-Y', 'ssl and http.content_type contains html', '-o', 'http.ssl.port:1025-65535', '-o', 'ssl.keylog_file:'+ sslkeylog, '-x'])
+                try:
+                    output = subprocess.check_output([tshark_exepath, '-r', os.path.join(auditeetrace_dir, one_trace), '-Y', 'ssl and http.content_type contains html', '-o', 'http.ssl.port:1025-65535', '-o', 'ssl.keylog_file:'+ sslkeylog, '-x'])
+                except: #maybe an old tshark version, Replace -Y with -R
+                    try:
+                        output = subprocess.check_output([tshark_exepath, '-r', os.path.join(auditeetrace_dir, one_trace), '-R', 'ssl and http.content_type contains html', '-o', 'http.ssl.port:1025-65535', '-o', 'ssl.keylog_file:'+ sslkeylog, '-x'])
+                    except: raise Exception ('Could not launch tshark')
                 if output == '': raise Exception ("Failed to find HTML in escrowtrace")
                 #output may contain multiple frames with HTML, we examine them one-by-one
                 separator = re.compile('Frame ' + re.escape('(') + '[0-9]{2,7} bytes' + re.escape(')') + ':')
