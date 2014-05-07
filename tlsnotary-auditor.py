@@ -226,14 +226,15 @@ def send_message(data):
     #empty queue from possible leftovers
     #try: ackQueue.get_nowait()
     #except: pass
-    #split up data longer than 400 bytes (IRC message limit is 512 bytes including the header data)
+    #split up data longer than chunk_size bytes (IRC message limit is 512 bytes including the header data)
     #'\r\n' must go to the end of each message
-    chunks = len(data)/400 + 1
-    if len(data)%400 == 0: chunks -= 1 #avoid creating an empty chunk if data length is a multiple of 400
+    chunk_size=350    
+    chunks = len(data)/chunk_size + 1
+    if len(data)%chunk_size == 0: chunks -= 1 #avoid creating an empty chunk if data length is a multiple of chunk_size
     
     for chunk_index in range(chunks) :
         send_message.my_seq += 1
-        chunk = data[400*chunk_index:400*(chunk_index+1)]
+        chunk = data[chunk_size*chunk_index:chunk_size*(chunk_index+1)]
         for i in range (3):
             bWasMessageAcked = False
             ending = ' EOL ' if chunk_index+1==chunks else ' CRLF ' #EOL for the last chunk, otherwise CRLF
