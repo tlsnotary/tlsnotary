@@ -1339,6 +1339,7 @@ def start_firefox(FF_to_backend_port):
         'user_pref("browser.rights.3.shown", true);\n', 
         'user_pref("app.update.auto", false);\n',
         'user_pref("app.update.enabled", false);\n',
+        'user_pref("browser.shell.checkDefaultBrowser", false);\n',
         'user_pref("browser.search.update", false);\n',
         'user_pref("browser.link.open_newwindow", 3);\n', #open new window in a new tab
         'user_pref("browser.link.open_newwindow.restriction", 0);\n', #enforce the above rule without exceptions
