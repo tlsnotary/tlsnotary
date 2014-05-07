@@ -1325,6 +1325,30 @@ def start_firefox(FF_to_backend_port):
                 f2.write('<?xml version="1.0"?><RDF:RDF xmlns:NC="http://home.netscape.com/NC-rdf#" xmlns:RDF="http://www.w3.org/1999/02/22-rdf-syntax-ns#"><RDF:Description RDF:about="chrome://browser/content/browser.xul"><NC:persist RDF:resource="chrome://browser/content/browser.xul#addon-bar" collapsed="false"/></RDF:Description></RDF:RDF>')    
         except Exception,e:
             return ('File open error', )
+    bundles_dir = os.path.join(datadir, 'firefoxcopy', 'distribution', 'bundles')
+    if not os.path.exists(bundles_dir):
+        os.makedirs(bundles_dir)
+        shutil.copytree(os.path.join(datadir, 'FF-addon', 'tlsnotary@tlsnotary'), 
+                        os.path.join(bundles_dir, 'tlsnotary@tlsnotary'))
+    with open(os.path.join(datadir, 'FF-profile', 'prefs.js'), 'w') as f:
+        f.writelines([
+        'user_pref("browser.startup.homepage", "chrome://tlsnotary/content/auditee.html");\n',
+        'user_pref("browser.startup.homepage_override.mstone", "ignore");\n', #prevents welcome page
+        'user_pref("browser.rights.3.shown", true);\n', 
+        'user_pref("app.update.auto", false);\n',
+        'user_pref("app.update.enabled", false);\n',
+        'user_pref("browser.search.update", false);\n',
+        'user_pref("browser.link.open_newwindow", 3);\n', #open new window in a new tab
+        'user_pref("browser.link.open_newwindow.restriction", 0);\n', #enforce the above rule without exceptions
+        'user_pref("extensions.lastAppVersion", "100.0.0");\n',
+        'user_pref("extensions.checkCompatibility.4.*", false);\n',
+        'user_pref("extensions.update.autoUpdate", false);\n',
+        'user_pref("extensions.update.enabled", false);\n',
+        'user_pref("extensions.enabledScopes", 0);\n', #prevent from looking for system addons
+        'user_pref("datareporting.healthreport.service.enabled", false);\n',
+        'user_pref("datareporting.healthreport.uploadEnabled", false);\n',
+        'user_pref("datareporting.policy.dataSubmissionEnabled", false);\n'
+        ])
           
     #create a session dir
     time_str = time.strftime("%d-%b-%Y-%H-%M-%S", time.gmtime())

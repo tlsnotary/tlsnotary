@@ -48,24 +48,3 @@ pref("browser.cache.disk.enable", false);
 pref("browser.cache.memory.enable", false);
 pref("browser.cache.disk_cache_ssl", false);
 pref("network.http.use-cache", false);
-
-pref("browser.shell.checkDefaultBrowser", false);
-pref("startup.homepage_welcome_url", "");
-pref("browser.rights.3.shown", true)
-pref("extensions.checkCompatibility", false);
-pref("browser.link.open_newwindow", 3); //open new window in a new tab
-pref("browser.link.open_newwindow.restriction", 0); // enforce the above rule without exceptions
-// The last version of the browser to successfully load extensions. 
-//Used to determine whether or not to disable extensions due to possible incompatibilities. 
-pref("extensions.lastAppVersion", "100.0.0"); //gets overriden by tbb
-pref("extensions.update.autoUpdate", false);  //doesnt exist in tbb
-pref("extensions.update.enabled", false);
-pref("datareporting.policy.dataSubmissionEnabled", false)
-
-//Override Tor Browser Bundle's 
-//NB network.proxy.* prefs do not override from here, we call them from within addon's JS
-pref("network.proxy.type", 0);
-//if socks_remote_dns is true even with proxy.type == 0, TBB still tries to use proxy
-//That's a TBB/Firefox24ESR bug (not present if FF27, though)
-pref("network.proxy.socks_remote_dns", false);
-pref("extensions.enabledAddons", "tlsnotary%40tlsnotary:0.1")
