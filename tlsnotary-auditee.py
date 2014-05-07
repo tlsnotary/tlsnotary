@@ -1317,7 +1317,9 @@ def start_firefox(FF_to_backend_port):
     os.chmod(firefox_exepath,stat.S_IRWXU)
     if not os.path.isdir(os.path.join(datadir, 'logs')): os.makedirs(os.path.join(datadir, 'logs'))
     if not os.path.isfile(os.path.join(datadir, 'logs', 'firefox.stdout')): open(os.path.join(datadir, 'logs', 'firefox.stdout'), 'w').close()
-    if not os.path.isfile(os.path.join(datadir, 'logs', 'firefox.stderr')): open(os.path.join(datadir, 'logs', 'firefox.stderr'), 'w').close()    
+    if not os.path.isfile(os.path.join(datadir, 'logs', 'firefox.stderr')): open(os.path.join(datadir, 'logs', 'firefox.stderr'), 'w').close()
+    if not os.path.exists(os.path.join(datadir, 'FF-profile')):
+        os.makedirs(os.path.join(datadir, 'FF-profile'))
     if not os.path.isfile(os.path.join(datadir, 'FF-profile', 'extensions.ini')):            
         try:
             #show addon bar
