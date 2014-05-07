@@ -44,11 +44,12 @@ FIREFOX_MISSING= 1
 BROWSER_START_ERROR = 5
 BROWSER_NOT_FOUND = 6
 WRONG_HASH = 8
+TSHARK_NOT_FOUND = 9
 
 
 sslkeylogfile = ''
 current_sessiondir = ''
-browser_exepath = 'firefox'
+browser_exepath = ''
 
 IRCsocket = socket._socketobject
 my_nick = ''
@@ -522,7 +523,7 @@ def process_messages():
                 skl_fd = open(sslkeylog, 'wb')
                 skl_fd.write('CLIENT_RANDOM ' + cr_hexl + ' ' + ms_hexl + '\n')
                 skl_fd.close()
-                output = subprocess.check_output(['tshark', '-r', os.path.join(auditeetrace_dir, one_trace), '-Y', 'ssl and http.content_type contains html', '-o', 'http.ssl.port:1025-65535', '-o', 'ssl.keylog_file:'+ sslkeylog, '-x'])
+                output = subprocess.check_output([tshark_exepath, '-r', os.path.join(auditeetrace_dir, one_trace), '-Y', 'ssl and http.content_type contains html', '-o', 'http.ssl.port:1025-65535', '-o', 'ssl.keylog_file:'+ sslkeylog, '-x'])
                 if output == '': raise Exception ("Failed to find HTML in escrowtrace")
                 #output may contain multiple frames with HTML, we examine them one-by-one
                 separator = re.compile('Frame ' + re.escape('(') + '[0-9]{2,7} bytes' + re.escape(')') + ':')
@@ -880,6 +881,16 @@ if __name__ == "__main__":
         else:
             print ('Please make sure firefox is installed and in your Program Files location', end='\r\n')
             exit(BROWSER_NOT_FOUND)
+        if os.path.isfile(os.path.join(os.getenv('programfiles'), "Wireshark",  "tshark.exe" )): 
+            tshark_exepath = os.path.join(os.getenv('programfiles'), "Wireshark",  "tshark.exe" )
+        elif  os.path.isfile(os.path.join(os.getenv('programfiles(x86)'), "Wireshark",  "tshark.exe" )): 
+            tshark_exepath = os.path.join(os.getenv('programfiles(x86)'), "Wireshark",  "tshark.exe" )
+        else:
+            print ('Please make sure wireshark is installed and in your Program Files location', end='\r\n')
+            exit(TSHARK_NOT_FOUND)                               
+    elif OS=='linux':
+        browser_exepath = 'firefox'
+        tshark_exepath = 'tshark' 
             
     try:
         ff_proc = subprocess.Popen([browser_exepath, os.path.join('http://127.0.0.1:' + str(FF_to_backend_port) + '/auditor.html')])

@@ -1465,7 +1465,6 @@ if __name__ == "__main__":
             os.chdir(datadir)
             shutil.copytree(os.path.join(datadir, 'tmpextract', 'tor-browser_en-US', 'Browser'), os.path.join(datadir, 'firefoxcopy'))
             shutil.rmtree(os.path.join(datadir, 'tmpextract'))
-            tshark_exepath = 'tshark'
             
         if OS=='mswin':
             exename = 'firefox-windows'
@@ -1488,13 +1487,6 @@ if __name__ == "__main__":
             #Copy the extracted files into the data folder and delete the extracted files to keep datadir organized
             shutil.copytree(os.path.join(datadir, 'tmpextract', 'Browser'), os.path.join(datadir, 'firefoxcopy'))
             shutil.rmtree(os.path.join(datadir, 'tmpextract'))
-            if os.path.isfile(os.path.join(os.getenv('programfiles'), "Wireshark",  "tshark.exe" )): 
-                tshark_exepath = os.path.join(os.getenv('programfiles'), "Wireshark",  "tshark.exe" )
-            elif  os.path.isfile(os.path.join(os.getenv('programfiles(x86)'), "Wireshark",  "tshark.exe" )): 
-                tshark_exepath = os.path.join(os.getenv('programfiles(x86)'), "Wireshark",  "tshark.exe" )
-            else:
-                print ('Please make sure wireshark is installed and in your Program Files location', end='\r\n')
-                exit(TSHARK_NOT_FOUND)            
                
         if OS=='macos':
             zipname = 'TorBrowserBundle-3.5.2.1-osx32_en-US.zip'
@@ -1509,6 +1501,16 @@ if __name__ == "__main__":
                 shutil.copytree(os.path.join(datadir, 'tmpextract', 'TorBrowserBundle_en-US.app', 'Contents', 'MacOS', 'TorBrowser.app', 'Contents', 'MacOS'), os.path.join(datadir, 'firefoxcopy'))
                 shutil.rmtree(os.path.join(datadir, 'tmpextract'))
 
+    if OS=='linux': tshark_exepath = 'tshark'
+    elif OS=='mswin':
+        if os.path.isfile(os.path.join(os.getenv('programfiles'), "Wireshark",  "tshark.exe" )): 
+            tshark_exepath = os.path.join(os.getenv('programfiles'), "Wireshark",  "tshark.exe" )
+        elif  os.path.isfile(os.path.join(os.getenv('programfiles(x86)'), "Wireshark",  "tshark.exe" )): 
+            tshark_exepath = os.path.join(os.getenv('programfiles(x86)'), "Wireshark",  "tshark.exe" )
+        else:
+            print ('Please make sure wireshark is installed and in your Program Files location', end='\r\n')
+            exit(TSHARK_NOT_FOUND)            
+    
       
     thread = ThreadWithRetval(target= minihttp_thread)
     thread.daemon = True
