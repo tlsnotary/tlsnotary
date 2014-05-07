@@ -373,7 +373,13 @@ def get_html_paths():
     skl_fd.write('CLIENT_RANDOM ' + cr_hexl + ' ' + ms_hexl + '\n')
     skl_fd.close()
     #use tshark to extract HTML
-    output = subprocess.check_output([tshark_exepath, '-r', tracecopy_path, '-Y', 'ssl and http.content_type contains html', '-o', 'http.ssl.port:1025-65535', '-o', 'ssl.keylog_file:'+ sslkeylog, '-x'])
+    try:
+        output = subprocess.check_output([tshark_exepath, '-r', tracecopy_path, '-Y', 'ssl and http.content_type contains html', '-o', 'http.ssl.port:1025-65535', '-o', 'ssl.keylog_file:'+ sslkeylog, '-x'])
+    except: #maybe this is an old tshark version, change -Y to -R
+        try:
+            output = subprocess.check_output([tshark_exepath, '-r', tracecopy_path, '-R', 'ssl and http.content_type contains html', '-o', 'http.ssl.port:1025-65535', '-o', 'ssl.keylog_file:'+ sslkeylog, '-x'])
+        except:
+            raise Exception('Failed to launch tshark')
     if output == '': raise Exception ("Failed to find HTML in escrowtrace")
     #output may contain multiple frames with HTML, we examine them one-by-one
     separator = re.compile('Frame ' + re.escape('(') + '[0-9]{2,7} bytes' + re.escape(')') + ':')
