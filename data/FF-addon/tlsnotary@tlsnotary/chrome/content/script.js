@@ -317,6 +317,17 @@ function responseStopRecording(iteration){
 	}
 	//else successful response, disable proxying
 	Cc["@mozilla.org/preferences-service;1"].getService(Ci.nsIPrefService).setIntPref("network.proxy.type", 0);
+	//set a dir which will open up to in "choose file" dialog
+	var ioSvc = Cc["@mozilla.org/network/io-service;1"].getService(Ci.nsIIOService);
+	var prefService = Cc["@mozilla.org/content-pref/service;1"].getService(Ci.nsIContentPrefService);
+	var uri = ioSvc.newURI("http://www.sendspace.com", null, null);
+	prefService.setPref(uri, "browser.upload.lastDir", session_path, null);
+	var uri2 = ioSvc.newURI("http://host03.pipebytes.com", null, null);
+	prefService.setPref(uri2, "browser.upload.lastDir", session_path, null);
+	var uri3 = ioSvc.newURI("http://www.jetbytes.com", null, null);
+	prefService.setPref(uri3, "browser.upload.lastDir", session_path, null);
+	console.log("was here");
+	
 	ss_start(); //from sendspace.js
 	setTimeout(ss_checkStarted, 20000)
 	help.value = "Preparing the data to be sent to auditor using sendspace.com..."

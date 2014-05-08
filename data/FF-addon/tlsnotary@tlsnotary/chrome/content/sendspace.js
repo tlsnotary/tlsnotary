@@ -21,51 +21,12 @@ function ss_eventHandler_htmlLoad(event){
 			gBrowser.getBrowserForTab(ss_tab).removeEventListener("load", ss_eventHandler_htmlLoad, true);
 			alert("In the next dialog window, please, choose the file mytrace.zip and press Open.\n\
 The file will be immediately forwarded to the auditor.");
-			ss_informBackend();
+			var fileinput = gBrowser.getBrowserForTab(ss_tab).contentWindow.document.getElementById("upload_file");
+			ss_simulateClick(fileinput);
+			ss_checkUploadButton();	
 		}
 	}
 }
-
-
-function ss_informBackend(){
-	ss_reqInformBackend = new XMLHttpRequest();
-    ss_reqInformBackend.onload = ss_responseInformBackend;
-    //port is a global var from script.js
-    ss_reqInformBackend.open("HEAD", "http://127.0.0.1:"+port+"/inform_backend", true);
-    ss_reqInformBackend.send();
-    //give 20 secs for escrow to respond
-    setTimeout(ss_responseInformBackend, 1000, 0);
-}
-
-function ss_responseInformBackend(iteration){
-    if (typeof iteration == "number"){
-    //give 5 secs for backend to respond
-        if (iteration > 5){
-            alert("responseInformBackend timed out");
-            return;
-        }
-        if (!ss_bInformBackendResponded) setTimeout(ss_responseInformBackend, 1000, ++iteration);
-        return;
-    }
-    //else: not a timeout but a response from the server
-	ss_bInformBackendResponded = true;
-    var query = ss_reqInformBackend.getResponseHeader("response");
-    var status = ss_reqInformBackend.getResponseHeader("status");
-
-    if (query != "inform_backend"){
-        alert("Internal error. Wrong response header: " + query);
-        return;
-    }
-	if (status != "success"){
-		alert ("Received an error message: " + status);
-		return;
-	}
-	//else successful response
-	var fileinput = gBrowser.getBrowserForTab(ss_tab).contentWindow.document.getElementById("upload_file");
-	ss_simulateClick(fileinput);
-	ss_checkUploadButton();	
-}
-
 
 function ss_checkUploadButton(){
 	var span_element = gBrowser.getBrowserForTab(ss_tab).contentWindow.document.getElementsByClassName("filename")[0];

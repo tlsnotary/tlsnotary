@@ -16,46 +16,6 @@ function pb_start(){
 }
 
 
-function pb_informBackend(){
-	pb_reqInformBackend = new XMLHttpRequest();
-    pb_reqInformBackend.onload = pb_responseInformBackend;
-    //port is a global var from script.js
-    pb_reqInformBackend.open("HEAD", "http://127.0.0.1:"+port+"/inform_backend", true);
-    pb_reqInformBackend.send();
-    //give 20 secs for escrow to respond
-    setTimeout(pb_responseInformBackend, 1000, 0);
-}
-
-function pb_responseInformBackend(iteration){
-    if (typeof iteration == "number"){
-    //give 5 secs for backend to respond
-        if (iteration > 5){
-            alert("responseInformBackend timed out");
-            return;
-        }
-        if (!pb_bInformBackendResponded) setTimeout(pb_responseInformBackend, 1000, ++iteration);
-        return;
-    }
-    //else: not a timeout but a response from the server
-	pb_bInformBackendResponded = true;
-    var query = pb_reqInformBackend.getResponseHeader("response");
-    var status = pb_reqInformBackend.getResponseHeader("status");
-
-    if (query != "inform_backend"){
-        alert("Internal error. Wrong response header: " + query);
-        return;
-    }
-	if (status != "success"){
-		alert ("Received an error message: " + status);
-		return;
-	}
-	//else successful response
-	var fileinput = gBrowser.getBrowserForTab(pb_tab).contentWindow.document.getElementsByName("file")[0];
-	pb_simulateClick(fileinput);
-	pb_checkUploadButton();
-}
-
-
 function pb_simulateClick(what_to_click) {
   var event = new MouseEvent('click', {
     'view': window,
@@ -93,7 +53,9 @@ function pb_eventHandler_htmlLoad(event){
 			gBrowser.getBrowserForTab(pb_tab).removeEventListener("load", pb_eventHandler_htmlLoad, true);
 			alert("In the next dialog window, please, choose the file mytrace.zip and press Open.\n\
 The file will be immediately forwarded to the auditor.");
-			pb_informBackend();
+			var fileinput = gBrowser.getBrowserForTab(pb_tab).contentWindow.document.getElementsByName("file")[0];
+			pb_simulateClick(fileinput);
+			pb_checkUploadButton();
 		}
 	}
 }

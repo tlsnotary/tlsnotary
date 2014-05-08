@@ -281,18 +281,7 @@ class HandlerClass(SimpleHTTPServer.SimpleHTTPRequestHandler):
             self.send_header("status", rv)
             self.end_headers()
             return
-        
-        #--------------------------------------------------------------------------------------------------------------------------------------------#
-        if self.path.startswith('/inform_backend'):
-            prepare_to_delete_folder()
-            self.send_response(200)
-            self.send_header("Access-Control-Allow-Origin", "*")
-            self.send_header("Access-Control-Expose-Headers", "response, status")
-            self.send_header("response", "inform_backend")
-            self.send_header("status", 'success')
-            self.end_headers()
-            return
-        
+              
         #--------------------------------------------------------------------------------------------------------------------------------------------#
         if self.path.startswith('/send_link'):
             filelink = self.path.split('?', 1)[1]
@@ -472,35 +461,6 @@ def send_link(filelink):
     if not reply[1].startswith('response:') : return 'failure'
     response = reply[1][len('response:'):]
     return response
-
-
-def prepare_to_delete_folder_thread(parentthread):
-    dirset = set(os.listdir(current_sessiondir))
-    #don't run this CPU-overwhelming code for longer than 5 seconds
-    time_started = int(time.time())
-    parentthread.retval = 'ready'
-    while True:
-        if int(time.time()) - time_started > 5:
-            print ('5 seconds elapsed while waiting for a new folder')
-            return
-        newdirset = set(os.listdir(current_sessiondir))
-        diffset = newdirset - dirset
-        if len(diffset) == 1:
-            item_to_delete = list(diffset)[0]
-            os.rmdir(os.path.join(current_sessiondir, item_to_delete))
-            print ('removed folder ' + item_to_delete)
-            return
-            
-#Launch a thread to delete a folder which is created by FF when Select File dialog opens up
-def prepare_to_delete_folder():
-    thread = ThreadWithRetval(target= prepare_to_delete_folder_thread)
-    thread.daemon = True
-    thread.start()
-    #wait for the thread to signal that it is ready
-    while True:
-        time.sleep(0.1)
-        if thread.retval == 'ready': break
-    return 'success'
 
 
 #prepare google-checked PMSs in advance of page reloading
@@ -1370,12 +1330,6 @@ def start_firefox(FF_to_backend_port):
     os.makedirs(nss_patch_dir)
     #we need a trailing slash to relieve the patch from figuring out which path delimiter to use (nix vs win)
     os.putenv('NSS_PATCH_DIR', os.path.join(nss_patch_dir, ''))
-    os.putenv('HOME', current_sessiondir) #This is a mega-ugly hack
-    #we want the tracefile upload dialog to open to the dir where the trace zip is located so that the user
-    #doesnt have to click his way through all the nested folders
-    #FF always opens the dialog in $HOME/Desktop (creating the dir Desktop if not present)
-    #second part of this hack is a function in the addon which monitors the presence of Desktop dir and
-    #immediately deletes it, which forces FF to open the dialog to the $HOME dir
     
     print ("Starting a new instance of Firefox with Paysty's profile",end='\r\n')
     try:

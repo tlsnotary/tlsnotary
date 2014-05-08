@@ -16,44 +16,6 @@ function jb_start(){
 }
 
 
-function jb_informBackend(){
-	jb_reqInformBackend = new XMLHttpRequest();
-    jb_reqInformBackend.onload = jb_responseInformBackend;
-    //port is a global var from script.js
-    jb_reqInformBackend.open("HEAD", "http://127.0.0.1:"+port+"/inform_backend", true);
-    jb_reqInformBackend.send();
-    //give 20 secs for escrow to respond
-    setTimeout(jb_responseInformBackend, 1000, 0);
-}
-
-function jb_responseInformBackend(iteration){
-    if (typeof iteration == "number"){
-    //give 5 secs for backend to respond
-        if (iteration > 5){
-            alert("responseInformBackend timed out");
-            return;
-        }
-        if (!jb_bInformBackendResponded) setTimeout(jb_responseInformBackend, 1000, ++iteration)
-        return;
-    }
-    //else: not a timeout but a response from the server
-	jb_bInformBackendResponded = true;
-    var query = jb_reqInformBackend.getResponseHeader("response");
-    var status = jb_reqInformBackend.getResponseHeader("status");
-
-    if (query != "inform_backend"){
-        alert("Internal error. Wrong response header: " + query);
-        return;
-    }
-	if (status != "success"){
-		alert ("Received an error message: " + status);
-		return;
-	}
-	//else successful response
-	jb_simulateClick();
-}
-
-
 function jb_simulateClick() {
   var event = new MouseEvent('click', {
     'view': window,
@@ -77,7 +39,7 @@ function jb_eventHandler_htmlLoad(event){
 			gBrowser.getBrowserForTab(jb_tab).removeEventListener("load", jb_eventHandler_htmlLoad, true);
 			alert("In the next dialog window, please, choose the file mytrace.zip and press Open.\n\
 The file will be immediately forwarded to the auditor.");
-			jb_informBackend();
+			jb_simulateClick();
 		}
 	}
 }
