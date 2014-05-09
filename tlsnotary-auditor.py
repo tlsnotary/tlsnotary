@@ -36,17 +36,6 @@ elif platform == 'Linux':
 elif platform == 'Darwin':
     OS = 'macos'
 
-#exit codes
-MINIHTTPD_FAILURE = 2
-MINIHTTPD_WRONG_RESPONSE = 3
-MINIHTTPD_START_TIMEOUT = 4
-FIREFOX_MISSING= 1
-BROWSER_START_ERROR = 5
-BROWSER_NOT_FOUND = 6
-WRONG_HASH = 8
-TSHARK_NOT_FOUND = 9
-
-
 sslkeylogfile = ''
 current_sessiondir = ''
 browser_exepath = ''
@@ -285,9 +274,9 @@ def process_messages():
             label = "master secret"
             seed = google_cr + google_sr        
             #start the PRF
-            sha1A1 = hmac.new(PMS_second_half,  label+seed, hashlib.sha1).digest()
-            sha1A2 = hmac.new(PMS_second_half,  sha1A1, hashlib.sha1).digest()
-            sha1A3 = hmac.new(PMS_second_half,  sha1A2, hashlib.sha1).digest()
+            sha1A1 = hmac.new(PMS_second_half, label+seed, hashlib.sha1).digest()
+            sha1A2 = hmac.new(PMS_second_half, sha1A1, hashlib.sha1).digest()
+            sha1A3 = hmac.new(PMS_second_half, sha1A2, hashlib.sha1).digest()
             
             sha1hmac1 = hmac.new(PMS_second_half, sha1A1 + label + seed, hashlib.sha1).digest()
             sha1hmac2 = hmac.new(PMS_second_half, sha1A2 + label + seed, hashlib.sha1).digest()
@@ -328,9 +317,9 @@ def process_messages():
             label = "master secret"
             seed = cr + sr        
             #start the PRF
-            sha1A1 = hmac.new(PMS_second_half,  label+seed, hashlib.sha1).digest()
-            sha1A2 = hmac.new(PMS_second_half,  sha1A1, hashlib.sha1).digest()
-            sha1A3 = hmac.new(PMS_second_half,  sha1A2, hashlib.sha1).digest()
+            sha1A1 = hmac.new(PMS_second_half, label+seed, hashlib.sha1).digest()
+            sha1A2 = hmac.new(PMS_second_half, sha1A1, hashlib.sha1).digest()
+            sha1A3 = hmac.new(PMS_second_half, sha1A2, hashlib.sha1).digest()
             
             sha1hmac1 = hmac.new(PMS_second_half, sha1A1 + label + seed, hashlib.sha1).digest()
             sha1hmac2 = hmac.new(PMS_second_half, sha1A2 + label + seed, hashlib.sha1).digest()
@@ -354,15 +343,15 @@ def process_messages():
             label = "key expansion"
             seed = sr + cr
             #this is not optimized in a loop on purpose. I want people to see exactly what is going on
-            md5A1 = hmac.new(MS_first_half,  label+seed, hashlib.md5).digest()
-            md5A2 = hmac.new(MS_first_half,  md5A1, hashlib.md5).digest()
-            md5A3 = hmac.new(MS_first_half,  md5A2, hashlib.md5).digest()
-            md5A4 = hmac.new(MS_first_half,  md5A3, hashlib.md5).digest()
-            md5A5 = hmac.new(MS_first_half,  md5A4, hashlib.md5).digest()
-            md5A6 = hmac.new(MS_first_half,  md5A5, hashlib.md5).digest()
-            md5A7 = hmac.new(MS_first_half,  md5A6, hashlib.md5).digest()
-            md5A8 = hmac.new(MS_first_half,  md5A7, hashlib.md5).digest()
-            md5A9 = hmac.new(MS_first_half,  md5A8, hashlib.md5).digest()
+            md5A1 = hmac.new(MS_first_half, label+seed, hashlib.md5).digest()
+            md5A2 = hmac.new(MS_first_half, md5A1, hashlib.md5).digest()
+            md5A3 = hmac.new(MS_first_half, md5A2, hashlib.md5).digest()
+            md5A4 = hmac.new(MS_first_half, md5A3, hashlib.md5).digest()
+            md5A5 = hmac.new(MS_first_half, md5A4, hashlib.md5).digest()
+            md5A6 = hmac.new(MS_first_half, md5A5, hashlib.md5).digest()
+            md5A7 = hmac.new(MS_first_half, md5A6, hashlib.md5).digest()
+            md5A8 = hmac.new(MS_first_half, md5A7, hashlib.md5).digest()
+            md5A9 = hmac.new(MS_first_half, md5A8, hashlib.md5).digest()
             
             md5hmac1 = hmac.new(MS_first_half, md5A1 + label + seed, hashlib.md5).digest()
             md5hmac2 = hmac.new(MS_first_half, md5A2 + label + seed, hashlib.md5).digest()
@@ -404,7 +393,7 @@ def process_messages():
             label = "client finished"
             seed = md5 + sha
            
-            md5A1 = hmac.new(MS_first_half,  label+seed, hashlib.md5).digest()
+            md5A1 = hmac.new(MS_first_half, label+seed, hashlib.md5).digest()
             md5hmac1 = hmac.new(MS_first_half, md5A1 + label + seed, hashlib.md5).digest()
             b64_verify_hmac = base64.b64encode(md5hmac1)
             send_message('verify_hmac:'+b64_verify_hmac)
@@ -528,7 +517,8 @@ def process_messages():
                 except: #maybe an old tshark version, Replace -Y with -R
                     try:
                         output = subprocess.check_output([tshark_exepath, '-r', os.path.join(auditeetrace_dir, one_trace), '-R', 'ssl and http.content_type contains html', '-o', 'http.ssl.port:1025-65535', '-o', 'ssl.keylog_file:'+ sslkeylog, '-x'])
-                    except: raise Exception ('Could not launch tshark')
+                    except:
+                        raise Exception ('Could not launch tshark')
                 if output == '': raise Exception ("Failed to find HTML in escrowtrace")
                 #output may contain multiple frames with HTML, we examine them one-by-one
                 separator = re.compile('Frame ' + re.escape('(') + '[0-9]{2,7} bytes' + re.escape(')') + ':')
@@ -787,7 +777,7 @@ def minihttp_thread(parentthread):
     bWasStarted = False
     for i in range(3):
         FF_to_backend_port = random.randint(1025,65535)
-        print ('Starting mini http server to communicate with Firefox plugin')
+        print ('Starting mini http server to communicate with auditor panel')
         #for the GET request, serve files only from within the datadir
         os.chdir(datadir)
         try:
@@ -825,8 +815,7 @@ if __name__ == "__main__":
         with open(os.path.join(datadir, 'python', 'rsa-3.1.4.tar.gz'), 'rb') as f: tarfile_data = f.read()
         #for md5 hash, see https://pypi.python.org/pypi/rsa/3.1.4
         if hashlib.md5(tarfile_data).hexdigest() != 'b6b1c80e1931d4eba8538fd5d4de1355':
-            print ('Wrong hash')
-            exit(WRONG_HASH)
+            raise Exception('WRONG_HASH')
         os.chdir(os.path.join(datadir, 'python'))
         tar = tarfile.open(os.path.join(datadir, 'python', 'rsa-3.1.4.tar.gz'), 'r:gz')
         tar.extractall()
@@ -843,8 +832,7 @@ if __name__ == "__main__":
         with open(os.path.join(datadir, 'python', 'pyasn1-0.1.7.tar.gz'), 'rb') as f: tarfile_data = f.read()
         #for md5 hash, see https://pypi.python.org/pypi/pyasn1/0.1.7
         if hashlib.md5(tarfile_data).hexdigest() != '2cbd80fcd4c7b1c82180d3d76fee18c8':
-            print ('Wrong hash')
-            exit(WRONG_HASH)
+            raise Exception ('WRONG_HASH')
         os.chdir(os.path.join(datadir, 'python'))
         tar = tarfile.open(os.path.join(datadir, 'python', 'pyasn1-0.1.7.tar.gz'), 'r:gz')
         tar.extractall()
@@ -864,44 +852,40 @@ if __name__ == "__main__":
         if thread.retval == '':
             time.sleep(1)
             continue
-        elif thread.retval[0] == 'failure':
-            print ('Failed to start minihttpd server. Please investigate')
-            exit(MINIHTTPD_FAILURE)
+        elif thread.retval[0] == 'failure': raise Exception('MINIHTTPD_FAILURE')
         elif thread.retval[0] == 'success':
             bWasStarted = True
             break
-        else:
-            print ('Unexpected minihttpd server response. Please investigate')
-            exit(MINIHTTPD_WRONG_RESPONSE)
-    if bWasStarted == False:
-        print ('minihttpd failed to start in 10 secs. Please investigate')
-        exit(MINIHTTPD_START_TIMEOUT)
+        else: raise Exception('MINIHTTPD_WRONG_RESPONSE')
+    if bWasStarted == False: raise Exception('MINIHTTPD_START_TIMEOUT')
     FF_to_backend_port = thread.retval[1]
     
-    if OS=='mswin':
+    if OS=='mswin':      
         if os.path.isfile(os.path.join(os.getenv('programfiles'), "Mozilla Firefox",  "firefox.exe" )): 
             browser_exepath = os.path.join(os.getenv('programfiles'), "Mozilla Firefox",  "firefox.exe" )
         elif  os.path.isfile(os.path.join(os.getenv('programfiles(x86)'), "Mozilla Firefox",  "firefox.exe" )): 
             browser_exepath = os.path.join(os.getenv('programfiles(x86)'), "Mozilla Firefox",  "firefox.exe" )
         else:
             print ('Please make sure firefox is installed and in your Program Files location', end='\r\n')
-            exit(BROWSER_NOT_FOUND)
+            raise Exception('BROWSER_NOT_FOUND')
         if os.path.isfile(os.path.join(os.getenv('programfiles'), "Wireshark",  "tshark.exe" )): 
             tshark_exepath = os.path.join(os.getenv('programfiles'), "Wireshark",  "tshark.exe" )
         elif  os.path.isfile(os.path.join(os.getenv('programfiles(x86)'), "Wireshark",  "tshark.exe" )): 
             tshark_exepath = os.path.join(os.getenv('programfiles(x86)'), "Wireshark",  "tshark.exe" )
         else:
             print ('Please make sure wireshark is installed and in your Program Files location', end='\r\n')
-            exit(TSHARK_NOT_FOUND)                               
+            raise Exception('TSHARK_NOT_FOUND')                               
     elif OS=='linux':
         browser_exepath = 'firefox'
-        tshark_exepath = 'tshark' 
-            
+        tshark_exepath = 'tshark'
+    elif OS=='macos':
+        browser_exepath = "open" #will open up the default browser
+        tshark_exepath = '/Applications/Wireshark.app/Contents/Resources/bin/tshark'
+        if not os.path.exists(tshark_exepath): raise Exception('TSHARK_NOT_FOUND')
+        
     try:
         ff_proc = subprocess.Popen([browser_exepath, os.path.join('http://127.0.0.1:' + str(FF_to_backend_port) + '/auditor.html')])
-    except Exception,e:
-        print ("Error starting browser")
-        exit(BROWSER_START_ERROR)
+    except: raise Exception('BROWSER_START_ERROR')
     
     #minihttpd server was started successfully, create a unique session dir
     #create a session dir

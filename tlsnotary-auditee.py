@@ -38,7 +38,7 @@ if m_platform == 'Windows':
     OS = 'mswin'
 elif m_platform == 'Linux':
     OS = 'linux'
-elif m_platform == 'darwin':
+elif m_platform == 'Darwin':
     OS = 'macos'
  
 #exit codes
@@ -369,7 +369,8 @@ def get_html_paths():
             output = subprocess.check_output([tshark_exepath, '-r', tracecopy_path, '-R', 'ssl and http.content_type contains html', '-o', 'http.ssl.port:1025-65535', '-o', 'ssl.keylog_file:'+ sslkeylog, '-x'])
         except:
             raise Exception('Failed to launch tshark')
-    if output == '': raise Exception ("Failed to find HTML in escrowtrace")
+    if output == '':
+        raise Exception ("Failed to find HTML in escrowtrace")
     #output may contain multiple frames with HTML, we examine them one-by-one
     separator = re.compile('Frame ' + re.escape('(') + '[0-9]{2,7} bytes' + re.escape(')') + ':')
     #ignore the first split element which is always an empty string
@@ -520,9 +521,9 @@ def prepare_pms():
         label = "master secret"
         seed = gcr + gsr
         
-        md5A1 = hmac.new(PMS_first_half,  label+seed, hashlib.md5).digest()
-        md5A2 = hmac.new(PMS_first_half,  md5A1, hashlib.md5).digest()
-        md5A3 = hmac.new(PMS_first_half,  md5A2, hashlib.md5).digest()
+        md5A1 = hmac.new(PMS_first_half, label+seed, hashlib.md5).digest()
+        md5A2 = hmac.new(PMS_first_half, md5A1, hashlib.md5).digest()
+        md5A3 = hmac.new(PMS_first_half, md5A2, hashlib.md5).digest()
         
         md5hmac1 = hmac.new(PMS_first_half, md5A1 + label + seed, hashlib.md5).digest()
         md5hmac2 = hmac.new(PMS_first_half, md5A2 + label + seed, hashlib.md5).digest()
@@ -757,9 +758,9 @@ def process_new_uid(uid):
     label = "master secret"
     seed = cr + sr
     
-    md5A1 = hmac.new(PMS_first_half,  label+seed, hashlib.md5).digest()
-    md5A2 = hmac.new(PMS_first_half,  md5A1, hashlib.md5).digest()
-    md5A3 = hmac.new(PMS_first_half,  md5A2, hashlib.md5).digest()
+    md5A1 = hmac.new(PMS_first_half, label+seed, hashlib.md5).digest()
+    md5A2 = hmac.new(PMS_first_half, md5A1, hashlib.md5).digest()
+    md5A3 = hmac.new(PMS_first_half, md5A2, hashlib.md5).digest()
     
     md5hmac1 = hmac.new(PMS_first_half, md5A1 + label + seed, hashlib.md5).digest()
     md5hmac2 = hmac.new(PMS_first_half, md5A2 + label + seed, hashlib.md5).digest()
@@ -769,7 +770,8 @@ def process_new_uid(uid):
     md5hmac_for_MS_first_half = md5hmac[:24]
     md5hmac_for_MS_second_half = md5hmac[24:48]
                   
-    b64_cr_sr_hmac_n_e= base64.b64encode(cipher_suite_first_byte+cr+sr+md5hmac_for_MS_first_half+n+e)
+    b64_cr_sr_hmac_n_e= base64.b64encode(cipher_suite_first_byte+cr+sr+
+                                             md5hmac_for_MS_first_half+n+e)
     reply = send_and_recv('cr_sr_hmac_n_e:'+b64_cr_sr_hmac_n_e)
     
     if reply[0] != 'success':
@@ -817,13 +819,13 @@ def process_new_uid(uid):
     label = "key expansion"
     seed = sr + cr
     #this is not optimized in a loop on purpose. I want people to see exactly what is going on   
-    sha1A1 = hmac.new(MS_second_half,  label+seed, hashlib.sha1).digest()
-    sha1A2 = hmac.new(MS_second_half,  sha1A1, hashlib.sha1).digest()
-    sha1A3 = hmac.new(MS_second_half,  sha1A2, hashlib.sha1).digest()
-    sha1A4 = hmac.new(MS_second_half,  sha1A3, hashlib.sha1).digest()
-    sha1A5 = hmac.new(MS_second_half,  sha1A4, hashlib.sha1).digest()
-    sha1A6 = hmac.new(MS_second_half,  sha1A5, hashlib.sha1).digest()
-    sha1A7 = hmac.new(MS_second_half,  sha1A6, hashlib.sha1).digest()
+    sha1A1 = hmac.new(MS_second_half, label+seed, hashlib.sha1).digest()
+    sha1A2 = hmac.new(MS_second_half, sha1A1, hashlib.sha1).digest()
+    sha1A3 = hmac.new(MS_second_half, sha1A2, hashlib.sha1).digest()
+    sha1A4 = hmac.new(MS_second_half, sha1A3, hashlib.sha1).digest()
+    sha1A5 = hmac.new(MS_second_half, sha1A4, hashlib.sha1).digest()
+    sha1A6 = hmac.new(MS_second_half, sha1A5, hashlib.sha1).digest()
+    sha1A7 = hmac.new(MS_second_half, sha1A6, hashlib.sha1).digest()
     
     sha1hmac1 = hmac.new(MS_second_half, sha1A1 + label + seed, hashlib.sha1).digest()
     sha1hmac2 = hmac.new(MS_second_half, sha1A2 + label + seed, hashlib.sha1).digest()
@@ -881,7 +883,7 @@ def process_new_uid(uid):
     label = "client finished"
     seed = md5_digest + sha_digest
  
-    sha1A1 = hmac.new(MS_second_half,  label+seed, hashlib.sha1).digest()
+    sha1A1 = hmac.new(MS_second_half, label+seed, hashlib.sha1).digest()
     sha1hmac1 = hmac.new(MS_second_half, sha1A1 + label + seed, hashlib.sha1).digest()
     verify_data = [ord(a) ^ ord(b) for a,b in zip(verify_hmac, sha1hmac1)][:12]    
     
@@ -1273,11 +1275,16 @@ def start_firefox(FF_to_backend_port):
     global current_sessiondir
     global nss_patch_dir
     
-    #sanity check
-    if os.path.exists(os.path.join(datadir, 'firefoxcopy', 'firefox.exe' if OS=='mswin' else 'firefox')):
-        firefox_exepath = os.path.join(datadir, 'firefoxcopy', 'firefox.exe' if OS=='mswin' else 'firefox')
-    else:
-        exit (FIREFOX_MISSING)
+    if OS=='linux':
+        firefox_exepath = os.path.join(datadir, 'firefoxcopy', 'firefox')
+        if not os.path.exists(firefox_exepath): exit (FIREFOX_MISSING)
+    if OS=='mswin':
+        firefox_exepath = os.path.join(datadir, 'firefoxcopy', 'firefox.exe')
+        if not os.path.exists(firefox_exepath): exit (FIREFOX_MISSING)
+    if OS=='macos':
+        firefox_exepath = os.path.join(datadir, 'firefoxcopy', 'Contents', 'MacOS', 
+                                       'TorBrowser.app', 'Contents', 'MacOS', 'firefox')
+        if not os.path.exists(firefox_exepath): exit (FIREFOX_MISSING)    
  
     import stat
     os.chmod(firefox_exepath,stat.S_IRWXU)
@@ -1293,7 +1300,7 @@ def start_firefox(FF_to_backend_port):
                 f2.write('<?xml version="1.0"?><RDF:RDF xmlns:NC="http://home.netscape.com/NC-rdf#" xmlns:RDF="http://www.w3.org/1999/02/22-rdf-syntax-ns#"><RDF:Description RDF:about="chrome://browser/content/browser.xul"><NC:persist RDF:resource="chrome://browser/content/browser.xul#addon-bar" collapsed="false"/></RDF:Description></RDF:RDF>')    
         except Exception,e:
             return ('File open error', )
-    bundles_dir = os.path.join(datadir, 'firefoxcopy', 'distribution', 'bundles')
+    bundles_dir = os.path.join(os.path.dirname(firefox_exepath), 'distribution', 'bundles')
     if not os.path.exists(bundles_dir):
         os.makedirs(bundles_dir)
         shutil.copytree(os.path.join(datadir, 'FF-addon', 'tlsnotary@tlsnotary'), 
@@ -1476,17 +1483,17 @@ if __name__ == "__main__":
             shutil.rmtree(os.path.join(datadir, 'tmpextract'))
                
         if OS=='macos':
-            zipname = 'TorBrowserBundle-3.5.2.1-osx32_en-US.zip'
+            zipname = 'firefox-macosx'
             if os.path.exists(os.path.join(installdir, zipname)):
                 torbrowser_zip_path = os.path.join(installdir, zipname)
             else:
                 print ('Couldn\'t find '+zipname+' Make sure it is located in the installdir')
                 exit (CANT_FIND_TORBROWSER)
-                tbbzip = zipfile.ZipFile(torbrowser_zip_path, 'r')
-                tbbzip.extractall(os.path.join(datadir, 'tmpextract'))
-                #files get extracted in a root dir Browser
-                shutil.copytree(os.path.join(datadir, 'tmpextract', 'TorBrowserBundle_en-US.app', 'Contents', 'MacOS', 'TorBrowser.app', 'Contents', 'MacOS'), os.path.join(datadir, 'firefoxcopy'))
-                shutil.rmtree(os.path.join(datadir, 'tmpextract'))
+            tbbzip = zipfile.ZipFile(torbrowser_zip_path, 'r')
+            tbbzip.extractall(os.path.join(datadir, 'tmpextract'))
+            #files get extracted in a root dir Browser
+            shutil.copytree(os.path.join(datadir, 'tmpextract', 'TorBrowserBundle_en-US.app'), os.path.join(datadir, 'firefoxcopy'))
+            shutil.rmtree(os.path.join(datadir, 'tmpextract'))
 
     if OS=='linux': tshark_exepath = 'tshark'
     elif OS=='mswin':
@@ -1496,7 +1503,13 @@ if __name__ == "__main__":
             tshark_exepath = os.path.join(os.getenv('programfiles(x86)'), "Wireshark",  "tshark.exe" )
         else:
             print ('Please make sure wireshark is installed and in your Program Files location', end='\r\n')
-            exit(TSHARK_NOT_FOUND)            
+            exit(TSHARK_NOT_FOUND)
+    elif OS=='macos':
+        if os.path.isfile('/Applications/Wireshark.app/Contents/Resources/bin/tshark'): 
+            tshark_exepath = '/Applications/Wireshark.app/Contents/Resources/bin/tshark'
+        else:
+            print ('Please make sure wireshark is installed and in your Applications folder', end='\r\n')
+            exit(TSHARK_NOT_FOUND)                
     
       
     thread = ThreadWithRetval(target= minihttp_thread)
