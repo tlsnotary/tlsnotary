@@ -1497,10 +1497,10 @@ if __name__ == "__main__":
 
     if OS=='linux': tshark_exepath = 'tshark'
     elif OS=='mswin':
-        if os.path.isfile(os.path.join(os.getenv('programfiles'), "Wireshark",  "tshark.exe" )): 
-            tshark_exepath = os.path.join(os.getenv('programfiles'), "Wireshark",  "tshark.exe" )
-        elif  os.path.isfile(os.path.join(os.getenv('programfiles(x86)'), "Wireshark",  "tshark.exe" )): 
-            tshark_exepath = os.path.join(os.getenv('programfiles(x86)'), "Wireshark",  "tshark.exe" )
+        if os.path.isfile(os.path.join(os.getenv('ProgramW6432'), "Wireshark",  "tshark.exe" )): 
+            tshark_exepath = os.path.join(os.getenv('ProgramW6432'), "Wireshark",  "tshark.exe" )
+        elif  os.path.isfile(os.path.join(os.getenv('ProgramFiles(x86)'), "Wireshark",  "tshark.exe" )): 
+            tshark_exepath = os.path.join(os.getenv('ProgramFiles(x86)'), "Wireshark",  "tshark.exe" )
         else:
             print ('Please make sure wireshark is installed and in your Program Files location', end='\r\n')
             exit(TSHARK_NOT_FOUND)
