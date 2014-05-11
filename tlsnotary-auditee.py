@@ -1055,7 +1055,10 @@ def start_recording():
             if platform.architecture()[0] == '64bit':
                 stcppipe_exename = 'stcppipe64_linux'
             else: stcppipe_exename = 'stcppipe_linux'
-        elif OS=='macos': stcppipe_exename = 'stcppipe_mac'
+        elif OS=='macos': 
+            if platform.architecture()[0] == '64bit':
+                stcppipe_exename = 'stcppipe64_mac'
+            else: stcppipe_exename = 'stcppipe_mac'            
         stcppipe_proc = subprocess.Popen([os.path.join(datadir, 'stcppipe', stcppipe_exename), '-d', logdir, '-b', '127.0.0.1', str(HTTPS_proxy_port), str(FF_proxy_port)])
         time.sleep(1)
         if stcppipe_proc.poll() != None:
