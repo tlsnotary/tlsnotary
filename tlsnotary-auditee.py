@@ -860,8 +860,8 @@ def process_new_uid(uid):
             time.sleep(0.1)
             break
     
-    md5_digest = open(os.path.join(nss_patch_dir, 'md5'+uid), 'rb').read()
-    sha_digest = open(os.path.join(nss_patch_dir, 'sha'+uid), 'rb').read()
+    with open(os.path.join(nss_patch_dir, 'md5'+uid), 'rb') as f: md5_digest = f.read()
+    with open(os.path.join(nss_patch_dir, 'sha'+uid), 'rb') as f: sha_digest = f.read()
     
     b64_verify_md5sha = base64.b64encode(md5_digest+sha_digest)
     reply = send_and_recv('verify_md5sha:'+b64_verify_md5sha)
@@ -1399,6 +1399,7 @@ if __name__ == "__main__":
         os.chdir(os.path.join(datadir, 'python'))
         tar = tarfile.open(os.path.join(datadir, 'python', 'rsa-3.1.4.tar.gz'), 'r:gz')
         tar.extractall()
+        tar.close()
     #both on first and subsequent runs
     sys.path.append(os.path.join(datadir, 'python', 'rsa-3.1.4'))
     import rsa
@@ -1417,6 +1418,7 @@ if __name__ == "__main__":
         os.chdir(os.path.join(datadir, 'python'))
         tar = tarfile.open(os.path.join(datadir, 'python', 'pyasn1-0.1.7.tar.gz'), 'r:gz')
         tar.extractall()
+        tar.close()
     #both on first and subsequent runs
     sys.path.append(os.path.join(datadir, 'python', 'pyasn1-0.1.7'))
     import pyasn1
