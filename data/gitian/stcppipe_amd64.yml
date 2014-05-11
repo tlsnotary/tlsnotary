@@ -10,6 +10,8 @@ packages:
 reference_datetime: "2000-01-01 00:00:00"
 files:
 - "stcppipe.zip"
+- "apple-uni-sdk-10.6_20110407-0.flosoft1_i386.deb"
+- "x86_64-apple-darwin10.tar.xz"
 remotes:
 - "url": "none"
   "dir": "tor"
@@ -21,3 +23,10 @@ script: |
   gcc stcppipe.c -DDISABLE_SSL -lpthread -o stcppipe64_linux
   strip stcppipe64_linux
   cp stcppipe64_linux $OUTDIR/
+  #####MAC
+  sudo dpkg -i apple-uni-sdk-10.6_20110407-0.flosoft1_i386.deb
+  tar -xavf x86_64-apple-darwin10.tar.xz
+  export CFLAGS="-I/usr/lib/apple/SDKs/MacOSX10.6.sdk/usr/include/ -I/usr/lib/gcc/i686-apple-darwin10/4.2.1/include/ -I.  -L/usr/lib/apple/SDKs/MacOSX10.6.sdk/usr/lib/ -L/usr/lib/apple/SDKs/MacOSX10.6.sdk/usr/lib/system/ -L/usr/lib/apple/SDKs/MacOSX10.6.sdk/usr/lib/gcc/i686-apple-darwin10/4.2.1/x86_64 -mmacosx-version-min=10.5"
+  ./x-tools/x86_64-apple-darwin10/bin/x86_64-apple-darwin10-gcc-4.2.1 $CFLAGS stcppipe.c -DDISABLE_SSL -o stcppipe64_mac
+  ./x-tools/x86_64-apple-darwin10/bin/x86_64-apple-darwin10-strip stcppipe64_mac
+  cp stcppipe64_mac $OUTDIR/
