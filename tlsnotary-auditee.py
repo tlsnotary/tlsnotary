@@ -1071,8 +1071,6 @@ def start_recording():
         return ('failure to start stcppipe')
     print ('stcppipe is piping from port ' + str(FF_proxy_port) + ' to port ' + str(HTTPS_proxy_port))
     
-    #finally let nss patch know we are ready and start monitoring
-    with open(os.path.join(nss_patch_dir, 'nss_patch_is_active'), "wb") as f: f.close()
     thread = threading.Thread(target= nss_patch_dir_scan_thread)
     thread.daemon = True
     thread.start()
