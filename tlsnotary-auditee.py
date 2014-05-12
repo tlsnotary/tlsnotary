@@ -297,15 +297,17 @@ class HandlerClass(SimpleHTTPServer.SimpleHTTPRequestHandler):
         #--------------------------------------------------------------------------------------------------------------------------------------------#
         if self.path.startswith('/get_html_paths'):
             rv = get_html_paths()
+            b64_paths = ''
             if rv[0] != 'success':
                 self.send_response(400)
+                self.send_header("status", rv[1])                
             else:
                 b64_paths = base64.b64encode(rv[1])
                 self.send_response(200)
+                self.send_header("status", 'success')                
             self.send_header("Access-Control-Allow-Origin", "*")
             self.send_header("Access-Control-Expose-Headers", "response, status, html_paths")
             self.send_header("response", "get_html_paths")
-            self.send_header("status", rv[0])
             self.send_header("html_paths", b64_paths)
             self.end_headers()
             return            
@@ -370,7 +372,7 @@ def get_html_paths():
         except:
             raise Exception('Failed to launch tshark')
     if output == '':
-        raise Exception ("Failed to find HTML in escrowtrace")
+        return ('failure', 'Failed to find HTML in escrowtrace')
     #output may contain multiple frames with HTML, we examine them one-by-one
     separator = re.compile('Frame ' + re.escape('(') + '[0-9]{2,7} bytes' + re.escape(')') + ':')
     #ignore the first split element which is always an empty string

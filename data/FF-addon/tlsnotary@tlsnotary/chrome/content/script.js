@@ -131,6 +131,16 @@ function responseGetHTMLPaths(iteration){
     }
 	if (status != "success"){
 		alert ("Received an error message: " + status);
+		help.value = "Navigate to a webpage and press RECORD. The page will reload automatically.";
+		var button_record_enabled = document.getElementById("button_record_enabled");
+		var button_spinner = document.getElementById("button_spinner");
+		var button_stop_enabled = document.getElementById("button_stop_enabled");
+		var button_stop_disabled = document.getElementById("button_stop_disabled");
+		
+		button_record_enabled.hidden = false;
+		button_spinner.hidden = true;
+		button_stop_disabled.hidden = true;
+		button_stop_enabled.hidden = false;
 		return;
 	}
 	//else successful response
