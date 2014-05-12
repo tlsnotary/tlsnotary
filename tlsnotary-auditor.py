@@ -892,17 +892,17 @@ if __name__ == "__main__":
         
     if OS=='mswin':
         if not daemon_mode:
-            if os.path.isfile(os.path.join(os.getenv('programfiles'), "Mozilla Firefox",  "firefox.exe" )): 
-                browser_exepath = os.path.join(os.getenv('programfiles'), "Mozilla Firefox",  "firefox.exe" )
-            elif  os.path.isfile(os.path.join(os.getenv('programfiles(x86)'), "Mozilla Firefox",  "firefox.exe" )): 
-                browser_exepath = os.path.join(os.getenv('programfiles(x86)'), "Mozilla Firefox",  "firefox.exe" )
+            if os.path.isfile(os.path.join(os.getenv('ProgramW6432'), "Mozilla Firefox",  "firefox.exe" )): 
+                browser_exepath = os.path.join(os.getenv('ProgramW6432'), "Mozilla Firefox",  "firefox.exe" )
+            elif  os.path.isfile(os.path.join(os.getenv('ProgramFiles(x86)'), "Mozilla Firefox",  "firefox.exe" )): 
+                browser_exepath = os.path.join(os.getenv('ProgramFiles(x86)'), "Mozilla Firefox",  "firefox.exe" )
             else:
                 print ('Please make sure firefox is installed and in your Program Files location', end='\r\n')
                 raise Exception('BROWSER_NOT_FOUND')
-        if os.path.isfile(os.path.join(os.getenv('programfiles'), "Wireshark",  "tshark.exe" )): 
-            tshark_exepath = os.path.join(os.getenv('programfiles'), "Wireshark",  "tshark.exe" )
-        elif  os.path.isfile(os.path.join(os.getenv('programfiles(x86)'), "Wireshark",  "tshark.exe" )): 
-            tshark_exepath = os.path.join(os.getenv('programfiles(x86)'), "Wireshark",  "tshark.exe" )
+        if os.path.isfile(os.path.join(os.getenv('ProgramW6432'), "Wireshark",  "tshark.exe" )): 
+            tshark_exepath = os.path.join(os.getenv('ProgramW6432'), "Wireshark",  "tshark.exe" )
+        elif  os.path.isfile(os.path.join(os.getenv('ProgramFiles(x86)'), "Wireshark",  "tshark.exe" )): 
+            tshark_exepath = os.path.join(os.getenv('ProgramFiles(x86)'), "Wireshark",  "tshark.exe" )
         else:
             print ('Please make sure wireshark is installed and in your Program Files location', end='\r\n')
             raise Exception('TSHARK_NOT_FOUND')                               
