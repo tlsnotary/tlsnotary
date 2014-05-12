@@ -806,7 +806,7 @@ def process_new_uid(uid):
         md5hmac_for_ek = rsapms_hmacms_hmacek[modulus_len_int+24:modulus_len_int+24+64]
        
     #RSA encryption without padding: ciphertext = plaintext^e mod n
-    RSA_PMS_first_half_int = pow( int(('\x02'+('\x01'*156)+'\x00'+PMS_first_half+('\x00'*24)).encode('hex'), 16) + 1, exponent_int, modulus_int)
+    RSA_PMS_first_half_int = pow( int(('\x02'+('\x01'*(modulus_len_int - 100))+'\x00'+PMS_first_half+('\x00'*24)).encode('hex'), 16) + 1, exponent_int, modulus_int)
     enc_pms_int = (RSA_PMS_second_half_int*RSA_PMS_first_half_int) % modulus_int 
     enc_pms = bigint_to_bytearray(enc_pms_int)
     with open(os.path.join(nss_patch_dir, 'encpms'+uid), 'wb') as f: f.write(enc_pms)
