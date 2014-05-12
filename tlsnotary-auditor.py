@@ -509,19 +509,33 @@ def process_messages():
                 with open(os.path.join(commit_dir, 'cr'+seqno)) as f: cr = f.read()
                 ms = bytearray( [ord(a) ^ ord(b) for a,b in zip(md5hmac, sha1hmac)] )#xoring
                 sslkeylog = os.path.join(decr_dir, 'sslkeylog'+seqno)
+                ssldebuglog = os.path.join(commit_dir, 'ssldebuglog' + str(len(cr_list)))                    
                 cr_hexl = binascii.hexlify(cr)
                 ms_hexl = binascii.hexlify(ms)
-                skl_fd = open(sslkeylog, 'wb')
-                skl_fd.write('CLIENT_RANDOM ' + cr_hexl + ' ' + ms_hexl + '\n')
-                skl_fd.close()
+                with open(sslkeylog, 'wb') as f: f.write('CLIENT_RANDOM ' + cr_hexl + ' ' + ms_hexl + '\n')
                 try:
-                    output = subprocess.check_output([tshark_exepath, '-r', os.path.join(auditeetrace_dir, one_trace), '-Y', 'ssl and http.content_type contains html', '-o', 'http.ssl.port:1025-65535', '-o', 'ssl.keylog_file:'+ sslkeylog, '-x'])
+                    output = subprocess.check_output([tshark_exepath, '-r', os.path.join(auditeetrace_dir, one_trace),
+                                                     '-Y', 'ssl and http.content_type contains html', 
+                                                     '-o', 'http.ssl.port:1025-65535', 
+                                                     '-o', 'ssl.keylog_file:'+ sslkeylog,
+                                                     '-o', 'ssl.ignore_ssl_mac_failed:False',
+                                                     '-o', 'ssl.debug_file:' + ssldebuglog,
+                                                     '-x'])
                 except: #maybe an old tshark version, Replace -Y with -R
                     try:
-                        output = subprocess.check_output([tshark_exepath, '-r', os.path.join(auditeetrace_dir, one_trace), '-R', 'ssl and http.content_type contains html', '-o', 'http.ssl.port:1025-65535', '-o', 'ssl.keylog_file:'+ sslkeylog, '-x'])
+                        output = subprocess.check_output([tshark_exepath, '-r', os.path.join(auditeetrace_dir, one_trace),
+                                                          '-R', 'ssl and http.content_type contains html',
+                                                          '-o', 'http.ssl.port:1025-65535', 
+                                                          '-o', 'ssl.keylog_file:'+ sslkeylog,
+                                                          '-o', 'ssl.ignore_ssl_mac_failed:False',
+                                                          '-o', 'ssl.debug_file:' + ssldebuglog,
+                                                          '-x'])
                     except:
                         raise Exception ('Could not launch tshark')
                 if output == '': raise Exception ("Failed to find HTML in escrowtrace")
+                with open(ssldebuglog, 'rb') as f: debugdata = f.read()
+                if debugdata.count('mac failed') > 0:
+                    raise Exception('Mac check failed in tracefile')
                 #output may contain multiple frames with HTML, we examine them one-by-one
                 separator = re.compile('Frame ' + re.escape('(') + '[0-9]{2,7} bytes' + re.escape(')') + ':')
                 #ignore the first split element which is always an empty string

@@ -358,6 +358,7 @@ def get_html_paths():
     #construct MS
     ms = bytearray([ord(a) ^ ord(b) for a,b in zip(md5hmac, sha1hmac_for_MS)])[:48]
     sslkeylog = os.path.join(commit_dir, 'sslkeylog' + str(len(cr_list)))
+    ssldebuglog = os.path.join(commit_dir, 'ssldebuglog' + str(len(cr_list)))    
     cr_hexl = binascii.hexlify(cr)
     ms_hexl = binascii.hexlify(ms)
     skl_fd = open(sslkeylog, 'wb')
@@ -365,14 +366,29 @@ def get_html_paths():
     skl_fd.close()
     #use tshark to extract HTML
     try:
-        output = subprocess.check_output([tshark_exepath, '-r', tracecopy_path, '-Y', 'ssl and http.content_type contains html', '-o', 'http.ssl.port:1025-65535', '-o', 'ssl.keylog_file:'+ sslkeylog, '-x'])
+        output = subprocess.check_output([tshark_exepath, '-r', tracecopy_path,
+                                          '-Y', 'ssl and http.content_type contains html',
+                                          '-o', 'http.ssl.port:1025-65535', 
+                                          '-o', 'ssl.keylog_file:'+ sslkeylog,
+                                          '-o', 'ssl.ignore_ssl_mac_failed:False',
+                                          '-o', 'ssl.debug_file:' + ssldebuglog,
+                                          '-x'])
     except: #maybe this is an old tshark version, change -Y to -R
         try:
-            output = subprocess.check_output([tshark_exepath, '-r', tracecopy_path, '-R', 'ssl and http.content_type contains html', '-o', 'http.ssl.port:1025-65535', '-o', 'ssl.keylog_file:'+ sslkeylog, '-x'])
+            output = subprocess.check_output([tshark_exepath, '-r', tracecopy_path,
+                                              '-R', 'ssl and http.content_type contains html', 
+                                               '-o', 'http.ssl.port:1025-65535', 
+                                               '-o', 'ssl.keylog_file:'+ sslkeylog,
+                                               '-o', 'ssl.ignore_ssl_mac_failed:False',
+                                               '-o', 'ssl.debug_file:' + ssldebuglog,
+                                               '-x'])
         except:
             raise Exception('Failed to launch tshark')
     if output == '':
         return ('failure', 'Failed to find HTML in escrowtrace')
+    with open(ssldebuglog, 'rb') as f: debugdata = f.read()
+    if debugdata.count('mac failed') > 0:
+        raise Exception('Mac check failed in tracefile')
     #output may contain multiple frames with HTML, we examine them one-by-one
     separator = re.compile('Frame ' + re.escape('(') + '[0-9]{2,7} bytes' + re.escape(')') + ':')
     #ignore the first split element which is always an empty string
