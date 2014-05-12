@@ -1347,6 +1347,8 @@ def start_firefox(FF_to_backend_port):
         'user_pref("datareporting.healthreport.service.enabled", false);\n',
         'user_pref("datareporting.healthreport.uploadEnabled", false);\n',
         'user_pref("datareporting.policy.dataSubmissionEnabled", false);\n'
+		'user_pref("gfx.direct2d.disabled", true);\n'
+		'user_pref("layers.acceleration.disabled", true);\n'
         ])
           
     #create a session dir
