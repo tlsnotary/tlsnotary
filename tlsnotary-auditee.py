@@ -771,9 +771,13 @@ def process_new_uid(uid):
     
     md5hmac_for_MS_first_half = md5hmac[:24]
     md5hmac_for_MS_second_half = md5hmac[24:48]
-                  
+           
+    modulus_len_int = len(n)       
+    modulus_len = bigint_to_bytearray(modulus_len_int)
+    if len(modulus_len) == 1: modulus_len.insert(0,0)  #zero-pad to 2 bytes
+    
     b64_cr_sr_hmac_n_e= base64.b64encode(cipher_suite_first_byte+cr+sr+
-                                             md5hmac_for_MS_first_half+n+e)
+                                             md5hmac_for_MS_first_half+modulus_len+n+e)
     reply = send_and_recv('cr_sr_hmac_n_e:'+b64_cr_sr_hmac_n_e)
     
     if reply[0] != 'success':
@@ -789,17 +793,17 @@ def process_new_uid(uid):
         print ('base64 decode error in rsapms_hmacms_hmacek')
         return ('base64 decode error in rsapms_hmacms_hmacek')
   
-    RSA_PMS_second_half = rsapms_hmacms_hmacek[:256]
+    RSA_PMS_second_half = rsapms_hmacms_hmacek[:modulus_len_int]
     RSA_PMS_second_half_int = int(RSA_PMS_second_half.encode('hex'), 16)
-    sha1hmac_for_MS_second_half = rsapms_hmacms_hmacek[256:280]
+    sha1hmac_for_MS_second_half = rsapms_hmacms_hmacek[modulus_len_int:modulus_len_int+24]
     if cipher_suite == 'AES256': 
-        md5hmac_for_ek = rsapms_hmacms_hmacek[280:416]
+        md5hmac_for_ek = rsapms_hmacms_hmacek[modulus_len_int+24:modulus_len_int+24+136]
     elif cipher_suite == 'AES128': 
-        md5hmac_for_ek = rsapms_hmacms_hmacek[280:384]
+        md5hmac_for_ek = rsapms_hmacms_hmacek[modulus_len_int+24:modulus_len_int+24+104]
     elif cipher_suite == 'RC4SHA': 
-        md5hmac_for_ek = rsapms_hmacms_hmacek[280:352]
+        md5hmac_for_ek = rsapms_hmacms_hmacek[modulus_len_int+24:modulus_len_int+24+72]
     elif cipher_suite == 'RC4MD5': 
-        md5hmac_for_ek = rsapms_hmacms_hmacek[280:344]
+        md5hmac_for_ek = rsapms_hmacms_hmacek[modulus_len_int+24:modulus_len_int+24+64]
        
     #RSA encryption without padding: ciphertext = plaintext^e mod n
     RSA_PMS_first_half_int = pow( int(('\x02'+('\x01'*156)+'\x00'+PMS_first_half+('\x00'*24)).encode('hex'), 16) + 1, exponent_int, modulus_int)

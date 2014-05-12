@@ -306,8 +306,10 @@ def process_messages():
             cr = cr_sr_hmac_n_e[1:33]
             sr = cr_sr_hmac_n_e[33:65]
             md5hmac_for_MS_first_half=cr_sr_hmac_n_e[65:89] #half of MS's 48 bytes
-            n = cr_sr_hmac_n_e[89:345]
-            e = cr_sr_hmac_n_e[345:348]
+            n_len = cr_sr_hmac_n_e[89:91]
+            n_len_int = int(n_len.encode('hex'),16)
+            n = cr_sr_hmac_n_e[91:91+n_len_int]
+            e = cr_sr_hmac_n_e[91+n_len_int:91+n_len_int+3]
             n_int = int(n.encode('hex'),16)
             e_int = int(e.encode('hex'),16)
                         
