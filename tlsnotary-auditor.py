@@ -36,7 +36,6 @@ elif platform == 'Linux':
 elif platform == 'Darwin':
     OS = 'macos'
 
-sslkeylogfile = ''
 current_sessiondir = ''
 browser_exepath = ''
 
@@ -509,7 +508,7 @@ def process_messages():
                 with open(os.path.join(commit_dir, 'cr'+seqno)) as f: cr = f.read()
                 ms = bytearray( [ord(a) ^ ord(b) for a,b in zip(md5hmac, sha1hmac)] )#xoring
                 sslkeylog = os.path.join(decr_dir, 'sslkeylog'+seqno)
-                ssldebuglog = os.path.join(commit_dir, 'ssldebuglog' + str(len(cr_list)))                    
+                ssldebuglog = os.path.join(decr_dir, 'ssldebuglog'+seqno)
                 cr_hexl = binascii.hexlify(cr)
                 ms_hexl = binascii.hexlify(ms)
                 with open(sslkeylog, 'wb') as f: f.write('CLIENT_RANDOM ' + cr_hexl + ' ' + ms_hexl + '\n')
@@ -564,21 +563,7 @@ class Handler(SimpleHTTPServer.SimpleHTTPRequestHandler):
         # example HEAD string "/page_marked?accno=12435678&sum=1234.56&time=1383389835"    
         # we need to adhere to CORS and add extra headers in server replies
         if self.path.startswith('/get_recent_keys'):
-            #this is the very first command that we expect in a new session.
-            #If this is the very first time tlsnotary is run, there will be no saved keys
-            #otherwise we load up the saved keys which the user can override with new keys if need be
-            my_privkey_pem = my_pubkey_pem = auditee_pubkey_pem = ''
-            if os.path.exists(os.path.join(datadir, 'recentkeys')):
-                if os.path.exists(os.path.join(datadir, 'recentkeys', 'myprivkey')) and os.path.exists(os.path.join(datadir, 'recentkeys', 'mypubkey')):
-                    with open(os.path.join(datadir, 'recentkeys', 'myprivkey'), 'r') as f: my_privkey_pem = f.read()
-                    with open(os.path.join(datadir, 'recentkeys', 'mypubkey'), 'r') as f: my_pubkey_pem = f.read()
-                    with open(os.path.join(current_sessiondir, 'myprivkey'), 'w') as f: f.write(my_privkey_pem)
-                    with open(os.path.join(current_sessiondir, 'mypubkey'), 'w') as f: f.write(my_pubkey_pem)
-                    myPrivateKey = rsa.PrivateKey.load_pkcs1(my_privkey_pem)
-                if os.path.exists(os.path.join(datadir, 'recentkeys', 'auditeepubkey')):
-                    with open(os.path.join(datadir, 'recentkeys', 'auditeepubkey'), 'r') as f: auditee_pubkey_pem = f.read()
-                    with open(os.path.join(current_sessiondir, 'auditorpubkey'), 'w') as f: f.write(auditee_pubkey_pem)
-                    auditeePublicKey = rsa.PublicKey.load_pkcs1(auditee_pubkey_pem)
+            my_pubkey_pem, auditee_pubkey_pem = get_recent_keys()
             self.send_response(200)
             self.send_header("Access-Control-Allow-Origin", "*")
             self.send_header("Access-Control-Expose-Headers", "response, mypubkey, auditeepubkey")
@@ -591,21 +576,9 @@ class Handler(SimpleHTTPServer.SimpleHTTPRequestHandler):
             self.send_header("auditeepubkey", auditee_pubkey_pem_stub)
             self.end_headers()
             return
-             
-             
-        if self.path.startswith('/new_keypair'):            
-            pubkey, privkey = rsa.newkeys(1024)
-            myPrivateKey = privkey
-            my_pubkey_pem = pubkey.save_pkcs1()
-            my_privkey_pem = privkey.save_pkcs1()
-            #------------------------------------------
-            with open(os.path.join(current_sessiondir, 'myprivkey'), 'w') as f: f.write(my_privkey_pem)
-            with open(os.path.join(current_sessiondir, 'mypubkey'), 'w') as f: f.write(my_pubkey_pem)
-            #also save the keys as recent, so that they could be reused in the next session
-            if not os.path.exists(os.path.join(datadir, 'recentkeys')): os.makedirs(os.path.join(datadir, 'recentkeys'))
-            with open(os.path.join(datadir, 'recentkeys' , 'myprivkey'), 'w') as f: f.write(my_privkey_pem)
-            with open(os.path.join(datadir, 'recentkeys', 'mypubkey'), 'w') as f: f.write(my_pubkey_pem)
-            #---------------------------------------------
+        #----------------------------------------------------------------------#
+        if self.path.startswith('/new_keypair'):
+            my_pubkey_pem = new_keypair()            
             self.send_response(200)
             self.send_header("Access-Control-Allow-Origin", "*")
             self.send_header("Access-Control-Expose-Headers", "response, pubkey")
@@ -614,7 +587,7 @@ class Handler(SimpleHTTPServer.SimpleHTTPRequestHandler):
             self.send_header("pubkey", my_pubkey_pem_stub)
             self.end_headers()
             return
-
+        #----------------------------------------------------------------------#
         if self.path.startswith('/import_auditee_pubkey'):
             arg_str = self.path.split('?', 1)[1]
             if not arg_str.startswith('pubkey='):
@@ -625,16 +598,8 @@ class Handler(SimpleHTTPServer.SimpleHTTPRequestHandler):
                 self.send_header("status", 'wrong HEAD parameter')
                 self.end_headers()
                 return
-            #elif HEAD parameters were OK
             auditee_pubkey_pem_stub = arg_str[len('pubkey='):]
-            auditee_pubkey_pem_stub = auditee_pubkey_pem_stub.replace('_', '\n')
-            auditee_pubkey_pem = '-----BEGIN RSA PUBLIC KEY-----\nMIGJAoGBA' + auditee_pubkey_pem_stub + 'AgMBAAE=\n-----END RSA PUBLIC KEY-----\n'
-            auditeePublicKey = rsa.PublicKey.load_pkcs1(auditee_pubkey_pem)
-            with open(os.path.join(current_sessiondir, 'auditeepubkey'), 'w') as f: f.write(auditee_pubkey_pem)
-            #also save the key as recent, so that they could be reused in the next session
-            if not os.path.exists(os.path.join(datadir, 'recentkeys')): os.makedirs(os.path.join(datadir, 'recentkeys'))
-            with open(os.path.join(datadir, 'recentkeys' , 'auditeepubkey'), 'w') as f: f.write(auditee_pubkey_pem)
-            #-----------------------------------------
+            import_auditee_pubkey(auditee_pubkey_pem_stub)
             self.send_response(200)
             self.send_header("Access-Control-Allow-Origin", "*")
             self.send_header("Access-Control-Expose-Headers", "response, status")
@@ -642,7 +607,7 @@ class Handler(SimpleHTTPServer.SimpleHTTPRequestHandler):
             self.send_header("status", 'success')
             self.end_headers()
             return
-        
+       #----------------------------------------------------------------------# 
         if self.path.startswith('/start_irc'):
             #connect to IRC send hello to the auditor and get a hello in return
             rv = start_irc()
@@ -653,8 +618,7 @@ class Handler(SimpleHTTPServer.SimpleHTTPRequestHandler):
             self.send_header("status", rv)
             self.end_headers()
             return
-        
-        
+        #----------------------------------------------------------------------#
         if self.path.startswith('/progress_update'):
             #receive this command in a loop, blocking for 30 seconds until there is something to respond with
             update = 'no update'
@@ -673,8 +637,7 @@ class Handler(SimpleHTTPServer.SimpleHTTPRequestHandler):
             self.send_header("update", update)
             self.end_headers()
             return
-        
-        
+        #----------------------------------------------------------------------#
         if self.path.startswith('/terminate'):
             rv = 'terminate()'
             self.send_response(200)
@@ -691,8 +654,56 @@ class Handler(SimpleHTTPServer.SimpleHTTPRequestHandler):
             self.send_header("response", "unknown command")
             self.end_headers()
             return
+ 
     
-      
+def import_auditee_pubkey(auditee_pubkey_pem_stub): 
+    global auditeePublicKey
+    auditee_pubkey_pem_stub = auditee_pubkey_pem_stub.replace('_', '\n')
+    auditee_pubkey_pem = '-----BEGIN RSA PUBLIC KEY-----\nMIGJAoGBA' + auditee_pubkey_pem_stub + 'AgMBAAE=\n-----END RSA PUBLIC KEY-----\n'
+    auditeePublicKey = rsa.PublicKey.load_pkcs1(auditee_pubkey_pem)
+    with open(os.path.join(current_sessiondir, 'auditeepubkey'), 'w') as f: f.write(auditee_pubkey_pem)
+    #also save the key as recent, so that they could be reused in the next session
+    if not os.path.exists(os.path.join(datadir, 'recentkeys')): os.makedirs(os.path.join(datadir, 'recentkeys'))
+    with open(os.path.join(datadir, 'recentkeys' , 'auditeepubkey'), 'w') as f: f.write(auditee_pubkey_pem)
+    
+    
+def get_recent_keys():
+    global myPrivateKey
+    global auditeePublicKey
+    #this is the very first command that we expect in a new session.
+    #If this is the very first time tlsnotary is run, there will be no saved keys
+    #otherwise we load up the saved keys which the user can override with new keys if need be
+    my_privkey_pem = my_pubkey_pem = auditee_pubkey_pem = ''
+    if os.path.exists(os.path.join(datadir, 'recentkeys')):
+        if os.path.exists(os.path.join(datadir, 'recentkeys', 'myprivkey')) and os.path.exists(os.path.join(datadir, 'recentkeys', 'mypubkey')):
+            with open(os.path.join(datadir, 'recentkeys', 'myprivkey'), 'r') as f: my_privkey_pem = f.read()
+            with open(os.path.join(datadir, 'recentkeys', 'mypubkey'), 'r') as f: my_pubkey_pem = f.read()
+            with open(os.path.join(current_sessiondir, 'myprivkey'), 'w') as f: f.write(my_privkey_pem)
+            with open(os.path.join(current_sessiondir, 'mypubkey'), 'w') as f: f.write(my_pubkey_pem)
+            myPrivateKey = rsa.PrivateKey.load_pkcs1(my_privkey_pem)
+        if os.path.exists(os.path.join(datadir, 'recentkeys', 'auditeepubkey')):
+            with open(os.path.join(datadir, 'recentkeys', 'auditeepubkey'), 'r') as f: auditee_pubkey_pem = f.read()
+            with open(os.path.join(current_sessiondir, 'auditorpubkey'), 'w') as f: f.write(auditee_pubkey_pem)
+            auditeePublicKey = rsa.PublicKey.load_pkcs1(auditee_pubkey_pem)
+    return my_pubkey_pem, auditee_pubkey_pem
+  
+    
+def new_keypair():
+    global myPrivateKey
+    pubkey, privkey = rsa.newkeys(1024)
+    myPrivateKey = privkey
+    my_pubkey_pem = pubkey.save_pkcs1()
+    my_privkey_pem = privkey.save_pkcs1()
+    #------------------------------------------
+    with open(os.path.join(current_sessiondir, 'myprivkey'), 'w') as f: f.write(my_privkey_pem)
+    with open(os.path.join(current_sessiondir, 'mypubkey'), 'w') as f: f.write(my_pubkey_pem)
+    #also save the keys as recent, so that they could be reused in the next session
+    if not os.path.exists(os.path.join(datadir, 'recentkeys')): os.makedirs(os.path.join(datadir, 'recentkeys'))
+    with open(os.path.join(datadir, 'recentkeys' , 'myprivkey'), 'w') as f: f.write(my_privkey_pem)
+    with open(os.path.join(datadir, 'recentkeys', 'mypubkey'), 'w') as f: f.write(my_pubkey_pem)
+    return my_pubkey_pem
+
+         
 def registerAuditeeThread():
     global auditee_nick
     global google_modulus
@@ -754,20 +765,16 @@ def registerAuditeeThread():
     b64_signed_hello = base64.b64encode(signed_hello)
     IRCsocket.send('PRIVMSG ' + channel_name + ' :' + auditee_nick + ' server_hello:'+b64_signed_hello + ' \r\n')
     time.sleep(2) #send twice because it was observed that the msg would not appear on the chan
-    IRCsocket.send('PRIVMSG ' + channel_name + ' :' + auditee_nick + ' server_hello:'+b64_signed_hello + ' \r\n')
-    
+    IRCsocket.send('PRIVMSG ' + channel_name + ' :' + auditee_nick + ' server_hello:'+b64_signed_hello + ' \r\n')  
     progressQueue.put(time.strftime('%H:%M:%S', time.localtime()) + ': Auditee has been authorized. Awaiting data...')
-    
     thread = threading.Thread(target= receivingThread)
     thread.daemon = True
     thread.start()
-            
     thread = threading.Thread(target= process_messages)
     thread.daemon = True
     thread.start()
     
     
-      
 def start_irc():
     global my_nick
     global IRCsocket
@@ -814,6 +821,7 @@ def minihttp_thread(parentthread):
     print ("Serving HTTP on", sa[0], "port", sa[1], "...",end='\r\n')
     httpd.serve_forever()
     return
+  
   
 #a thread which returns a value. This is achieved by passing self as the first argument to a called function
 #the calling function can then set parentthread.retval
@@ -876,14 +884,21 @@ if __name__ == "__main__":
     if bWasStarted == False: raise Exception('MINIHTTPD_START_TIMEOUT')
     FF_to_backend_port = thread.retval[1]
     
-    if OS=='mswin':      
-        if os.path.isfile(os.path.join(os.getenv('programfiles'), "Mozilla Firefox",  "firefox.exe" )): 
-            browser_exepath = os.path.join(os.getenv('programfiles'), "Mozilla Firefox",  "firefox.exe" )
-        elif  os.path.isfile(os.path.join(os.getenv('programfiles(x86)'), "Mozilla Firefox",  "firefox.exe" )): 
-            browser_exepath = os.path.join(os.getenv('programfiles(x86)'), "Mozilla Firefox",  "firefox.exe" )
-        else:
-            print ('Please make sure firefox is installed and in your Program Files location', end='\r\n')
-            raise Exception('BROWSER_NOT_FOUND')
+    daemon_mode = False
+    if len(sys.argv) > 1:
+        if sys.argv[1] == 'daemon':
+            daemon_mode = True
+            print('Running auditor in daemon mode')
+        
+    if OS=='mswin':
+        if not daemon_mode:
+            if os.path.isfile(os.path.join(os.getenv('programfiles'), "Mozilla Firefox",  "firefox.exe" )): 
+                browser_exepath = os.path.join(os.getenv('programfiles'), "Mozilla Firefox",  "firefox.exe" )
+            elif  os.path.isfile(os.path.join(os.getenv('programfiles(x86)'), "Mozilla Firefox",  "firefox.exe" )): 
+                browser_exepath = os.path.join(os.getenv('programfiles(x86)'), "Mozilla Firefox",  "firefox.exe" )
+            else:
+                print ('Please make sure firefox is installed and in your Program Files location', end='\r\n')
+                raise Exception('BROWSER_NOT_FOUND')
         if os.path.isfile(os.path.join(os.getenv('programfiles'), "Wireshark",  "tshark.exe" )): 
             tshark_exepath = os.path.join(os.getenv('programfiles'), "Wireshark",  "tshark.exe" )
         elif  os.path.isfile(os.path.join(os.getenv('programfiles(x86)'), "Wireshark",  "tshark.exe" )): 
@@ -892,27 +907,55 @@ if __name__ == "__main__":
             print ('Please make sure wireshark is installed and in your Program Files location', end='\r\n')
             raise Exception('TSHARK_NOT_FOUND')                               
     elif OS=='linux':
-        browser_exepath = 'firefox'
+        if not daemon_mode: browser_exepath = 'firefox'
         tshark_exepath = 'tshark'
     elif OS=='macos':
-        browser_exepath = "open" #will open up the default browser
+        if not daemon_mode: browser_exepath = "open" #will open up the default browser
         tshark_exepath = '/Applications/Wireshark.app/Contents/Resources/bin/tshark'
         if not os.path.exists(tshark_exepath): raise Exception('TSHARK_NOT_FOUND')
-        
-    try:
-        ff_proc = subprocess.Popen([browser_exepath, os.path.join('http://127.0.0.1:' + str(FF_to_backend_port) + '/auditor.html')])
-    except: raise Exception('BROWSER_START_ERROR')
+    
+    if daemon_mode:
+        my_pubkey_pem, auditee_pubkey_pem = get_recent_keys()
+        my_pubkey_pem_stub = my_pubkey_pem[40:-38].replace('\n', '_')
+        auditee_pubkey_pem_stub = auditee_pubkey_pem[40:-38].replace('\n', '_')        
+        if ('genkey' in sys.argv) or (my_pubkey_pem_stub == ''):
+            my_pubkey_pem = new_keypair()
+            my_pubkey_pem_stub = my_pubkey_pem[40:-38].replace('\n', '_')
+            print ('Generated a new key which you must pass to the auditee:')
+            print (my_pubkey_pem_stub)
+        else:
+            print ('Reusing your key from the previous session:')
+            print (my_pubkey_pem_stub)
+        if 'hiskey=' in sys.argv:
+            idx = sys.argv.index('hiskey=')
+            auditee_pubkey_pem_stub = sys.argv[idx][len('hiskey='):]
+            if len(auditee_pubkey_pem_stub) != 173:
+                raise Exception ('His key must be 173 characters long')
+            import_auditee_pubkey(auditee_pubkey_pem_stub)
+        elif auditee_pubkey_pem_stub != '':
+            print ('Reusing his key from previous session:')
+            print (auditee_pubkey_pem_stub)
+        else: raise Exception ('You need to provide his key using hiskey=')
+        start_irc()
+    else:#not a deamon mode
+        try:
+            ff_proc = subprocess.Popen([browser_exepath, os.path.join('http://127.0.0.1:' + str(FF_to_backend_port) + '/auditor.html')])
+        except: raise Exception('BROWSER_START_ERROR')
     
     #minihttpd server was started successfully, create a unique session dir
     #create a session dir
     time_str = time.strftime("%d-%b-%Y-%H-%M-%S", time.gmtime())
     current_sessiondir = os.path.join(sessionsdir, time_str)
     os.makedirs(current_sessiondir)
-    sslkeylogfile = open(os.path.join(current_sessiondir, 'sslkeylogfile'), 'w')
        
     try:
         while True:
-            time.sleep(.1)
+            time.sleep(1)
+            if daemon_mode:
+                try: 
+                    message = progressQueue.get_nowait()
+                    print (message)
+                except: pass      
     except KeyboardInterrupt:
         print ('Interrupted by user')
         bTerminateAllThreads = True
