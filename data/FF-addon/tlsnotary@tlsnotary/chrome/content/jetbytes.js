@@ -92,7 +92,7 @@ function jb_responseSendLink(iteration){
     if (typeof iteration == "number"){
     //give 5 secs for backend to respond
         if (iteration > 20){
-			help.value == "ERROR";
+			help.value = "ERROR";
             alert("responseSendLink timed out");
             return;
         }
@@ -105,12 +105,12 @@ function jb_responseSendLink(iteration){
     var status = jb_reqSendLink.getResponseHeader("status");
 
     if (query != "send_link"){
-		help.value == "ERROR";
+		help.value = "ERROR";
         alert("Internal error. Wrong response header: " + query);
         return;
     }
 	if (status != "success"){
-		help.value == "ERROR";
+		help.value = "ERROR";
 		alert ("Received an error message: " + status);
 		return;
 	}
