@@ -51,7 +51,7 @@ function pb_eventHandler_htmlLoad(event){
 		var win = event.originalTarget.defaultView;
 		if (!win.frameElement) {
 			gBrowser.getBrowserForTab(pb_tab).removeEventListener("load", pb_eventHandler_htmlLoad, true);
-			alert("In the next dialog window, please, choose the file mytrace.zip and press Open.\n\
+			//alert("In the next dialog window, please, choose the file mytrace.zip and press Open.\n\
 The file will be immediately forwarded to the auditor.");
 			var fileinput = gBrowser.getBrowserForTab(pb_tab).contentWindow.document.getElementsByName("file")[0];
 			pb_simulateClick(fileinput);

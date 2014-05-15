@@ -218,7 +218,7 @@ function responseStartIRC(iteration){
 	//NB: we can set envvar from this JS code only because this file is part of the addon
 	//When debugging this file by simple loading into the browser, we won't be able to access env vars
 	Components.classes["@mozilla.org/process/environment;1"].getService(Components.interfaces.nsIEnvironment).set("TLSNOTARY_IRC_STARTED", "true");	 
-	alert("You are now connected to IRC. The auditor is ready to start the auditing session. You may now open a new tab, type in a URL, navigate to a webpage you need, and press the RECORD button");
+	//alert("You are now connected to IRC. The auditor is ready to start the auditing session. You may now open a new tab, type in a URL, navigate to a webpage you need, and press the RECORD button");
 
 }
 

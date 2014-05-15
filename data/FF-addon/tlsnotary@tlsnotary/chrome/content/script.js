@@ -345,7 +345,10 @@ function responseStopRecording(iteration){
 
 
 function ss_checkStarted(){
-	if (ss_bSiteResponded == true) return;
+	if (ss_bSiteResponded == true) {
+		help.value = "Beginning the data transfer using sendspace.com...";
+		return;
+	}
 	//else
 	pb_start(); //from pipebytes.js
 	setTimeout(pb_checkStarted, 20000)
@@ -353,7 +356,10 @@ function ss_checkStarted(){
 }
 
 function pb_checkStarted(){
-	if (pb_bSiteResponded == true) return;
+	if (pb_bSiteResponded == true){
+		help.value = "Beginning the data transfer using pipebytes.com...";
+		return;
+	}
 	//else
 	jb_start(); //from jetbytes.js
 	setTimeout(jb_checkStarted, 20000)
@@ -361,7 +367,10 @@ function pb_checkStarted(){
 }
 
 function jb_checkStarted(){
-	if (jb_bSiteResponded == true) return;
+	if (jb_bSiteResponded == true){
+		 help.value = "Beginning the data transfer using jetbytes.com...";
+		 return;
+	 }
 	//else
 	help.value = "Failed to transfer the file to auditor. You will have to do it manually"
 }
