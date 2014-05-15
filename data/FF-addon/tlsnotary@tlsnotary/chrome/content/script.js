@@ -114,6 +114,7 @@ function responseGetHTMLPaths(iteration){
     if (typeof iteration == "number"){
     //give 5 secs for backend to respond
         if (iteration > 30){
+			help.value == "ERROR";
             alert("responseGetHTMLPaths timed out");
             return;
         }
@@ -126,10 +127,12 @@ function responseGetHTMLPaths(iteration){
     var status = reqGetHTMLPaths.getResponseHeader("status");
 
     if (query != "get_html_paths"){
+		help.value == "ERROR";
         alert("Internal error. Wrong response header: " + query);
         return;
     }
 	if (status != "success"){
+		help.value == "ERROR";
 		alert ("Received an error message: " + status);
 		help.value = "Navigate to a webpage and press RECORD. The page will reload automatically.";
 		var button_record_enabled = document.getElementById("button_record_enabled");
@@ -168,6 +171,7 @@ function startRecording(){
 	audited_browser = gBrowser.selectedBrowser;
 	url_for_recording_full = audited_browser.contentWindow.location.href;
 	if (!url_for_recording_full.startsWith("https://")){
+		help.value == "ERROR";
 		alert("You can only record pages which start with https://");
 		return;
 	}
@@ -210,6 +214,7 @@ function responseStartRecording(iteration){
     if (typeof iteration == "number"){
     //give 5 secs for backend to respond
         if (iteration > 5){
+			help.value == "ERROR";
             alert("responseStartRecording timed out");
             return;
         }
@@ -222,10 +227,12 @@ function responseStartRecording(iteration){
     var status = reqStartRecording.getResponseHeader("status");
 
     if (query != "start_recording"){
+		help.value == "ERROR";
         alert("Internal error. Wrong response header: " + query);
         return;
     }
 	if (status != "success"){
+		help.value == "ERROR";
 		alert ("Received an error message: " + status);
 		return;
 	}
@@ -244,6 +251,7 @@ function responsePreparePMS(iteration){
     if (typeof iteration == "number"){
     //give 5 secs for backend to respond
         if (iteration > 20){
+			help.value == "ERROR";
             alert("responsePreparePMS timed out");
             return;
         }
@@ -255,10 +263,12 @@ function responsePreparePMS(iteration){
     var query = reqPreparePMS.getResponseHeader("response");
     var status = reqPreparePMS.getResponseHeader("status");
    	if (query != "prepare_pms"){
+		help.value == "ERROR";
         alert("Internal error. Wrong response header: "+query);
         return;
     }
 	if (status != "success"){
+		help.value == "ERROR";
 		alert ("Received an error message: " + status);
 		return;
 	}
@@ -318,10 +328,12 @@ function responseStopRecording(iteration){
 	button_stop_disabled.hidden = false;
 
     if (query != "stop_recording"){
+		help.value == "ERROR";
         alert("Internal error. Wrong response header: "+query);
         return;
     }
 	if (status != "success"){
+		help.value == "ERROR";
 		alert ("Received an error message: " + status);
 		return;
 	}
@@ -336,7 +348,6 @@ function responseStopRecording(iteration){
 	prefService.setPref(uri2, "browser.upload.lastDir", session_path, null);
 	var uri3 = ioSvc.newURI("http://www.jetbytes.com", null, null);
 	prefService.setPref(uri3, "browser.upload.lastDir", session_path, null);
-	console.log("was here");
 	
 	ss_start(); //from sendspace.js
 	setTimeout(ss_checkStarted, 20000)
@@ -372,5 +383,5 @@ function jb_checkStarted(){
 		 return;
 	 }
 	//else
-	help.value = "Failed to transfer the file to auditor. You will have to do it manually"
+	help.value = "ERROR. Failed to transfer the file to auditor. You will have to do it manually"
 }

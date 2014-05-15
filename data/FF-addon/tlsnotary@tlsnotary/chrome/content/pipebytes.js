@@ -88,10 +88,12 @@ function pb_responseSendLink(iteration){
     var status = pb_reqSendLink.getResponseHeader("status");
 
     if (query != "send_link"){
+		help.value == "ERROR";
         alert("Internal error. Wrong response header: " + query);
         return;
     }
 	if (status != "success"){
+		help.value == "ERROR";
 		alert ("Received an error message: " + status);
 		return;
 	}

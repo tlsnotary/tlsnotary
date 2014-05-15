@@ -88,6 +88,8 @@ function responseGetRecentKeys(iteration){
     if (typeof iteration == "number"){
     //give 5 secs for backend to respond
         if (iteration > 5){
+			var help = document.getElementById("help");
+			help.value = "ERROR responseGetRecentKeys timed out";
             alert("responseGetRecentKeys timed out");
             return;
         }
@@ -101,6 +103,8 @@ function responseGetRecentKeys(iteration){
     var auditorpubkey = reqGetRecentKeys.getResponseHeader("auditorpubkey");
 
     if (query != "get_recent_keys"){
+		var help = document.getElementById("help");
+		help.value = "ERROR Internal error. Wrong response header";
         alert("Internal error. Wrong response header: "+query);
         return;
     }
@@ -123,6 +127,8 @@ function startPressed(){
 	var textarea_auditorkey = document.getElementById("textarea_auditorkey");
     var auditorpubkey = textarea_auditorkey.value;
 	if (auditorpubkey.length != 173){
+		var help = document.getElementById("help");
+		help.value = "ERROR Wrong auditee pubkey length. Expected 173 characters";
 		alert("Wrong auditee pubkey length. Expected 173 characters");
 		return;
 	}
@@ -138,6 +144,8 @@ function responseImportAuditorPubkey(iteration){
     if (typeof iteration == "number"){
     //give 5 secs for backend to respond
         if (iteration > 5){
+			var help = document.getElementById("help");
+			help.value = "ERROR responseImportAuditorPubkey timed out";
             alert("responseImportAuditorPubkey timed out");
             return;
         }
@@ -150,10 +158,14 @@ function responseImportAuditorPubkey(iteration){
     var status = reqImportAuditorPubkey.getResponseHeader("status");
 
     if (query != "import_auditor_pubkey"){
+		var help = document.getElementById("help");
+		help.value = "ERROR Internal error. Wrong response header";
         alert("Internal error. Wrong response header: "+query);
         return;
     }
 	if (status != "success"){
+		var help = document.getElementById("help");
+		help.value = "ERROR Received an error message";
 		alert ("Received an error message: " + status);
 		return;
 	}
@@ -192,6 +204,8 @@ function responseStartIRC(iteration){
     if (typeof iteration == "number"){
     //give ample time to connect to IRC server and report back
         if (iteration > 20){
+			var help = document.getElementById("help");
+			help.value = "ERROR responseStartIRC timed out";
             alert("responseStartIRC timed out")
             return
         }
@@ -204,10 +218,14 @@ function responseStartIRC(iteration){
     var status = reqStartIRC.getResponseHeader("status");
 
     if (query != "start_irc"){
+		var help = document.getElementById("help");
+		help.value = "ERROR Internal error. Wrong response header";
         alert("Internal error. Wrong response header: "+query);
         return;
     }
 	if (status != "success"){
+		var help = document.getElementById("help");
+		help.value = "ERROR Received an error message";
 		alert ("Received an error message: " + status);
 		return;
 	}
@@ -235,6 +253,8 @@ function responseNewKeypair(iteration){
     if (typeof iteration == "number"){
     //give 5 secs for backend to respond
         if (iteration > 5){
+			var help = document.getElementById("help");
+			help.value = "ERROR responseNewKeypair timed out";
             alert("responseNewKeypair timed out");
             return;
         }
@@ -248,10 +268,14 @@ function responseNewKeypair(iteration){
     var mypubkey = reqNewKeypair.getResponseHeader("pubkey");
 
     if (query != "new_keypair"){
+		var help = document.getElementById("help");
+		help.value = "ERROR responseNewKeypair timed out";
         alert("Internal error. Wrong response header: "+query);
         return;
     }
 	if (status != "success"){
+		var help = document.getElementById("help");
+		help.value = "ERROR Received an error message";
 		alert ("Received an error message: " + status);
 		return;
 	}
