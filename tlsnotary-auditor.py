@@ -914,6 +914,11 @@ if __name__ == "__main__":
         tshark_exepath = '/Applications/Wireshark.app/Contents/Resources/bin/tshark'
         if not os.path.exists(tshark_exepath): raise Exception('TSHARK_NOT_FOUND')
     
+    #create a session dir
+    time_str = time.strftime("%d-%b-%Y-%H-%M-%S", time.gmtime())
+    current_sessiondir = os.path.join(sessionsdir, time_str)
+    os.makedirs(current_sessiondir)
+                 
     if daemon_mode:
         my_pubkey_pem, auditee_pubkey_pem = get_recent_keys()
         my_pubkey_pem_stub = my_pubkey_pem[40:-38].replace('\n', '_')
@@ -942,12 +947,6 @@ if __name__ == "__main__":
             ff_proc = subprocess.Popen([browser_exepath, os.path.join('http://127.0.0.1:' + str(FF_to_backend_port) + '/auditor.html')])
         except: raise Exception('BROWSER_START_ERROR')
     
-    #minihttpd server was started successfully, create a unique session dir
-    #create a session dir
-    time_str = time.strftime("%d-%b-%Y-%H-%M-%S", time.gmtime())
-    current_sessiondir = os.path.join(sessionsdir, time_str)
-    os.makedirs(current_sessiondir)
-       
     try:
         while True:
             time.sleep(1)
