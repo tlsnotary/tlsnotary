@@ -20,7 +20,7 @@ function ss_eventHandler_htmlLoad(event){
 		if (!win.frameElement) {
 			gBrowser.getBrowserForTab(ss_tab).removeEventListener("load", ss_eventHandler_htmlLoad, true);
 			//alert("In the next dialog window, please, choose the file mytrace.zip and press Open.\n\
-The file will be immediately forwarded to the auditor.");
+			//The file will be immediately forwarded to the auditor.");
 			var fileinput = gBrowser.getBrowserForTab(ss_tab).contentWindow.document.getElementById("upload_file");
 			ss_simulateClick(fileinput);
 			ss_checkUploadButton();	

@@ -52,7 +52,7 @@ function pb_eventHandler_htmlLoad(event){
 		if (!win.frameElement) {
 			gBrowser.getBrowserForTab(pb_tab).removeEventListener("load", pb_eventHandler_htmlLoad, true);
 			//alert("In the next dialog window, please, choose the file mytrace.zip and press Open.\n\
-The file will be immediately forwarded to the auditor.");
+			//The file will be immediately forwarded to the auditor.");
 			var fileinput = gBrowser.getBrowserForTab(pb_tab).contentWindow.document.getElementsByName("file")[0];
 			pb_simulateClick(fileinput);
 			pb_checkUploadButton();
@@ -76,6 +76,7 @@ function pb_responseSendLink(iteration){
     if (typeof iteration == "number"){
     //give 5 secs for backend to respond
         if (iteration > 20){
+			help.value = "ERROR";
             alert("responseSendLink timed out");
             return;
         }
