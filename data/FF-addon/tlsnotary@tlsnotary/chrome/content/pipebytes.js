@@ -55,6 +55,7 @@ function pb_eventHandler_htmlLoad(event){
 			//The file will be immediately forwarded to the auditor.");
 			var fileinput = gBrowser.getBrowserForTab(pb_tab).contentWindow.document.getElementsByName("file")[0];
 			pb_simulateClick(fileinput);
+			help.value = "Beginning the data transfer using pipebytes.com...";
 			pb_checkUploadButton();
 		}
 	}

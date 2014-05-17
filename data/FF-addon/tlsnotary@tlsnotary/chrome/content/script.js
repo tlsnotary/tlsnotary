@@ -357,7 +357,6 @@ function responseStopRecording(iteration){
 
 function ss_checkStarted(){
 	if (ss_bSiteResponded == true) {
-		help.value = "Beginning the data transfer using sendspace.com...";
 		return;
 	}
 	//else
@@ -368,7 +367,6 @@ function ss_checkStarted(){
 
 function pb_checkStarted(){
 	if (pb_bSiteResponded == true){
-		help.value = "Beginning the data transfer using pipebytes.com...";
 		return;
 	}
 	//else
@@ -379,7 +377,6 @@ function pb_checkStarted(){
 
 function jb_checkStarted(){
 	if (jb_bSiteResponded == true){
-		 help.value = "Beginning the data transfer using jetbytes.com...";
 		 return;
 	 }
 	//else

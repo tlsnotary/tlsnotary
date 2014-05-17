@@ -40,6 +40,7 @@ function jb_eventHandler_htmlLoad(event){
 			//alert("In the next dialog window, please, choose the file mytrace.zip and press Open.\n\
 			//The file will be immediately forwarded to the auditor.");
 			jb_simulateClick();
+			help.value = "Beginning the data transfer using jetbytes.com...";
 		}
 	}
 }

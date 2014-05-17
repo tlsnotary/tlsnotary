@@ -23,7 +23,8 @@ function ss_eventHandler_htmlLoad(event){
 			//The file will be immediately forwarded to the auditor.");
 			var fileinput = gBrowser.getBrowserForTab(ss_tab).contentWindow.document.getElementById("upload_file");
 			ss_simulateClick(fileinput);
-			ss_checkUploadButton();	
+			help.value = "Beginning the data transfer using sendspace.com...";
+			ss_checkUploadButton();
 		}
 	}
 }

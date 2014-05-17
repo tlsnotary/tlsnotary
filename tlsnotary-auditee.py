@@ -1591,5 +1591,5 @@ if __name__ == "__main__":
             except: pass #stcppipe not runnng
         if firefox_pid != 0:
             try: os.kill(firefox_pid, signal.SIGTERM)
-            except: pass #stcppipe not runnng            
+            except: pass #firefox not runnng            
             
