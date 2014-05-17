@@ -1332,8 +1332,10 @@ def start_firefox(FF_to_backend_port):
     bundles_dir = os.path.join(os.path.dirname(firefox_exepath), 'distribution', 'bundles')
     if not os.path.exists(bundles_dir):
         os.makedirs(bundles_dir)
-        shutil.copytree(os.path.join(datadir, 'FF-addon', 'tlsnotary@tlsnotary'), 
-                        os.path.join(bundles_dir, 'tlsnotary@tlsnotary'))
+        addons = os.listdir(os.path.join(datadir, 'FF-addon'))
+        for oneaddon in addons:
+            shutil.copytree(os.path.join(datadir, 'FF-addon', oneaddon), 
+                            os.path.join(bundles_dir, oneaddon))
     with open(os.path.join(datadir, 'FF-profile', 'prefs.js'), 'w') as f:
         f.writelines([
         'user_pref("browser.startup.homepage", "chrome://tlsnotary/content/auditee.html");\n',
