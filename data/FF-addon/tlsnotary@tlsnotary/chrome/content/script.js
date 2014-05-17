@@ -83,7 +83,7 @@ myObserver.prototype = {
 	 if ( (url_for_recording_short==url_short) && regex.test(accept) && url.startsWith("https://")
 	  && !url.endsWith(".png") && !url.endsWith(".gif") && !url.endsWith(".svg") && !url.endsWith(".css") 
 	  && !url.endsWith(".js") && !url.endsWith(".jpg") && !url.endsWith(".ico") && !url.endsWith(".woff") 
-	  && !url.endsWith(".swf") && !url.contains("favicon.ico#") ) 	{
+	  && !url.endsWith(".swf") && !url.endsWith(".tlfx") && !url.contains("favicon.ico#") ) 	{
 		observer.unregister();
 		Cc["@mozilla.org/process/environment;1"].getService(Ci.nsIEnvironment).set("NSS_PATCH_STAGE_ONE", "true");
 		console.log("patch toggled");
