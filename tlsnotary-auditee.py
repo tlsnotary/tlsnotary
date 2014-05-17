@@ -1416,6 +1416,16 @@ def minihttp_thread(parentthread):
     httpd.serve_forever()
     return
     
+        
+def quit(sig=0, frame=0):
+    if stcppipe_pid != 0:
+        try: os.kill(stcppipe_pid, signal.SIGTERM)
+        except: pass #stcppipe not runnng
+    if firefox_pid != 0:
+        try: os.kill(firefox_pid, signal.SIGTERM)
+        except: pass #firefox not runnng
+    exit(1)
+    
     
 if __name__ == "__main__":
     
@@ -1577,6 +1587,7 @@ if __name__ == "__main__":
     #elif Firefox started successfully
     ff_proc = ff_retval[1]    
     
+    signal.signal(signal.SIGTERM, quit)
     try:
         while True:
             time.sleep(1)
@@ -1587,11 +1598,4 @@ if __name__ == "__main__":
                 urllib2.urlopen(request)
                 break
     except KeyboardInterrupt:
-        print ('Interrupted by user')
-        if stcppipe_pid != 0:
-            try: os.kill(stcppipe_pid, signal.SIGTERM)
-            except: pass #stcppipe not runnng
-        if firefox_pid != 0:
-            try: os.kill(firefox_pid, signal.SIGTERM)
-            except: pass #firefox not runnng            
-            
+        quit()            
