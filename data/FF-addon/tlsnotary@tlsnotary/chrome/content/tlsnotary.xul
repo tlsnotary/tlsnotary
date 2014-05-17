@@ -2,9 +2,6 @@
 <overlay id="lspnr" 
          xmlns="http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul">
   <script src="script.js"/>
-  <script src="jetbytes.js"/>
-  <script src="pipebytes.js"/>
-  <script src="sendspace.js"/>
   <toolbar id="addon-bar">
     <box id="box" orient="horizontal" align="center">
 		<label id="help" value=""/>
