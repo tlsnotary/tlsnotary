@@ -70,6 +70,8 @@ stcppipe_proc = None
 tshark_exepath = ''
 bReceivingThreadStopFlagIsSet = False
 secretbytes_amount=13
+firefox_pid = 0
+stcppipe_pid = 0
 
 PMS_first_half = '' #made global because of google check. TODO: start creating classes
 bIsStcppipeStarted = False
@@ -1048,6 +1050,7 @@ def https_proxy_thread(parenthread, port):
 
 def start_recording():
     global stcppipe_proc
+    global stcppipe_pid
    
     #start the https proxy and make sure the port is not in use
     bWasStarted = False
@@ -1092,6 +1095,7 @@ def start_recording():
     if bWasStarted == False:
         return ('failure to start stcppipe')
     print ('stcppipe is piping from port ' + str(FF_proxy_port) + ' to port ' + str(HTTPS_proxy_port))
+    stcppipe_pid = stcppipe_proc.pid
     
     thread = threading.Thread(target= nss_patch_dir_scan_thread)
     thread.daemon = True
@@ -1297,6 +1301,7 @@ def start_irc():
 def start_firefox(FF_to_backend_port):
     global current_sessiondir
     global nss_patch_dir
+    global firefox_pid
     
     if OS=='linux':
         firefox_exepath = os.path.join(datadir, 'firefoxcopy', 'firefox')
@@ -1368,6 +1373,7 @@ def start_firefox(FF_to_backend_port):
         ff_proc = subprocess.Popen([firefox_exepath,'-no-remote', '-profile', os.path.join(datadir, 'FF-profile')], stdout=open(os.path.join(datadir, 'logs', "firefox.stdout"),'w'), stderr=open(os.path.join(datadir, 'logs', "firefox.stderr"), 'w'))
     except Exception,e:
         return ("Error starting Firefox: %s" %e,)
+    firefox_pid = ff_proc.pid
     return ('success', ff_proc)
 
 
@@ -1569,11 +1575,21 @@ if __name__ == "__main__":
     #elif Firefox started successfully
     ff_proc = ff_retval[1]    
     
-    while True:
-        time.sleep(1)
-        if ff_proc.poll() != None:
-            #FF window was closed, shut down all subsystems and exit gracefully
-            request = urllib2.Request("http://127.0.0.1:" +str(FF_to_backend_port)+ "/terminate")
-            request.get_method = lambda : 'HEAD'            
-            urllib2.urlopen(request)
-            break
+    try:
+        while True:
+            time.sleep(1)
+            if ff_proc.poll() != None:
+                #FF window was closed, shut down all subsystems and exit gracefully
+                request = urllib2.Request("http://127.0.0.1:" +str(FF_to_backend_port)+ "/terminate")
+                request.get_method = lambda : 'HEAD'            
+                urllib2.urlopen(request)
+                break
+    except KeyboardInterrupt:
+        print ('Interrupted by user')
+        if stcppipe_pid != 0:
+            try: os.kill(stcppipe_pid, signal.SIGTERM)
+            except: pass #stcppipe not runnng
+        if firefox_pid != 0:
+            try: os.kill(firefox_pid, signal.SIGTERM)
+            except: pass #stcppipe not runnng            
+            
