@@ -102,7 +102,7 @@ function pb_responseSendLink(iteration){
 	//else successful response
 	help.value = "Auditing session has finished";
 
-	alert ("Congratulations. Auditor acknowledged successful receipt of the audit data. \n\
-All data pertaining to this audit session are located in " + session_path + "\n\
-You may now close the browser.");
+	//alert ("Congratulations. Auditor acknowledged successful receipt of the audit data. \n\
+	//All data pertaining to this audit session are located in " + session_path + "\n\
+	//You may now close the browser.");
 }
