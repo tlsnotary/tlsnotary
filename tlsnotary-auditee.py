@@ -254,7 +254,7 @@ class HandlerClass(SimpleHTTPServer.SimpleHTTPRequestHandler):
             self.send_header("Access-Control-Allow-Origin", "*")
             self.send_header("Access-Control-Expose-Headers", "response, status, session_path")
             self.send_header("response", "stop_recording")
-            self.send_header("session_path", current_sessiondir)
+            self.send_header("session_path", os.path.join(current_sessiondir, 'mytrace'))
             self.send_header("status", rv)
             self.end_headers()
             return
@@ -715,7 +715,9 @@ def stop_recording():
     #TODO stop https proxy. 
 
     #trace* files in committed dir is what auditor needs
-    zipf = zipfile.ZipFile(os.path.join(current_sessiondir, 'mytrace.zip'), 'w')
+    tracedir = os.path.join(current_sessiondir, 'mytrace')
+    os.makedirs(tracedir)
+    zipf = zipfile.ZipFile(os.path.join(tracedir, 'mytrace.zip'), 'w')
     commit_dir = os.path.join(current_sessiondir, 'commit')
     com_dir_files = os.listdir(commit_dir)
     for onefile in com_dir_files:
@@ -723,7 +725,6 @@ def stop_recording():
         zipf.write(os.path.join(commit_dir, onefile), onefile)
     zipf.close()
     return 'success'
-
 
     
 #The NSS patch has created a new file in the nss_patch_dir
