@@ -114,8 +114,7 @@ function responseGetHTMLPaths(iteration){
     if (typeof iteration == "number"){
     //give 5 secs for backend to respond
         if (iteration > 30){
-			help.value = "ERROR";
-            alert("responseGetHTMLPaths timed out");
+			help.value = "ERROR responseGetHTMLPaths timed out";
             return;
         }
         if (!bGetHTMLPaths) setTimeout(responseGetHTMLPaths, 1000, ++iteration)
@@ -127,13 +126,12 @@ function responseGetHTMLPaths(iteration){
     var status = reqGetHTMLPaths.getResponseHeader("status");
 
     if (query != "get_html_paths"){
-		help.value = "ERROR";
-        alert("Internal error. Wrong response header: " + query);
+		help.value = "ERROR Internal error. Wrong response header: " + query;
         return;
     }
 	if (status != "success"){
-		help.value = "ERROR";
-		alert ("Received an error message: " + status);
+		help.value = "ERROR Received an error message: " + status;
+		return;
 		help.value = "Navigate to a webpage and press RECORD. The page will reload automatically.";
 		var button_record_enabled = document.getElementById("button_record_enabled");
 		var button_spinner = document.getElementById("button_spinner");
@@ -171,8 +169,7 @@ function startRecording(){
 	audited_browser = gBrowser.selectedBrowser;
 	url_for_recording_full = audited_browser.contentWindow.location.href;
 	if (!url_for_recording_full.startsWith("https://")){
-		help.value = "ERROR";
-		alert("You can only record pages which start with https://");
+		help.value = "ERROR You can only record pages which start with https://";
 		return;
 	}
 	var button_record_enabled = document.getElementById("button_record_enabled");
@@ -214,8 +211,7 @@ function responseStartRecording(iteration){
     if (typeof iteration == "number"){
     //give 5 secs for backend to respond
         if (iteration > 5){
-			help.value = "ERROR";
-            alert("responseStartRecording timed out");
+			help.value = "ERROR responseStartRecording timed out";
             return;
         }
         if (!bStartRecordingResponded) setTimeout(responseStartRecording, 1000, ++iteration)
@@ -227,13 +223,11 @@ function responseStartRecording(iteration){
     var status = reqStartRecording.getResponseHeader("status");
 
     if (query != "start_recording"){
-		help.value = "ERROR";
-        alert("Internal error. Wrong response header: " + query);
+		help.value = "ERROR Internal error. Wrong response header: " + query;
         return;
     }
 	if (status != "success"){
-		help.value = "ERROR";
-		alert ("Received an error message: " + status);
+		help.value = "ERROR Received an error message: " + status;
 		return;
 	}
 	//else successful response
@@ -251,8 +245,7 @@ function responsePreparePMS(iteration){
     if (typeof iteration == "number"){
     //give 5 secs for backend to respond
         if (iteration > 20){
-			help.value = "ERROR";
-            alert("responsePreparePMS timed out");
+			help.value = "ERROR responsePreparePMS timed out";
             return;
         }
         if (!bStopPreparePMS) setTimeout(responsePreparePMS, 1000, ++iteration)
@@ -263,13 +256,11 @@ function responsePreparePMS(iteration){
     var query = reqPreparePMS.getResponseHeader("response");
     var status = reqPreparePMS.getResponseHeader("status");
    	if (query != "prepare_pms"){
-		help.value = "ERROR";
-        alert("Internal error. Wrong response header: "+query);
+		help.value = "ERROR Internal error. Wrong response header: " +query;
         return;
     }
 	if (status != "success"){
-		help.value = "ERROR";
-		alert ("Received an error message: " + status);
+		help.value = "ERROR Received an error message: " + status;
 		return;
 	}
 	//else success preparing PMS, resume page reload
@@ -310,7 +301,7 @@ function responseStopRecording(iteration){
     if (typeof iteration == "number"){
     //give 5 secs for backend to respond
         if (iteration > 20){
-            alert("responseStopRecording timed out");
+			help.value = "ERROR responseStopRecording timed out ";
             return;
         }
         if (!bStopRecordingResponded) setTimeout(responseStopRecording, 1000, ++iteration)
@@ -328,13 +319,11 @@ function responseStopRecording(iteration){
 	button_stop_disabled.hidden = false;
 
     if (query != "stop_recording"){
-		help.value = "ERROR";
-        alert("Internal error. Wrong response header: "+query);
+		help.value = "ERROR Internal error. Wrong response header: "+query;
         return;
     }
 	if (status != "success"){
-		help.value = "ERROR";
-		alert ("Received an error message: " + status);
+		help.value = "ERROR Received an error message: " + status;
 		return;
 	}
 	//else successful response, disable proxying

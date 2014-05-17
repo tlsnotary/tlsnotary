@@ -93,8 +93,7 @@ function jb_responseSendLink(iteration){
     if (typeof iteration == "number"){
     //give 5 secs for backend to respond
         if (iteration > 20){
-			help.value = "ERROR";
-            alert("responseSendLink timed out");
+			help.value = "ERROR responseSendLink timed out";
             return;
         }
         if (!jb_bSendLinkResponded) setTimeout(jb_responseSendLink, 1000, ++iteration)
@@ -106,13 +105,11 @@ function jb_responseSendLink(iteration){
     var status = jb_reqSendLink.getResponseHeader("status");
 
     if (query != "send_link"){
-		help.value = "ERROR";
-        alert("Internal error. Wrong response header: " + query);
+		help.value = "ERROR Internal error. Wrong response header: " + query;
         return;
     }
 	if (status != "success"){
-		help.value = "ERROR";
-		alert ("Received an error message: " + status);
+		help.value = "ERROR Received an error message: " + status;
 		return;
 	}
 	//else successful response
