@@ -1,0 +1,6 @@
+<?xml version="1.0"?>
+<overlay id="testdriveroverlay"
+         xmlns="http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul">
+  <script src="testdriver_script.js"/>
+</overlay>
+
