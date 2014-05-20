@@ -60,8 +60,6 @@ var reqStartIRC;
 var reqNewKeypair;
 
 
-
-
 function inputReceived(){
     var start_button = document.getElementById("start_button");
     var input_fields = document.getElementsByName("key");
@@ -81,12 +79,11 @@ function homepageLoaded () {
     reqGetRecentKeys.onload = responseGetRecentKeys;
     reqGetRecentKeys.open("HEAD", "http://127.0.0.1:"+port+"/get_recent_keys", true);
     reqGetRecentKeys.send();
-    setTimeout(responseGetRecentKeys, 1000, 0);
+    responseGetRecentKeys(0);
 }
 
 function responseGetRecentKeys(iteration){
     if (typeof iteration == "number"){
-    //give 5 secs for backend to respond
         if (iteration > 5){
 			var help = document.getElementById("help");
 			help.value = "ERROR responseGetRecentKeys timed out";
@@ -101,7 +98,6 @@ function responseGetRecentKeys(iteration){
     var query = reqGetRecentKeys.getResponseHeader("response");
     var mypubkey = reqGetRecentKeys.getResponseHeader("mypubkey");
     var auditorpubkey = reqGetRecentKeys.getResponseHeader("auditorpubkey");
-
     if (query != "get_recent_keys"){
 		var help = document.getElementById("help");
 		help.value = "ERROR Internal error. Wrong response header";
@@ -136,13 +132,12 @@ function startPressed(){
     reqImportAuditorPubkey.onload = responseImportAuditorPubkey;
     reqImportAuditorPubkey.open("HEAD", "http://127.0.0.1:"+port+"/import_auditor_pubkey?pubkey="+auditorpubkey, true);
     reqImportAuditorPubkey.send();
-    setTimeout(responseImportAuditorPubkey, 1000, 0);
+    responseImportAuditorPubkey(0);
 	//the response function will also call startIRC()
 }
 
 function responseImportAuditorPubkey(iteration){
     if (typeof iteration == "number"){
-    //give 5 secs for backend to respond
         if (iteration > 5){
 			var help = document.getElementById("help");
 			help.value = "ERROR responseImportAuditorPubkey timed out";
@@ -156,7 +151,6 @@ function responseImportAuditorPubkey(iteration){
 	bImportAuditorPubkeyResponded = true;
     var query = reqImportAuditorPubkey.getResponseHeader("response");
     var status = reqImportAuditorPubkey.getResponseHeader("status");
-
     if (query != "import_auditor_pubkey"){
 		var help = document.getElementById("help");
 		help.value = "ERROR Internal error. Wrong response header";
@@ -196,13 +190,11 @@ function startIRC(){
     reqStartIRC.onload = responseStartIRC;
     reqStartIRC.open("HEAD", "http://127.0.0.1:"+port+"/start_irc", true);
     reqStartIRC.send();
-    //give 20 secs for escrow to respond
-    setTimeout(responseStartIRC, 1000, 0);
+    responseStartIRC(0);
 }
 
 function responseStartIRC(iteration){
     if (typeof iteration == "number"){
-    //give ample time to connect to IRC server and report back
         if (iteration > 20){
 			var help = document.getElementById("help");
 			help.value = "ERROR responseStartIRC timed out";
@@ -216,7 +208,6 @@ function responseStartIRC(iteration){
 	bStartIRCResponded = true;
     var query = reqStartIRC.getResponseHeader("response");
     var status = reqStartIRC.getResponseHeader("status");
-
     if (query != "start_irc"){
 		var help = document.getElementById("help");
 		help.value = "ERROR Internal error. Wrong response header";
@@ -245,13 +236,11 @@ function newKeypair() {
     reqNewKeypair.onload = responseNewKeypair;
     reqNewKeypair.open("HEAD", "http://127.0.0.1:"+port+"/new_keypair", true);
     reqNewKeypair.send();
-    //give 20 secs for escrow to respond
-    setTimeout(responseNewKeypair, 1000, 0);
+    responseNewKeypair(0);
 }
 
 function responseNewKeypair(iteration){
     if (typeof iteration == "number"){
-    //give 5 secs for backend to respond
         if (iteration > 5){
 			var help = document.getElementById("help");
 			help.value = "ERROR responseNewKeypair timed out";
@@ -266,7 +255,6 @@ function responseNewKeypair(iteration){
     var query = reqNewKeypair.getResponseHeader("response");
     var status = reqNewKeypair.getResponseHeader("status");
     var mypubkey = reqNewKeypair.getResponseHeader("pubkey");
-
     if (query != "new_keypair"){
 		var help = document.getElementById("help");
 		help.value = "ERROR responseNewKeypair timed out";
@@ -283,8 +271,6 @@ function responseNewKeypair(iteration){
 	var textarea_mykey = document.getElementById("textarea_mykey");
     textarea_mykey.value = mypubkey;
 }
-
-
 
 </script>
 

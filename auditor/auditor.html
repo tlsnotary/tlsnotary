@@ -56,10 +56,6 @@ var reqStartIRC;
 var reqNewKeypair;
 
 
-function showFileName(){
-	alert(document.getElementById("upload").value);
-}
-
 function inputReceived(){
     var start_button = document.getElementById("start_button");
     var input_fields = document.getElementsByName("key");
@@ -84,12 +80,11 @@ function homepageLoaded () {
     reqGetRecentKeys.onload = responseGetRecentKeys;
     reqGetRecentKeys.open("HEAD", "http://127.0.0.1:"+port+"/get_recent_keys", true);
     reqGetRecentKeys.send();
-    setTimeout(responseGetRecentKeys, 1000, 0);
+    responseGetRecentKeys(0);
 }
 
 function responseGetRecentKeys(iteration){
     if (typeof iteration == "number"){
-    //give 5 secs for backend to respond
         if (iteration > 5){
             alert("responseGetRecentKeys timed out");
             return;
@@ -102,7 +97,6 @@ function responseGetRecentKeys(iteration){
     var query = reqGetRecentKeys.getResponseHeader("response");
     var mypubkey = reqGetRecentKeys.getResponseHeader("mypubkey");
     var auditeepubkey = reqGetRecentKeys.getResponseHeader("auditeepubkey");
-
     if (query != "get_recent_keys"){
         alert("Internal error. Wrong response header: "+query);
         return;
@@ -133,13 +127,12 @@ function startPressed(){
     reqImportAuditeePubkey.onload = responseImportAuditeePubkey;
     reqImportAuditeePubkey.open("HEAD", "http://127.0.0.1:"+port+"/import_auditee_pubkey?pubkey="+auditeepubkey, true);
     reqImportAuditeePubkey.send();
-    setTimeout(responseImportAuditeePubkey, 1000, 0);
+    responseImportAuditeePubkey(0);
 	//the response function will also call startIRC()
 }
 
 function responseImportAuditeePubkey(iteration){
     if (typeof iteration == "number"){
-    //give 5 secs for backend to respond
         if (iteration > 5){
             alert("responseImportAuditorPubkey timed out");
             return;
@@ -151,7 +144,6 @@ function responseImportAuditeePubkey(iteration){
 	bImportAuditeePubkeyResponded = true;
     var query = reqImportAuditeePubkey.getResponseHeader("response");
     var status = reqImportAuditeePubkey.getResponseHeader("status");
-
     if (query != "import_auditee_pubkey"){
         alert("Internal error. Wrong response header: "+query);
         return;
@@ -165,7 +157,7 @@ function responseImportAuditeePubkey(iteration){
 }
 
 function showLog(){
-	$("#myModal").modal('show')                // initializes and invokes show immediately
+	$("#myModal").modal('show') // initializes and invokes show immediately
 }
 
 function startIRC(){
@@ -176,20 +168,18 @@ function startIRC(){
 	var button_show_log = document.getElementById("show_log");
 	button_show_log.removeAttribute("disabled", "true");
 
-
 	progressUpdate();
     $("#myModal").modal('show')                // initializes and invokes show immediately
 	reqStartIRC = new XMLHttpRequest();
     reqStartIRC.onload = responseStartIRC;
     reqStartIRC.open("HEAD", "http://127.0.0.1:"+port+"/start_irc", true);
     reqStartIRC.send();
-    setTimeout(responseStartIRC, 1000, 0);
+    responseStartIRC(0);
 }
 
 function responseStartIRC(iteration){
     if (typeof iteration == "number"){
-    //give ample time to connect to IRC server and report back
-        if (iteration > 20){
+        if (iteration > 10){
             alert("responseStartIRC timed out")
             return
         }
@@ -200,7 +190,6 @@ function responseStartIRC(iteration){
 	bStartIRCResponded = true;
     var query = reqStartIRC.getResponseHeader("response");
     var status = reqStartIRC.getResponseHeader("status");
-
     if (query != "start_irc"){
         alert("Internal error. Wrong response header: "+query);
         return;
@@ -209,8 +198,6 @@ function responseStartIRC(iteration){
 		alert ("Received an error message: " + status);
 		return;
 	}
-	//else successful response
-	//alert("You may now invite the auditee to start their audit session.");
 }
 
 
@@ -251,13 +238,11 @@ function newKeypair() {
     reqNewKeypair.open("HEAD", "http://127.0.0.1:"+port+"/new_keypair", true);
     reqNewKeypair.send();
 	bNewKeypairResponded = false;
-    //give 20 secs for escrow to respond
-    setTimeout(responseNewKeypair, 1000, 0);
+    responseNewKeypair(0);
 }
 
 function responseNewKeypair(iteration){
     if (typeof iteration == "number"){
-    //give 5 secs for backend to respond
         if (iteration > 5){
             alert("responseNewKeypair timed out");
             return;
@@ -269,7 +254,6 @@ function responseNewKeypair(iteration){
 	bNewKeypairResponded = true;
     var query = reqNewKeypair.getResponseHeader("response");
     var mypubkey = reqNewKeypair.getResponseHeader("pubkey");
-
     if (query != "new_keypair"){
         alert("Internal error. Wrong response header: "+query);
         return;
@@ -281,11 +265,7 @@ function responseNewKeypair(iteration){
 	button_new_keypair.removeAttribute("disabled", "true");
 }
 
-
-
 </script>
-
-
 <script src="jquery-2.0.3.min.js"></script>
 <script src="bootstrap-modal.js"></script>
 <script src="bootstrap-transition.js"></script>

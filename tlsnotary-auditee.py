@@ -251,8 +251,7 @@ def get_html_paths():
     md5hmac_hash = hashlib.sha256(md5hmac).digest()  
     b64_commit_hash = base64.b64encode(commit_hash+md5hmac_hash)
     reply = send_and_recv('commit_hash:'+b64_commit_hash)
-    if reply[0] != 'success':
-        raise Exception ('Failed to receive a reply')
+    if reply[0] != 'success': raise Exception ('Failed to receive a reply')
     if not reply[1].startswith('sha1hmac_for_MS:'):
         raise Exception ('bad reply. Expected sha1hmac_for_MS')
     b64_sha1hmac_for_MS = reply[1][len('sha1hmac_for_MS:'):]
@@ -268,8 +267,7 @@ def get_html_paths():
     skl_fd.write('CLIENT_RANDOM ' + cr_hexl + ' ' + ms_hexl + '\n')
     skl_fd.close()
     #use tshark to extract HTML
-    try:
-        output = subprocess.check_output([tshark_exepath, '-r', tracecopy_path,
+    try: output = subprocess.check_output([tshark_exepath, '-r', tracecopy_path,
                                           '-Y', 'ssl and http.content_type contains html',
                                           '-o', 'http.ssl.port:1025-65535', 
                                           '-o', 'ssl.keylog_file:'+ sslkeylog,
@@ -277,21 +275,17 @@ def get_html_paths():
                                           '-o', 'ssl.debug_file:' + ssldebuglog,
                                           '-x'])
     except: #maybe this is an old tshark version, change -Y to -R
-        try:
-            output = subprocess.check_output([tshark_exepath, '-r', tracecopy_path,
+        try: output = subprocess.check_output([tshark_exepath, '-r', tracecopy_path,
                                               '-R', 'ssl and http.content_type contains html', 
                                                '-o', 'http.ssl.port:1025-65535', 
                                                '-o', 'ssl.keylog_file:'+ sslkeylog,
                                                '-o', 'ssl.ignore_ssl_mac_failed:False',
                                                '-o', 'ssl.debug_file:' + ssldebuglog,
                                                '-x'])
-        except:
-            raise Exception('Failed to launch tshark')
-    if output == '':
-        return ('failure', 'Failed to find HTML in escrowtrace')
+        except: raise Exception('Failed to launch tshark')
+    if output == '': return ('failure', 'Failed to find HTML in escrowtrace')
     with open(ssldebuglog, 'rb') as f: debugdata = f.read()
-    if debugdata.count('mac failed') > 0:
-        raise Exception('Mac check failed in tracefile')
+    if debugdata.count('mac failed') > 0: raise Exception('Mac check failed in tracefile')
     #output may contain multiple frames with HTML, we examine them one-by-one
     separator = re.compile('Frame ' + re.escape('(') + '[0-9]{2,7} bytes' + re.escape(')') + ':')
     #ignore the first split element which is always an empty string
@@ -988,9 +982,8 @@ def start_recording():
 #respond to PING messages and put all the other messages onto the recvQueue
 def receivingThread(my_nick, auditor_nick, IRCsocket):
     if not hasattr(receivingThread, 'last_seq_which_i_acked'):
-        receivingThread.last_seq_which_i_acked = 100000 #static variable. Initialized only on first function's run   
-    first_chunk='' #we put the first chunk here and do a new loop iteration to pick up the second one
-    second_chunk=''
+        receivingThread.last_seq_which_i_acked = 100000 #static variable. Initialized only on first function's run
+    chunks = []
     while not bReceivingThreadStopFlagIsSet:
         buffer = ''
         try: buffer = IRCsocket.recv(1024)
@@ -1021,32 +1014,16 @@ def receivingThread(my_nick, auditor_nick, IRCsocket):
                 continue
             if not his_seq == receivingThread.last_seq_which_i_acked +1: continue #we did not receive the next seq in order
             #else we got a new seq      
-            if first_chunk == '' and  not msg[5].startswith((
+            if len(chunks)==0 and not msg[5].startswith((
                 'grsapms_ghmac', 'rsapms_hmacms_hmacek', 'verify_hmac:', 'logsig:', 'response:', 'sha1hmac_for_MS')) : continue         
-            #check if this is the first chunk of a chunked message. Only 2 chunks are supported for now
             #'CRLF' is used at the end of the first chunk, 'EOL' is used to show that there are no more chunks
-            if msg[-1]=='CRLF':
-                if first_chunk != '':
-                    if second_chunk !='': #we already have two chunks, no more are allowed
-                        continue
-                    second_chunk = msg[5]
-                else:
-                    first_chunk = msg[5]
-                IRCsocket.send('PRIVMSG ' + channel_name + ' :' + auditor_nick + ' ack:' + str(his_seq) + ' \r\n')
-                receivingThread.last_seq_which_i_acked = his_seq
-                continue #go pickup another chunk
-            elif msg[-1]=='EOL' and first_chunk != '': #last chunk arrived
-                print ('second chunk arrived')
-                assembled_message = first_chunk + second_chunk + msg[5]
-                recvQueue.put(assembled_message)
-                first_chunk=''
-                second_chunk=''
-                IRCsocket.send('PRIVMSG ' + channel_name + ' :' + auditor_nick + ' ack:' + str(his_seq) + ' \r\n')
-                receivingThread.last_seq_which_i_acked = his_seq
-            elif msg[-1]=='EOL':
-                recvQueue.put(msg[5])
-                IRCsocket.send('PRIVMSG ' + channel_name + ' :' + auditor_nick + ' ack:' + str(his_seq) + ' \r\n')
-                receivingThread.last_seq_which_i_acked = his_seq
+            chunks.append(msg[5])
+            IRCsocket.send('PRIVMSG ' + channel_name + ' :' + auditor_nick + ' ack:' + str(his_seq) + ' \r\n')
+            receivingThread.last_seq_which_i_acked = his_seq            
+            if msg[-1]=='EOL':
+                assembled_message = ''.join(chunks)
+                recvQueue.put(assembled_message)              
+                chunks = []
                
 
 def start_irc():

@@ -27,34 +27,27 @@ import zipfile
 installdir = os.path.dirname(os.path.realpath(__file__))
 datadir = os.path.join(installdir, 'auditor')
 sessionsdir = os.path.join(datadir, 'sessions')
+time_str = time.strftime("%d-%b-%Y-%H-%M-%S", time.gmtime())
+current_sessiondir = os.path.join(sessionsdir, time_str)
+os.makedirs(current_sessiondir)
 
 platform = platform.system()
-if platform == 'Windows':
-    OS = 'mswin'
-elif platform == 'Linux':
-    OS = 'linux'
-elif platform == 'Darwin':
-    OS = 'macos'
+if platform == 'Windows': OS = 'mswin'
+elif platform == 'Linux': OS = 'linux'
+elif platform == 'Darwin': OS = 'macos'
 
-current_sessiondir = ''
-browser_exepath = ''
-
-IRCsocket = socket._socketobject
+IRCsocket = None
 my_nick = ''
 auditee_nick = ''
 channel_name = '#tlsnotary'
 myPrivateKey = auditeePublicKey = None
-
-google_modulus = 0
-google_exponent = 0
-PMS_second_half = ''
-
-recvQueue = Queue.Queue() #all IRC messages are placed on this queue
-ackQueue = Queue.Queue() #count_my_messages_thread places messages' ordinal numbers on this thread 
-progressQueue = Queue.Queue() #messages intended to be displayed by the frontend are placed here
-
+recvQueue = Queue.Queue() #all IRC messages destined for me
+ackQueue = Queue.Queue() #auditee ACKs
+progressQueue = Queue.Queue() #messages intended to be displayed by the frontend
+google_modulus = google_exponent = 0
 secretbytes_amount=8
 bTerminateAllThreads = False
+
 
 def bigint_to_bytearray(bigint):
     m_bytes = []
@@ -63,6 +56,11 @@ def bigint_to_bytearray(bigint):
         m_bytes.insert( 0, b )
         bigint //= 256
     return bytearray(m_bytes)
+
+
+def xor(a,b):
+    return bytearray([ord(a) ^ ord(b) for a,b in zip(a,b)])
+
 
 #processes each http request in a separate thread
 #we need threading in order to send progress updates to the frontend in a non-blocking manner
@@ -146,10 +144,8 @@ def get_html_from_asciidump(ascii_dump):
 #respond to PING messages and put all the other messages onto the recvQueue
 def receivingThread():
     if not hasattr(receivingThread, "last_seq_which_i_acked"):
-        receivingThread.last_seq_which_i_acked = 0 #static variable. Initialized only on first function's run
-     
-    first_chunk='' #we put the first chunk here and do a new loop iteration to pick up the second one
-    second_chunk=''
+        receivingThread.last_seq_which_i_acked = 0 #static variable. Initialized only on first function's run    
+    chunks = []
     while True:
         buffer = ''
         try: buffer = IRCsocket.recv(1024)
@@ -180,32 +176,16 @@ def receivingThread():
                 continue
             if not his_seq == receivingThread.last_seq_which_i_acked+1: continue #we did not receive the next seq in order
             #else we got a new seq      
-            if first_chunk=='' and  not msg[5].startswith( ('cr_sr_hmac_n_e', 'gcr_gsr', 'verify_md5sha:', 'zipsig:', 'link:', 'commit_hash:') ) : continue         
-            #check if this is the first chunk of a chunked message. Only 2 chunks are supported for now
+            if len(chunks)==0 and  not msg[5].startswith( ('cr_sr_hmac_n_e',
+                'gcr_gsr', 'verify_md5sha:', 'zipsig:', 'link:', 'commit_hash:') ) : continue         
             #'CRLF' is used at the end of the first chunk, 'EOL' is used to show that there are no more chunks
-            if msg[-1]=='CRLF':
-                if first_chunk != '': 
-                    if second_chunk != '': #we already have two chunks, no more are allowed
-                        continue
-                    else:
-                        second_chunk = msg[5]
-                else:
-                    first_chunk = msg[5]
-                IRCsocket.send('PRIVMSG ' + channel_name + ' :' + auditee_nick + ' ack:' + str(his_seq) + ' \r\n')
-                receivingThread.last_seq_which_i_acked = his_seq
-                continue #go pickup another chunk
-            elif msg[-1]=='EOL' and first_chunk != '': #last chunk arrived
-                print ('second chunk arrived')
-                assembled_message = first_chunk + second_chunk + msg[5]
-                recvQueue.put(assembled_message)
-                first_chunk='' #empty the container for the next iterations
-                second_chunk=''
-                IRCsocket.send('PRIVMSG ' + channel_name + ' :' + auditee_nick + ' ack:' + str(his_seq) + ' \r\n')
-                receivingThread.last_seq_which_i_acked = his_seq
-            elif msg[-1]=='EOL':
-                recvQueue.put(msg[5])
-                IRCsocket.send('PRIVMSG ' + channel_name + ' :' + auditee_nick + ' ack:' + str(his_seq) + ' \r\n')
-                receivingThread.last_seq_which_i_acked = his_seq
+            chunks.append(msg[5])
+            IRCsocket.send('PRIVMSG ' + channel_name + ' :' + auditee_nick + ' ack:' + str(his_seq) + ' \r\n')
+            receivingThread.last_seq_which_i_acked = his_seq            
+            if msg[-1]=='EOL':
+                assembled_message = ''.join(chunks)
+                recvQueue.put(assembled_message)              
+                chunks = []
                 
 
 def send_message(data):
@@ -244,94 +224,72 @@ def send_message(data):
             return ('failure',)
     return('success',)
 
-
-    
+ 
 #Receive messages from auditee, perform calculations, and respond to them accordingly
 def process_messages():
-    global auditee_nick
-    global PMS_second_half
-    #after the auditee was authorized, entering a regular message processing loop
     while True:
-        try:
-            msg = recvQueue.get(block=True, timeout=1)
+        try: msg = recvQueue.get(block=True, timeout=1)
         except: continue
-        print ('got msg ' + str(msg) + ' from recvQueue')
-
-        if msg.startswith('gcr_gsr:'): #the first msg must be 'gcr_gsr'
+        if msg.startswith('gcr_gsr:'):
             b64_gcr_gsr = msg[len('gcr_gsr:'):]
             try: gcr_gsr = base64.b64decode(b64_gcr_gsr)
-            except:
-                print ('base64 decode error in cr_gcr_gsr')
-                continue               
+            except: raise Exception ('base64 decode error in cr_gcr_gsr')
             google_cr = gcr_gsr[:32]
             google_sr = gcr_gsr[32:64]
-            
-            PMS_second_half =  os.urandom(secretbytes_amount) + ('\x00' * (24-secretbytes_amount-1)) + '\x01'
-            RSA_PMS_google_int = pow( int(('\x01'+('\x00'*25)+PMS_second_half).encode('hex'),16), google_exponent, google_modulus )
+            #second half of pre-master secret
+            PMS2 =  os.urandom(secretbytes_amount) + ('\x00' * (24-secretbytes_amount-1)) + '\x01'
+            RSA_PMS_google_int = pow( int(('\x01'+('\x00'*25)+PMS2).encode('hex'),16), google_exponent, google_modulus )
             grsapms = bigint_to_bytearray(RSA_PMS_google_int)
             #-------------------BEGIN get sha1hmac for google
             label = "master secret"
             seed = google_cr + google_sr        
-            #start the PRF
-            sha1A1 = hmac.new(PMS_second_half, label+seed, hashlib.sha1).digest()
-            sha1A2 = hmac.new(PMS_second_half, sha1A1, hashlib.sha1).digest()
-            sha1A3 = hmac.new(PMS_second_half, sha1A2, hashlib.sha1).digest()
-            
-            sha1hmac1 = hmac.new(PMS_second_half, sha1A1 + label + seed, hashlib.sha1).digest()
-            sha1hmac2 = hmac.new(PMS_second_half, sha1A2 + label + seed, hashlib.sha1).digest()
-            sha1hmac3 = hmac.new(PMS_second_half, sha1A3 + label + seed, hashlib.sha1).digest()
+            sha1A1 = hmac.new(PMS2, label+seed, hashlib.sha1).digest()
+            sha1A2 = hmac.new(PMS2, sha1A1, hashlib.sha1).digest()
+            sha1A3 = hmac.new(PMS2, sha1A2, hashlib.sha1).digest()          
+            sha1hmac1 = hmac.new(PMS2, sha1A1 + label + seed, hashlib.sha1).digest()
+            sha1hmac2 = hmac.new(PMS2, sha1A2 + label + seed, hashlib.sha1).digest()
+            sha1hmac3 = hmac.new(PMS2, sha1A3 + label + seed, hashlib.sha1).digest()
             ghmac = (sha1hmac1+sha1hmac2+sha1hmac3)[:48]
-            #-------------------END get sha1hmac for google
-            
+            #-------------------END get sha1hmac for google            
             b64_grsapms_ghmac = base64.b64encode(grsapms+ghmac)
             send_message('grsapms_ghmac:'+ b64_grsapms_ghmac)
             continue
-         #------------------------------------------------------------------------------------------------------#   
-        elif msg.startswith('cr_sr_hmac_n_e:'): #the first msg must be 'cr_sr_hmac_n_e_gcr_gsr'
+         #---------------------------------------------------------------------#
+        elif msg.startswith('cr_sr_hmac_n_e:'): 
             progressQueue.put(time.strftime('%H:%M:%S', time.localtime()) + ': Processing data from the auditee.')
             b64_cr_sr_hmac_n_e = msg[len('cr_sr_hmac_n_e:'):]
             try: cr_sr_hmac_n_e = base64.b64decode(b64_cr_sr_hmac_n_e)
-            except:
-                print ('base64 decode error in cr_sr_hmac_n_e')
-                continue
-            
+            except: raise Exception ('base64 decode error in cr_sr_hmac_n_e')
             cipher_suite_int = int(cr_sr_hmac_n_e[:1].encode('hex'), 16)
             if cipher_suite_int == 4: cipher_suite = 'RC4MD5'
             elif cipher_suite_int == 5: cipher_suite = 'RC4SHA'
             elif cipher_suite_int == 47: cipher_suite = 'AES128'
             elif cipher_suite_int == 53: cipher_suite = 'AES256'
             else: raise Exception ('invalid cipher sute')
-
             cr = cr_sr_hmac_n_e[1:33]
             sr = cr_sr_hmac_n_e[33:65]
-            md5hmac_for_MS_first_half=cr_sr_hmac_n_e[65:89] #half of MS's 48 bytes
+            md5hmac1_for_MS=cr_sr_hmac_n_e[65:89] #half of MS's 48 bytes
             n_len = cr_sr_hmac_n_e[89:91]
             n_len_int = int(n_len.encode('hex'),16)
             n = cr_sr_hmac_n_e[91:91+n_len_int]
             e = cr_sr_hmac_n_e[91+n_len_int:91+n_len_int+3]
             n_int = int(n.encode('hex'),16)
-            e_int = int(e.encode('hex'),16)
-                        
+            e_int = int(e.encode('hex'),16)                        
             #RSA encryption without padding: ciphertext = plaintext^e mod n
-            RSA_PMS_second_half_int = pow( int(('\x01'+('\x00'*25)+PMS_second_half).encode('hex'),16), e_int, n_int )
-            
+            RSA_PMS2_int = pow( int(('\x01'+('\x00'*25)+PMS2).encode('hex'),16), e_int, n_int )
+            #get my sha1hmac to xor with auditee's md5hmac and get MS first half
             label = "master secret"
             seed = cr + sr        
-            #start the PRF
-            sha1A1 = hmac.new(PMS_second_half, label+seed, hashlib.sha1).digest()
-            sha1A2 = hmac.new(PMS_second_half, sha1A1, hashlib.sha1).digest()
-            sha1A3 = hmac.new(PMS_second_half, sha1A2, hashlib.sha1).digest()
-            
-            sha1hmac1 = hmac.new(PMS_second_half, sha1A1 + label + seed, hashlib.sha1).digest()
-            sha1hmac2 = hmac.new(PMS_second_half, sha1A2 + label + seed, hashlib.sha1).digest()
-            sha1hmac3 = hmac.new(PMS_second_half, sha1A3 + label + seed, hashlib.sha1).digest()
+            sha1A1 = hmac.new(PMS2, label+seed, hashlib.sha1).digest()
+            sha1A2 = hmac.new(PMS2, sha1A1, hashlib.sha1).digest()
+            sha1A3 = hmac.new(PMS2, sha1A2, hashlib.sha1).digest()            
+            sha1hmac1 = hmac.new(PMS2, sha1A1 + label + seed, hashlib.sha1).digest()
+            sha1hmac2 = hmac.new(PMS2, sha1A2 + label + seed, hashlib.sha1).digest()
+            sha1hmac3 = hmac.new(PMS2, sha1A3 + label + seed, hashlib.sha1).digest()
             sha1hmac = (sha1hmac1+sha1hmac2+sha1hmac3)[:48]
-
-            sha1hmac_for_MS_first_half = sha1hmac[:24]
-            sha1hmac_for_MS_second_half = sha1hmac[24:48]
-            
-            MS_first_half = bytearray([ord(a) ^ ord(b) for a,b in zip(md5hmac_for_MS_first_half, sha1hmac_for_MS_first_half)])
-                   
+            sha1hmac1_for_MS = sha1hmac[:24]
+            sha1hmac2_for_MS = sha1hmac[24:48]
+            MS1 = xor(md5hmac1_for_MS, sha1hmac1_for_MS)                  
             #master secret key expansion
             #see RFC2246 6.3. Key calculation & 5. HMAC and the pseudorandom function
             #The amount of key material for each ciphersuite:
@@ -339,31 +297,28 @@ def process_messages():
             #AES128-CBC-SHA: mac key 20*2, encryption key 16*2, IV 16*2 == 104bytes
             #RC4128_MD5: mac key 16*2, encryption key 16*2 == 64 bytes
             #RC4128_SHA: mac key 20*2, encryption key 16*2 == 72bytes
-
             #Regardless of theciphersuite, we generate the max key material we'd ever need which is 136 bytes
             label = "key expansion"
             seed = sr + cr
             #this is not optimized in a loop on purpose. I want people to see exactly what is going on
-            md5A1 = hmac.new(MS_first_half, label+seed, hashlib.md5).digest()
-            md5A2 = hmac.new(MS_first_half, md5A1, hashlib.md5).digest()
-            md5A3 = hmac.new(MS_first_half, md5A2, hashlib.md5).digest()
-            md5A4 = hmac.new(MS_first_half, md5A3, hashlib.md5).digest()
-            md5A5 = hmac.new(MS_first_half, md5A4, hashlib.md5).digest()
-            md5A6 = hmac.new(MS_first_half, md5A5, hashlib.md5).digest()
-            md5A7 = hmac.new(MS_first_half, md5A6, hashlib.md5).digest()
-            md5A8 = hmac.new(MS_first_half, md5A7, hashlib.md5).digest()
-            md5A9 = hmac.new(MS_first_half, md5A8, hashlib.md5).digest()
-            
-            md5hmac1 = hmac.new(MS_first_half, md5A1 + label + seed, hashlib.md5).digest()
-            md5hmac2 = hmac.new(MS_first_half, md5A2 + label + seed, hashlib.md5).digest()
-            md5hmac3 = hmac.new(MS_first_half, md5A3 + label + seed, hashlib.md5).digest()
-            md5hmac4 = hmac.new(MS_first_half, md5A4 + label + seed, hashlib.md5).digest()
-            md5hmac5 = hmac.new(MS_first_half, md5A5 + label + seed, hashlib.md5).digest()
-            md5hmac6 = hmac.new(MS_first_half, md5A6 + label + seed, hashlib.md5).digest()
-            md5hmac7 = hmac.new(MS_first_half, md5A7 + label + seed, hashlib.md5).digest()
-            md5hmac8 = hmac.new(MS_first_half, md5A8 + label + seed, hashlib.md5).digest()
-            md5hmac9 = hmac.new(MS_first_half, md5A9 + label + seed, hashlib.md5).digest()
-            
+            md5A1 = hmac.new(MS1, label+seed, hashlib.md5).digest()
+            md5A2 = hmac.new(MS1, md5A1, hashlib.md5).digest()
+            md5A3 = hmac.new(MS1, md5A2, hashlib.md5).digest()
+            md5A4 = hmac.new(MS1, md5A3, hashlib.md5).digest()
+            md5A5 = hmac.new(MS1, md5A4, hashlib.md5).digest()
+            md5A6 = hmac.new(MS1, md5A5, hashlib.md5).digest()
+            md5A7 = hmac.new(MS1, md5A6, hashlib.md5).digest()
+            md5A8 = hmac.new(MS1, md5A7, hashlib.md5).digest()
+            md5A9 = hmac.new(MS1, md5A8, hashlib.md5).digest()           
+            md5hmac1 = hmac.new(MS1, md5A1 + label + seed, hashlib.md5).digest()
+            md5hmac2 = hmac.new(MS1, md5A2 + label + seed, hashlib.md5).digest()
+            md5hmac3 = hmac.new(MS1, md5A3 + label + seed, hashlib.md5).digest()
+            md5hmac4 = hmac.new(MS1, md5A4 + label + seed, hashlib.md5).digest()
+            md5hmac5 = hmac.new(MS1, md5A5 + label + seed, hashlib.md5).digest()
+            md5hmac6 = hmac.new(MS1, md5A6 + label + seed, hashlib.md5).digest()
+            md5hmac7 = hmac.new(MS1, md5A7 + label + seed, hashlib.md5).digest()
+            md5hmac8 = hmac.new(MS1, md5A8 + label + seed, hashlib.md5).digest()
+            md5hmac9 = hmac.new(MS1, md5A9 + label + seed, hashlib.md5).digest()
             md5hmac = (md5hmac1+md5hmac2+md5hmac3+md5hmac4+md5hmac5+md5hmac6+md5hmac7+md5hmac8+md5hmac9)
             #fill the place of server MAC with zeroes
             if cipher_suite == 'AES256': 
@@ -373,29 +328,24 @@ def process_messages():
             elif cipher_suite == 'RC4SHA':
                 md5hmac_for_ek = md5hmac[:20] + bytearray(os.urandom(20)) + md5hmac[40:72]
             elif cipher_suite == 'RC4MD5': 
-                md5hmac_for_ek = md5hmac[:16] + bytearray(os.urandom(16)) + md5hmac[32:64]
-        
-            rsapms_hmacms_hmacek = bigint_to_bytearray(RSA_PMS_second_half_int)+sha1hmac_for_MS_second_half+md5hmac_for_ek
+                md5hmac_for_ek = md5hmac[:16] + bytearray(os.urandom(16)) + md5hmac[32:64]     
+            rsapms_hmacms_hmacek = bigint_to_bytearray(RSA_PMS2_int)+sha1hmac2_for_MS+md5hmac_for_ek
             b64_rsapms_hmacms_hmacek = base64.b64encode(rsapms_hmacms_hmacek)
             send_message('rsapms_hmacms_hmacek:'+ b64_rsapms_hmacms_hmacek)
             continue
-        #------------------------------------------------------------------------------------------------------#    
+        #---------------------------------------------------------------------#
         elif msg.startswith('verify_md5sha:'):
             b64_md5sha = msg[len('verify_md5sha:') : ]
             try: md5sha = base64.b64decode(b64_md5sha)
-            except:
-                print ('base64 decode error in verify_md5sha')
-                continue
+            except: raise Exception ('base64 decode error in verify_md5sha')
             md5 = md5sha[:16] #md5 hash is 16bytes
-            sha = md5sha[16:]   #sha hash is 20 bytes
-            
+            sha = md5sha[16:]   #sha hash is 20 bytes          
             #calculate verify_data for Finished message
             #see RFC2246 7.4.9. Finished & 5. HMAC and the pseudorandom function
             label = "client finished"
-            seed = md5 + sha
-           
-            md5A1 = hmac.new(MS_first_half, label+seed, hashlib.md5).digest()
-            md5hmac1 = hmac.new(MS_first_half, md5A1 + label + seed, hashlib.md5).digest()
+            seed = md5 + sha          
+            md5A1 = hmac.new(MS1, label+seed, hashlib.md5).digest()
+            md5hmac1 = hmac.new(MS1, md5A1 + label + seed, hashlib.md5).digest()
             b64_verify_hmac = base64.b64encode(md5hmac1)
             send_message('verify_hmac:'+b64_verify_hmac)
             continue
@@ -403,23 +353,18 @@ def process_messages():
         elif msg.startswith('commit_hash:'):
             b64_commit_hash = msg[len('commit_hash:'):]
             try: commit_hash = base64.b64decode(b64_commit_hash)
-            except: 
-                print ('base64 decode error in commit_hash')
-                continue
+            except: raise Exception ('base64 decode error in commit_hash')
             trace_hash = commit_hash[:32]
             md5hmac_hash = commit_hash[32:64]
             commit_dir = os.path.join(current_sessiondir, 'commit')
             if not os.path.exists(commit_dir): os.makedirs(commit_dir)
             #file names are assigned sequentially hash1, hash2 etc.
             #The auditee must provide tracefiles trace1, trace2 corresponding to these sequence numbers
-            last_seqno = 0
             commdir_list = os.listdir(commit_dir)
-            for one_trace in commdir_list:
-                if not one_trace.startswith('tracehash'): continue
-                this_seqno = int( one_trace[len('tracehash'):] )
-                if not this_seqno > last_seqno: continue
-                last_seqno = this_seqno
-                continue
+            #get last seqno
+            seqnos = [int(one_trace[len('tracehash'):]) for one_trace 
+                      in commdir_list if one_trace.startswith('tracehash')]
+            last_seqno = max([0] + seqnos) #avoid throwing by feeding at least one value 0
             my_seqno = last_seqno+1
             trace_hash_path = os.path.join(commit_dir, 'tracehash'+str(my_seqno))
             md5hmac_hash_path =  os.path.join(commit_dir, 'md5hmac_hash'+str(my_seqno))
@@ -432,14 +377,12 @@ def process_messages():
             b64_sha1hmac = base64.b64encode(sha1hmac) 
             send_message('sha1hmac_for_MS:'+b64_sha1hmac)
             continue  
-        #------------------------------------------------------------------------------------------------------#           
+        #---------------------------------------------------------------------#
         elif msg.startswith('link:'):
             b64_link = msg[len('link:'):]
             try: link = base64.b64decode(b64_link)
-            except:
-                print ('base64 decode error in link')
-                continue
-            time.sleep(3) #just in case the server needs some time to process the file
+            except: raise Exception ('base64 decode error in link')
+            time.sleep(1) #just in case the upload server needs some time to prepare the file
             req = urllib2.Request(link)
             resp = urllib2.urlopen(req)
             linkdata = resp.read()
@@ -455,38 +398,25 @@ def process_messages():
             for one_trace in adir_list:
                 if not one_trace.startswith('trace'): continue
                 try: this_seqno = int(one_trace[len('trace'):])
-                except:
-                    print ('WARNING: Could not cast trace\'s tail to int')
-                    response = 'failure'
-                    break
-                if this_seqno in seqnos:
-                    print ('WARNING: multiple tracefiles names detected')
-                    response = 'failure'
-                    break
+                except: raise Exception ('WARNING: Could not cast trace\'s tail to int')
+                if this_seqno in seqnos: 
+                    raise Exception ('WARNING: multiple tracefiles names detected')
                 saved_hash_path = os.path.join(commit_dir, 'tracehash'+str(this_seqno))
-                if not os.path.exists(saved_hash_path):
-                    print ('WARNING: Auditee gave a trace number which doesn\'t have a committed hash')
-                    response = 'failure'
-                    break
+                if not os.path.exists(saved_hash_path): 
+                    raise Exception ('WARNING: Auditee gave a trace number which doesn\'t have a committed hash')
                 with open(saved_hash_path, 'rb') as f: saved_hash = f.read()
                 with open(os.path.join(auditeetrace_dir, one_trace), 'rb') as f: tracedata = f.read()
                 trace_hash = hashlib.sha256(tracedata).digest()
-                if not saved_hash == trace_hash:
-                    print ('WARNING: Trace\'s hash doesn\'t match the hash committed to')
-                    response = 'failure'
-                    break
+                if not saved_hash == trace_hash: 
+                    raise Exception ('WARNING: Trace\'s hash doesn\'t match the hash committed to')
                 md5hmac_path = os.path.join(auditeetrace_dir, 'md5hmac'+str(this_seqno))
                 if not os.path.exists(md5hmac_path):
-                    print ('WARNING: Could not find md5hmac in auditeetrace')
-                    response = 'failure'
-                    break
+                    raise Exception ('WARNING: Could not find md5hmac in auditeetrace')
                 with open(md5hmac_path, 'rb') as f: md5hmac_data = f.read()
                 md5hmac_hash = hashlib.sha256(md5hmac_data).digest()
                 with open(os.path.join(commit_dir, 'md5hmac_hash'+str(this_seqno)), 'rb') as f: commited_md5hmac_hash = f.read()
                 if not md5hmac_hash == commited_md5hmac_hash:
-                    print ('WARNING: mismatch in committed md5hmac hashes')
-                    response = 'failure'
-                    break
+                    raise Exception ('WARNING: mismatch in committed md5hmac hashes')
                 #elif no errors
                 seqnos.append(this_seqno)
                 continue
@@ -496,7 +426,6 @@ def process_messages():
             else:
                 progressQueue.put(time.strftime('%H:%M:%S', time.localtime()) + ': WARNING!!! The auditee FAILED the audit session')
             progressQueue.put(time.strftime('%H:%M:%S', time.localtime()) + ': Decrypting  auditee\'s data')
-
             #decrypt  the tracefiles
             decr_dir = os.path.join(current_sessiondir, 'decrypted')
             os.makedirs(decr_dir)
@@ -506,14 +435,15 @@ def process_messages():
                 with open(os.path.join(auditeetrace_dir, 'md5hmac'+seqno)) as f: md5hmac = f.read()
                 with open(os.path.join(commit_dir, 'sha1hmac'+seqno)) as f: sha1hmac = f.read()
                 with open(os.path.join(commit_dir, 'cr'+seqno)) as f: cr = f.read()
-                ms = bytearray( [ord(a) ^ ord(b) for a,b in zip(md5hmac, sha1hmac)] )#xoring
+                ms = xor(md5hmac, sha1hmac)
                 sslkeylog = os.path.join(decr_dir, 'sslkeylog'+seqno)
                 ssldebuglog = os.path.join(decr_dir, 'ssldebuglog'+seqno)
                 cr_hexl = binascii.hexlify(cr)
                 ms_hexl = binascii.hexlify(ms)
-                with open(sslkeylog, 'wb') as f: f.write('CLIENT_RANDOM ' + cr_hexl + ' ' + ms_hexl + '\n')
-                try:
-                    output = subprocess.check_output([tshark_exepath, '-r', os.path.join(auditeetrace_dir, one_trace),
+                with open(sslkeylog, 'wb') as f: 
+                    f.write('CLIENT_RANDOM ' + cr_hexl + ' ' + ms_hexl + '\n')
+                try: output = subprocess.check_output([tshark_exepath, '-r', 
+                                                    os.path.join(auditeetrace_dir, one_trace),
                                                      '-Y', 'ssl and http.content_type contains html', 
                                                      '-o', 'http.ssl.port:1025-65535', 
                                                      '-o', 'ssl.keylog_file:'+ sslkeylog,
@@ -521,16 +451,15 @@ def process_messages():
                                                      '-o', 'ssl.debug_file:' + ssldebuglog,
                                                      '-x'])
                 except: #maybe an old tshark version, Replace -Y with -R
-                    try:
-                        output = subprocess.check_output([tshark_exepath, '-r', os.path.join(auditeetrace_dir, one_trace),
+                    try: output = subprocess.check_output([tshark_exepath, '-r',
+                                                           os.path.join(auditeetrace_dir, one_trace),
                                                           '-R', 'ssl and http.content_type contains html',
                                                           '-o', 'http.ssl.port:1025-65535', 
                                                           '-o', 'ssl.keylog_file:'+ sslkeylog,
                                                           '-o', 'ssl.ignore_ssl_mac_failed:False',
                                                           '-o', 'ssl.debug_file:' + ssldebuglog,
                                                           '-x'])
-                    except:
-                        raise Exception ('Could not launch tshark')
+                    except: raise Exception ('Could not launch tshark')
                 if output == '': raise Exception ("Failed to find HTML in escrowtrace")
                 with open(ssldebuglog, 'rb') as f: debugdata = f.read()
                 if debugdata.count('mac failed') > 0:
@@ -555,68 +484,52 @@ class Handler(SimpleHTTPServer.SimpleHTTPRequestHandler):
     #https://mail.python.org/pipermail/python-list/2013-April/645128.html
     protocol_version = "HTTP/1.0"      
     
+    def respond(self, headers):
+            keys = [k for k in headers]
+            self.send_response(200)
+            self.send_header('Access-Control-Allow-Origin', '*')
+            self.send_header('Access-Control-Expose-Headers', ','.join(keys))
+            for key in headers:
+                self.send_header(key, headers[key])
+            self.end_headers()                    
+
     def do_HEAD(self):
         global myPrivateKey
         global auditeePublicKey
-        
+                
         print ('minihttp received ' + self.path + ' request',end='\r\n')
         # example HEAD string "/page_marked?accno=12435678&sum=1234.56&time=1383389835"    
         # we need to adhere to CORS and add extra headers in server replies
         if self.path.startswith('/get_recent_keys'):
             my_pubkey_pem, auditee_pubkey_pem = get_recent_keys()
-            self.send_response(200)
-            self.send_header("Access-Control-Allow-Origin", "*")
-            self.send_header("Access-Control-Expose-Headers", "response, mypubkey, auditeepubkey")
-            self.send_header("response", "get_recent_keys")
             #if pem keys were empty '' then slicing[:] will produce an empty string ''
             #Esthetical step: cut off the standard header and footer to make keys look smaller replacing newlines wth dashes
             my_pubkey_pem_stub = my_pubkey_pem[40:-38].replace('\n', '_')
             auditee_pubkey_pem_stub = auditee_pubkey_pem[40:-38].replace('\n', '_')
-            self.send_header("mypubkey", my_pubkey_pem_stub)
-            self.send_header("auditeepubkey", auditee_pubkey_pem_stub)
-            self.end_headers()
+            self.respond({'response':'get_recent_keys', 'mypubkey':my_pubkey_pem_stub,
+                                             'auditorpubkey':auditee_pubkey_pem_stub})
             return
         #----------------------------------------------------------------------#
         if self.path.startswith('/new_keypair'):
             my_pubkey_pem = new_keypair()            
-            self.send_response(200)
-            self.send_header("Access-Control-Allow-Origin", "*")
-            self.send_header("Access-Control-Expose-Headers", "response, pubkey")
-            self.send_header("response", "new_keypair")
             my_pubkey_pem_stub = my_pubkey_pem[40:-38].replace('\n', '_')
-            self.send_header("pubkey", my_pubkey_pem_stub)
-            self.end_headers()
+            self.respond({'response':'new_keypair', 'pubkey':my_pubkey_pem_stub})                        
             return
         #----------------------------------------------------------------------#
         if self.path.startswith('/import_auditee_pubkey'):
             arg_str = self.path.split('?', 1)[1]
             if not arg_str.startswith('pubkey='):
-                self.send_response(400)
-                self.send_header("Access-Control-Allow-Origin", "*")
-                self.send_header("Access-Control-Expose-Headers", "response, status")
-                self.send_header("response", "import_auditee_pubkey")
-                self.send_header("status", 'wrong HEAD parameter')
-                self.end_headers()
+                self.respond({'response':'import_auditee_pubkey', 'status':'wrong HEAD parameter'})                        
                 return
             auditee_pubkey_pem_stub = arg_str[len('pubkey='):]
             import_auditee_pubkey(auditee_pubkey_pem_stub)
-            self.send_response(200)
-            self.send_header("Access-Control-Allow-Origin", "*")
-            self.send_header("Access-Control-Expose-Headers", "response, status")
-            self.send_header("response", "import_auditee_pubkey")
-            self.send_header("status", 'success')
-            self.end_headers()
+            self.respond({'response':'import_auditee_pubkey', 'status':'success'})                                    
             return
        #----------------------------------------------------------------------# 
         if self.path.startswith('/start_irc'):
             #connect to IRC send hello to the auditor and get a hello in return
             rv = start_irc()
-            self.send_response(200)
-            self.send_header("Access-Control-Allow-Origin", "*")
-            self.send_header("Access-Control-Expose-Headers", "response, status")
-            self.send_header("response", "start_irc")
-            self.send_header("status", rv)
-            self.end_headers()
+            self.respond({'response':'start_irc', 'status':rv})                                    
             return
         #----------------------------------------------------------------------#
         if self.path.startswith('/progress_update'):
@@ -630,29 +543,11 @@ class Handler(SimpleHTTPServer.SimpleHTTPRequestHandler):
                 except:
                     if bTerminateAllThreads: break
                     time.sleep(1) #nothing in the queue
-            self.send_response(200)
-            self.send_header("Access-Control-Allow-Origin", "*")
-            self.send_header("Access-Control-Expose-Headers", "response, update")
-            self.send_header("response", "progress_update")
-            self.send_header("update", update)
-            self.end_headers()
+            self.respond({'response':'progress_update', 'update':update})
             return
         #----------------------------------------------------------------------#
-        if self.path.startswith('/terminate'):
-            rv = 'terminate()'
-            self.send_response(200)
-            self.send_header("Access-Control-Allow-Origin", "*")
-            self.send_header("Access-Control-Expose-Headers", "response, status")
-            self.send_header("response", "terminate")
-            self.send_header("status", rv)
-            self.end_headers()
-            return   
         else:
-            self.send_response(200)
-            self.send_header("Access-Control-Allow-Origin", "*")
-            self.send_header("Access-Control-Expose-Headers", "response")
-            self.send_header("response", "unknown command")
-            self.end_headers()
+            self.respond({'response':'unknown command'})
             return
  
     
@@ -794,22 +689,21 @@ def start_irc():
     return 'success'
     
 
-#use miniHTTP server to receive commands from Firefox addon and respond to them
-def minihttp_thread(parentthread):    
+#use http server to talk to auditor.html
+def http_server(parentthread):    
     #allow three attempts to start mini httpd in case if the port is in use
     bWasStarted = False
+    print ('Starting http server to communicate with auditor panel')    
     for i in range(3):
         FF_to_backend_port = random.randint(1025,65535)
-        print ('Starting mini http server to communicate with auditor panel')
         #for the GET request, serve files only from within the datadir
         os.chdir(datadir)
-        try:
-            httpd = StoppableThreadedHttpServer(('127.0.0.1', FF_to_backend_port), Handler)
-            bWasStarted = True
-            break
+        try: httpd = StoppableThreadedHttpServer(('127.0.0.1', FF_to_backend_port), Handler)
         except Exception, e:
             print ('Error starting mini http server. Maybe the port is in use?', e,end='\r\n')
             continue
+        bWasStarted = True
+        break        
     if bWasStarted == False:
         #retval is a var that belongs to our parent class which is ThreadWithRetval
         parentthread.retval = ('failure',)
@@ -831,11 +725,11 @@ class ThreadWithRetval(threading.Thread):
     retval = ''
 
 
-if __name__ == "__main__": 
+def first_run_check():
     #On first run, unpack rsa and pyasn1 archives, check hashes
     rsa_dir = os.path.join(datadir, 'python', 'rsa-3.1.4')
     if not os.path.exists(rsa_dir):
-        print ('Extracting rsa-3.1.4.tar.gz')
+        print ('Extracting rsa-3.1.4.tar.gz...')
         with open(os.path.join(datadir, 'python', 'rsa-3.1.4.tar.gz'), 'rb') as f: tarfile_data = f.read()
         #for md5 hash, see https://pypi.python.org/pypi/rsa/3.1.4
         if hashlib.md5(tarfile_data).hexdigest() != 'b6b1c80e1931d4eba8538fd5d4de1355':
@@ -843,16 +737,10 @@ if __name__ == "__main__":
         os.chdir(os.path.join(datadir, 'python'))
         tar = tarfile.open(os.path.join(datadir, 'python', 'rsa-3.1.4.tar.gz'), 'r:gz')
         tar.extractall()
-    #both on first and subsequent runs
-    sys.path.append(os.path.join(datadir, 'python', 'rsa-3.1.4'))
-    import rsa 
-    #init global vars
-    myPrivateKey = rsa.key.PrivateKey
-    auditeePublicKey = rsa.key.PublicKey
-    
+   
     pyasn1_dir = os.path.join(datadir, 'python', 'pyasn1-0.1.7')
     if not os.path.exists(pyasn1_dir):
-        print ('Extracting pyasn1-0.1.7.tar.gz')
+        print ('Extracting pyasn1-0.1.7.tar.gz...')
         with open(os.path.join(datadir, 'python', 'pyasn1-0.1.7.tar.gz'), 'rb') as f: tarfile_data = f.read()
         #for md5 hash, see https://pypi.python.org/pypi/pyasn1/0.1.7
         if hashlib.md5(tarfile_data).hexdigest() != '2cbd80fcd4c7b1c82180d3d76fee18c8':
@@ -860,22 +748,26 @@ if __name__ == "__main__":
         os.chdir(os.path.join(datadir, 'python'))
         tar = tarfile.open(os.path.join(datadir, 'python', 'pyasn1-0.1.7.tar.gz'), 'r:gz')
         tar.extractall()
+  
+
+if __name__ == "__main__": 
+    first_run_check()
     #both on first and subsequent runs
-    sys.path.append(os.path.join(datadir, 'python', 'pyasn1-0.1.7'))
+    sys.path.append(os.path.join(datadir, 'python', 'rsa-3.1.4'))
+    sys.path.append(os.path.join(datadir, 'python', 'pyasn1-0.1.7'))    
+    import rsa
     import pyasn1
     from pyasn1.type import univ
-    from pyasn1.codec.der import encoder, decoder    
-    
-    thread = ThreadWithRetval(target= minihttp_thread)
+    from pyasn1.codec.der import encoder, decoder       
+
+    thread = ThreadWithRetval(target= http_server)
     thread.daemon = True
     thread.start()
-    #wait for minihttpd thread to indicate its status
-    
+    #wait for minihttpd thread to indicate its status   
     bWasStarted = False
     for i in range(10):
-        if thread.retval == '':
-            time.sleep(1)
-            continue
+        time.sleep(1)        
+        if thread.retval == '': continue
         elif thread.retval[0] == 'failure': raise Exception('MINIHTTPD_FAILURE')
         elif thread.retval[0] == 'success':
             bWasStarted = True
@@ -892,20 +784,18 @@ if __name__ == "__main__":
         
     if OS=='mswin':
         if not daemon_mode:
-            if os.path.isfile(os.path.join(os.getenv('ProgramW6432'), "Mozilla Firefox",  "firefox.exe" )): 
-                browser_exepath = os.path.join(os.getenv('ProgramW6432'), "Mozilla Firefox",  "firefox.exe" )
-            elif  os.path.isfile(os.path.join(os.getenv('ProgramFiles(x86)'), "Mozilla Firefox",  "firefox.exe" )): 
-                browser_exepath = os.path.join(os.getenv('ProgramFiles(x86)'), "Mozilla Firefox",  "firefox.exe" )
-            else:
-                print ('Please make sure firefox is installed and in your Program Files location', end='\r\n')
-                raise Exception('BROWSER_NOT_FOUND')
-        if os.path.isfile(os.path.join(os.getenv('ProgramW6432'), "Wireshark",  "tshark.exe" )): 
-            tshark_exepath = os.path.join(os.getenv('ProgramW6432'), "Wireshark",  "tshark.exe" )
-        elif  os.path.isfile(os.path.join(os.getenv('ProgramFiles(x86)'), "Wireshark",  "tshark.exe" )): 
-            tshark_exepath = os.path.join(os.getenv('ProgramFiles(x86)'), "Wireshark",  "tshark.exe" )
-        else:
-            print ('Please make sure wireshark is installed and in your Program Files location', end='\r\n')
-            raise Exception('TSHARK_NOT_FOUND')                               
+            browser_exepath= ''
+            ff64 = os.path.join(os.getenv('ProgramW6432'), "Mozilla Firefox",  "firefox.exe")
+            if os.path.isfile(ff64): browser_exepath = ff64
+            ff32 = os.path.join(os.getenv('ProgramFiles(x86)'), "Mozilla Firefox",  "firefox.exe" )
+            if  os.path.isfile(ff32): browser_exepath = ff32
+            if browser_exepath == '': raise Exception('Failed to find Firefox in your Program Files location')
+        tshark_exepath = ''
+        tshark64 = os.path.join(os.getenv('ProgramW6432'), "Wireshark",  "tshark.exe" )
+        if os.path.isfile(tshark64): tshark_exepath = tshark64
+        tshark32 = os.path.join(os.getenv('ProgramFiles(x86)'), "Wireshark",  "tshark.exe" )
+        if  os.path.isfile(tshark32): tshark_exepath = tshark32
+        if tshark_exepath == '':  raise Exception('Failed to find Wireshark in your Program Files location')
     elif OS=='linux':
         if not daemon_mode: browser_exepath = 'firefox'
         tshark_exepath = 'tshark'
@@ -913,12 +803,7 @@ if __name__ == "__main__":
         if not daemon_mode: browser_exepath = "open" #will open up the default browser
         tshark_exepath = '/Applications/Wireshark.app/Contents/Resources/bin/tshark'
         if not os.path.exists(tshark_exepath): raise Exception('TSHARK_NOT_FOUND')
-    
-    #create a session dir
-    time_str = time.strftime("%d-%b-%Y-%H-%M-%S", time.gmtime())
-    current_sessiondir = os.path.join(sessionsdir, time_str)
-    os.makedirs(current_sessiondir)
-                 
+                     
     if daemon_mode:
         my_pubkey_pem, auditee_pubkey_pem = get_recent_keys()
         my_pubkey_pem_stub = my_pubkey_pem[40:-38].replace('\n', '_')
@@ -943,18 +828,15 @@ if __name__ == "__main__":
         else: raise Exception ('You need to provide his key using hiskey=')
         start_irc()
     else:#not a deamon mode
-        try:
-            ff_proc = subprocess.Popen([browser_exepath, os.path.join('http://127.0.0.1:' + str(FF_to_backend_port) + '/auditor.html')])
+        try: ff_proc = subprocess.Popen([browser_exepath, os.path.join(
+            'http://127.0.0.1:' + str(FF_to_backend_port) + '/auditor.html')])
         except: raise Exception('BROWSER_START_ERROR')
     
     try:
         while True:
             time.sleep(1)
             if daemon_mode:
-                try: 
-                    message = progressQueue.get_nowait()
-                    print (message)
+                try: print (progressQueue.get_nowait())
                 except: pass      
     except KeyboardInterrupt:
-        print ('Interrupted by user')
         bTerminateAllThreads = True
