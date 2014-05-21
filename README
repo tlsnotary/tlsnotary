@@ -36,6 +36,7 @@ git tag -a tlsnotary_build -m "tlsnotary tag"
 cd ../../../tor-browser-bundle/gitian
 sed -i '4s/VERIFY_TAGS=1/VERIFY_TAGS=0/' versions
 sed -i '8s/tor-browser-${FIREFOX_VERSION}.*/tlsnotary_build/' versions
+sed -i '51s/echo "`cd tor-browser/#echo "`cd tor-browser/' record-inputs.sh
 
 sudo -s #without sudo, you will be asked to enter password 8 times 
 export USE_LXC=1
