@@ -51,8 +51,7 @@ stcppipe_proc = None
 tshark_exepath = ''
 bReceivingThreadStopFlagIsSet = False
 secretbytes_amount=13
-firefox_pid = 0
-stcppipe_pid = 0
+firefox_pid = stcppipe_pid = selftest_pid = 0
 
 PMS1 = '' #first half of pre-master secret. global because of google check
 md5hmac = '' #used in get_html_paths to construct the full MS after committing to a hash
@@ -85,6 +84,41 @@ class ThreadWithRetval(threading.Thread):
     def __init__(self, target, args=()):
         super(ThreadWithRetval, self).__init__(target=target, args = (self,)+args )
     retval = ''
+
+
+def import_auditor_pubkey(auditor_pubkey_b64modulus):
+    global auditorPubKey                      
+    try:
+        auditor_pubkey_modulus = base64.b64decode(auditor_pubkey_b64modulus)
+        auditor_pubkey_modulus_int = int(auditor_pubkey_modulus.encode('hex'),16)              
+        auditorPubKey = rsa.PublicKey(auditor_pubkey_modulus_int, 65537)
+        auditor_pubkey_pem = auditorPubKey.save_pkcs1()
+        with open(os.path.join(current_sessiondir, 'auditorpubkey'), 'wb') as f: f.write(auditor_pubkey_pem)
+        #also save the key as recent, so that they could be reused in the next session
+        if not os.path.exists(os.path.join(datadir, 'recentkeys')): os.makedirs(os.path.join(datadir, 'recentkeys'))
+        with open(os.path.join(datadir, 'recentkeys' , 'auditorpubkey'), 'wb') as f: f.write(auditor_pubkey_pem)
+        return ('success')
+    except Exception,e:
+        print (e)
+        return ('failue')
+
+
+def newkeys():
+    global myPrvKey                
+    #Usually the auditee would reuse a keypair from previous session
+    #but for privacy reason the auditee may generate a new key
+    pubkey, privkey = rsa.newkeys(1024)
+    myPrvKey = privkey
+    my_pem_pubkey = pubkey.save_pkcs1()
+    my_pem_privkey = privkey.save_pkcs1()
+    with open(os.path.join(current_sessiondir, 'myprivkey'), 'wb') as f: f.write(my_pem_privkey)
+    with open(os.path.join(current_sessiondir, 'mypubkey'), 'wb') as f: f.write(my_pem_pubkey)
+    #also save the keys as recent, so that they could be reused in the next session
+    if not os.path.exists(os.path.join(datadir, 'recentkeys')): os.makedirs(os.path.join(datadir, 'recentkeys'))
+    with open(os.path.join(datadir, 'recentkeys' , 'myprivkey'), 'wb') as f: f.write(my_pem_privkey)
+    with open(os.path.join(datadir, 'recentkeys', 'mypubkey'), 'wb') as f: f.write(my_pem_pubkey)
+    pubkey_export = base64.b64encode(bigint_to_bytearray(pubkey.n))
+    return pubkey_export
 
 
 #Receive HTTP HEAD requests from FF addon
@@ -135,20 +169,7 @@ class HandlerClass(SimpleHTTPServer.SimpleHTTPRequestHandler):
             return            
         #---------------------------------------------------------------------#     
         if self.path.startswith('/new_keypair'):
-            #Usually the auditee would reuse a keypair from previous session
-            #but for privacy reason the auditee may generate a new key
-            pubkey, privkey = rsa.newkeys(1024)
-            global myPrvKey            
-            myPrvKey = privkey
-            my_pem_pubkey = pubkey.save_pkcs1()
-            my_pem_privkey = privkey.save_pkcs1()
-            with open(os.path.join(current_sessiondir, 'myprivkey'), 'wb') as f: f.write(my_pem_privkey)
-            with open(os.path.join(current_sessiondir, 'mypubkey'), 'wb') as f: f.write(my_pem_pubkey)
-            #also save the keys as recent, so that they could be reused in the next session
-            if not os.path.exists(os.path.join(datadir, 'recentkeys')): os.makedirs(os.path.join(datadir, 'recentkeys'))
-            with open(os.path.join(datadir, 'recentkeys' , 'myprivkey'), 'wb') as f: f.write(my_pem_privkey)
-            with open(os.path.join(datadir, 'recentkeys', 'mypubkey'), 'wb') as f: f.write(my_pem_pubkey)
-            pubkey_export = base64.b64encode(bigint_to_bytearray(pubkey.n))
+            pubkey_export = newkeys()
             self.respond({'response':'new_keypair', 'pubkey':pubkey_export,
                                  'status':'success'})
             return        
@@ -159,20 +180,8 @@ class HandlerClass(SimpleHTTPServer.SimpleHTTPRequestHandler):
                 self.respond({'response':'import_auditor_pubkey', 'status':'wrong HEAD parameter'})
                 return
             #else
-            status = 'success' #this won't change unless there was an error
-            auditor_pubkey_b64modulus = arg_str[len('pubkey='):]
-            auditor_pubkey_modulus = base64.b64decode(auditor_pubkey_b64modulus)
-            auditor_pubkey_modulus_int = int(auditor_pubkey_modulus.encode('hex'),16)      
-            try:
-                global auditorPubKey                
-                auditorPubKey = rsa.PublicKey(auditor_pubkey_modulus_int, 65537)
-                auditor_pubkey_pem = auditorPubKey.save_pkcs1()
-                with open(os.path.join(current_sessiondir, 'auditorpubkey'), 'wb') as f: f.write(auditor_pubkey_pem)
-                #also save the key as recent, so that they could be reused in the next session
-                if not os.path.exists(os.path.join(datadir, 'recentkeys')): os.makedirs(os.path.join(datadir, 'recentkeys'))
-                with open(os.path.join(datadir, 'recentkeys' , 'auditorpubkey'), 'wb') as f: f.write(auditor_pubkey_pem)
-            except:
-                status = 'Error importing pubkey. Did you copy-paste it correctly?'
+            auditor_pubkey_b64modulus = arg_str[len('pubkey='):]            
+            status = import_auditor_pubkey(auditor_pubkey_b64modulus)           
             self.respond({'response':'import_auditor_pubkey', 'status':status})
             return        
         #----------------------------------------------------------------------#
@@ -222,6 +231,19 @@ class HandlerClass(SimpleHTTPServer.SimpleHTTPRequestHandler):
             status = 'success' if rv[0] == 'success' else rv[1]
             self.respond({'response':'get_html_paths', 'status':status, 'html_paths':b64_paths})
             return                  
+        #----------------------------------------------------------------------#
+        if self.path.startswith('/selftest'):
+            output = subprocess.check_output([sys.executable, os.path.join(installdir, 'tlsnotary-auditor.py'), 'daemon', 'genkey'])
+            auditor_key = output.split()[-1]
+            import_auditor_pubkey(auditor_key)
+            print ('Imported auditor key')
+            print (auditor_key)
+            my_newkey = newkeys()
+            proc = subprocess.Popen([sys.executable, os.path.join(installdir, 'tlsnotary-auditor.py'), 'daemon', 'hiskey='+my_newkey])
+            global selftest_pid
+            selftest_pid = proc.pid
+            self.respond({'response':'selftest', 'status':'success'})
+            return            
         #----------------------------------------------------------------------#
         else:
             self.respond({'response':'unknown command'})
@@ -1266,6 +1288,9 @@ def quit(sig=0, frame=0):
     if firefox_pid != 0:
         try: os.kill(firefox_pid, signal.SIGTERM)
         except: pass #firefox not runnng
+    if selftest_pid != 0:
+        try: os.kill(selftest_pid, signal.SIGTERM)
+        except: pass #selftest not runnng    
     exit(1)
     
  

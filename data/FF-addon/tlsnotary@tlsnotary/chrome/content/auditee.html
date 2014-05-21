@@ -22,6 +22,7 @@
 <tr>
 <td>
 <button id="start_button" autofocus="autofocus" class="btn btn-primary btn-lg" style="width:100%;" onclick="startPressed()">Connect to IRC</button>
+<button id="selftest_button" autofocus="autofocus" class="btn btn-primary btn-lg" style="width:100%;" onclick="selfTest()">Self test</button>
 </td>
 </tr>
 <tr>
@@ -151,6 +152,33 @@ function progressBar(){
 	if (progress_bar.value >= 100){return;} 
 	progress_bar.value += 1;
 	setTimeout(progressBar, 150);
+}
+
+var bSelfTestResponded = false;
+var reqSelfTest;
+function selfTest(){
+	reqSelfTest = new XMLHttpRequest();
+    reqSelfTest.onload = responseSelfTest;
+    reqSelfTest.open("HEAD", "http://127.0.0.1:"+port+"/selftest", true);
+    reqSelfTest.send();
+    responseSelfTest(0);
+}
+
+
+function responseSelfTest(iteration){
+	if (typeof iteration == "number"){
+        if (iteration > 20){setError("ERROR responseSelfTest timed out");return;}
+        if (!bSelfTestResponded) setTimeout(responseSelfTest, 1000, ++iteration)
+        return;
+    }
+    //else: not a timeout but a response from the server
+	bSelfTestResponded = true;
+    var query = reqSelfTest.getResponseHeader("response");
+    var status = reqSelfTest.getResponseHeader("status");
+    if (query != "selftest"){setError("ERROR Internal error. Wrong response header" + query);return;}
+	if (status != "success"){setError("ERROR Received an error message");return;}
+	//else successful response
+	alert("Selftest: press start IRC")	
 }
 
 function startIRC(){

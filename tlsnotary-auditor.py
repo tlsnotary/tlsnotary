@@ -498,23 +498,13 @@ class Handler(SimpleHTTPServer.SimpleHTTPRequestHandler):
         print ('minihttp received ' + self.path + ' request',end='\r\n')
         # example HEAD string "/page_marked?accno=12435678&sum=1234.56&time=1383389835"    
         if self.path.startswith('/get_recent_keys'):
-            my_pubkey_pem, auditee_pubkey_pem = get_recent_keys()
-            if my_pubkey_pem == '': my_pubkey_export = ''
-            else:
-                my_pubkey = rsa.PublicKey.load_pkcs1(my_pubkey_pem)
-                my_pubkey_export = base64.b64encode(bigint_to_bytearray(my_pubkey.n))
-            if auditee_pubkey_pem == '': auditee_pubkey_export = ''
-            else:
-                auditee_pubkey = rsa.PublicKey.load_pkcs1(auditee_pubkey_pem)
-                auditee_pubkey_export = base64.b64encode(bigint_to_bytearray(auditee_pubkey.n))                      
+            my_pubkey_export, auditee_pubkey_export = get_recent_keys()
             self.respond({'response':'get_recent_keys', 'mypubkey':my_pubkey_export,
                                              'auditorpubkey':auditee_pubkey_export})
             return
         #----------------------------------------------------------------------#
         if self.path.startswith('/new_keypair'):
-            my_pubkey_pem = new_keypair()
-            my_pubkey = rsa.PublicKey.load_pkcs1(my_pubkey_pem)
-            my_pubkey_export = base64.b64encode(bigint_to_bytearray(my_pubkey.n))            
+            my_pubkey_export = new_keypair()
             self.respond({'response':'new_keypair', 'pubkey':my_pubkey_export})                        
             return
         #----------------------------------------------------------------------#
@@ -571,7 +561,7 @@ def get_recent_keys():
     #this is the very first command that we expect in a new session.
     #If this is the very first time tlsnotary is run, there will be no saved keys
     #otherwise we load up the saved keys which the user can override with new keys if need be
-    my_privkey_pem = my_pubkey_pem = auditee_pubkey_pem = ''
+    my_privkey_export = auditee_pubkey_export = ''
     if os.path.exists(os.path.join(datadir, 'recentkeys')):
         if os.path.exists(os.path.join(datadir, 'recentkeys', 'myprivkey')) and os.path.exists(os.path.join(datadir, 'recentkeys', 'mypubkey')):
             with open(os.path.join(datadir, 'recentkeys', 'myprivkey'), 'r') as f: my_privkey_pem = f.read()
@@ -579,11 +569,15 @@ def get_recent_keys():
             with open(os.path.join(current_sessiondir, 'myprivkey'), 'w') as f: f.write(my_privkey_pem)
             with open(os.path.join(current_sessiondir, 'mypubkey'), 'w') as f: f.write(my_pubkey_pem)
             myPrivateKey = rsa.PrivateKey.load_pkcs1(my_privkey_pem)
+            my_pubkey = rsa.PublicKey.load_pkcs1(my_pubkey_pem)
+            my_pubkey_export = base64.b64encode(bigint_to_bytearray(my_pubkey.n))            
         if os.path.exists(os.path.join(datadir, 'recentkeys', 'auditeepubkey')):
             with open(os.path.join(datadir, 'recentkeys', 'auditeepubkey'), 'r') as f: auditee_pubkey_pem = f.read()
             with open(os.path.join(current_sessiondir, 'auditorpubkey'), 'w') as f: f.write(auditee_pubkey_pem)
             auditeePublicKey = rsa.PublicKey.load_pkcs1(auditee_pubkey_pem)
-    return my_pubkey_pem, auditee_pubkey_pem
+            auditee_pubkey = rsa.PublicKey.load_pkcs1(auditee_pubkey_pem)
+            auditee_pubkey_export = base64.b64encode(bigint_to_bytearray(auditee_pubkey.n))                                  
+    return my_pubkey_export, auditee_pubkey_export
   
     
 def new_keypair():
@@ -599,7 +593,9 @@ def new_keypair():
     if not os.path.exists(os.path.join(datadir, 'recentkeys')): os.makedirs(os.path.join(datadir, 'recentkeys'))
     with open(os.path.join(datadir, 'recentkeys' , 'myprivkey'), 'w') as f: f.write(my_privkey_pem)
     with open(os.path.join(datadir, 'recentkeys', 'mypubkey'), 'w') as f: f.write(my_pubkey_pem)
-    return my_pubkey_pem
+    my_pubkey = rsa.PublicKey.load_pkcs1(my_pubkey_pem)
+    my_pubkey_export = base64.b64encode(bigint_to_bytearray(my_pubkey.n))                
+    return my_pubkey_export
 
          
 def registerAuditeeThread():
@@ -808,27 +804,27 @@ if __name__ == "__main__":
         if not os.path.exists(tshark_exepath): raise Exception('TSHARK_NOT_FOUND')
                      
     if daemon_mode:
-        my_pubkey_pem, auditee_pubkey_pem = get_recent_keys()
-        my_pubkey_pem_stub = my_pubkey_pem[40:-38].replace('\n', '_')
-        auditee_pubkey_pem_stub = auditee_pubkey_pem[40:-38].replace('\n', '_')        
-        if ('genkey' in sys.argv) or (my_pubkey_pem_stub == ''):
-            my_pubkey_pem = new_keypair()
-            my_pubkey_pem_stub = my_pubkey_pem[40:-38].replace('\n', '_')
+        my_pubkey_b64modulus, auditee_pubkey_b64modulus = get_recent_keys()
+        if ('genkey' in sys.argv) or (my_pubkey_b64modulus == ''):
+            my_pubkey_b64modulus = new_keypair()
             print ('Pass this key to the auditee and restart:')
-            print (my_pubkey_pem_stub)
+            print (my_pubkey_b64modulus)
             exit(0)
         else:
             print ('Reusing your key from the previous session:')
-            print (my_pubkey_pem_stub)
-        if 'hiskey=' in sys.argv:
-            idx = sys.argv.index('hiskey=')
-            auditee_pubkey_pem_stub = sys.argv[idx][len('hiskey='):]
-            if len(auditee_pubkey_pem_stub) != 173:
-                raise Exception ('His key must be 173 characters long')
-            import_auditee_pubkey(auditee_pubkey_pem_stub)
-        elif auditee_pubkey_pem_stub != '':
+            print (my_pubkey_b64modulus)
+        #check if hiskey=OIAAHhdshdu89dah... was supplied
+        key = [b[len('hiskey='):] for idx,b in enumerate(sys.argv) if b.startswith('hiskey=')]
+        if len(key) == 1:
+            auditee_pubkey_b64modulus = key[0]
+            if len(auditee_pubkey_b64modulus) != 172:
+                raise Exception ('His key must be 172 characters long')
+            import_auditee_pubkey(auditee_pubkey_b64modulus)
+            print('Imported hiskey from command line:')
+            print(auditee_pubkey_b64modulus)
+        elif auditee_pubkey_b64modulus != '':
             print ('Reusing his key from previous session:')
-            print (auditee_pubkey_pem_stub)
+            print (auditee_pubkey_b64modulus)
         else: raise Exception ('You need to provide his key using hiskey=')
         start_irc()
     else:#not a deamon mode

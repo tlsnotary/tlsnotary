@@ -25,6 +25,11 @@ Cc["@mozilla.org/preferences-service;1"].getService(Ci.nsIPrefService).getBranch
 //TODO: the pref  below must be set from here rather than defaults.js because Firefox overrides them on startup
 Cc["@mozilla.org/preferences-service;1"].getService(Ci.nsIPrefService).getBranch("network.proxy.").setIntPref("type", 0);
 
+
+function test(){
+	alert("test");
+}
+
 //poll the env var to see if IRC started so that we can display a help message on the addon toolbar
 //We do this from here rather than from auditee.html to make it easier to debug
 pollEnvvar();
