@@ -485,6 +485,7 @@ class Handler(SimpleHTTPServer.SimpleHTTPRequestHandler):
     protocol_version = "HTTP/1.0"      
     
     def respond(self, headers):
+        # we need to adhere to CORS and add extra headers in server replies        
             keys = [k for k in headers]
             self.send_response(200)
             self.send_header('Access-Control-Allow-Origin', '*')
@@ -493,27 +494,28 @@ class Handler(SimpleHTTPServer.SimpleHTTPRequestHandler):
                 self.send_header(key, headers[key])
             self.end_headers()                    
 
-    def do_HEAD(self):
-        global myPrivateKey
-        global auditeePublicKey
-                
+    def do_HEAD(self):                
         print ('minihttp received ' + self.path + ' request',end='\r\n')
         # example HEAD string "/page_marked?accno=12435678&sum=1234.56&time=1383389835"    
-        # we need to adhere to CORS and add extra headers in server replies
         if self.path.startswith('/get_recent_keys'):
             my_pubkey_pem, auditee_pubkey_pem = get_recent_keys()
-            #if pem keys were empty '' then slicing[:] will produce an empty string ''
-            #Esthetical step: cut off the standard header and footer to make keys look smaller replacing newlines wth dashes
-            my_pubkey_pem_stub = my_pubkey_pem[40:-38].replace('\n', '_')
-            auditee_pubkey_pem_stub = auditee_pubkey_pem[40:-38].replace('\n', '_')
-            self.respond({'response':'get_recent_keys', 'mypubkey':my_pubkey_pem_stub,
-                                             'auditorpubkey':auditee_pubkey_pem_stub})
+            if my_pubkey_pem == '': my_pubkey_export = ''
+            else:
+                my_pubkey = rsa.PublicKey.load_pkcs1(my_pubkey_pem)
+                my_pubkey_export = base64.b64encode(bigint_to_bytearray(my_pubkey.n))
+            if auditee_pubkey_pem == '': auditee_pubkey_export = ''
+            else:
+                auditee_pubkey = rsa.PublicKey.load_pkcs1(auditee_pubkey_pem)
+                auditee_pubkey_export = base64.b64encode(bigint_to_bytearray(auditee_pubkey.n))                      
+            self.respond({'response':'get_recent_keys', 'mypubkey':my_pubkey_export,
+                                             'auditorpubkey':auditee_pubkey_export})
             return
         #----------------------------------------------------------------------#
         if self.path.startswith('/new_keypair'):
-            my_pubkey_pem = new_keypair()            
-            my_pubkey_pem_stub = my_pubkey_pem[40:-38].replace('\n', '_')
-            self.respond({'response':'new_keypair', 'pubkey':my_pubkey_pem_stub})                        
+            my_pubkey_pem = new_keypair()
+            my_pubkey = rsa.PublicKey.load_pkcs1(my_pubkey_pem)
+            my_pubkey_export = base64.b64encode(bigint_to_bytearray(my_pubkey.n))            
+            self.respond({'response':'new_keypair', 'pubkey':my_pubkey_export})                        
             return
         #----------------------------------------------------------------------#
         if self.path.startswith('/import_auditee_pubkey'):
@@ -521,8 +523,8 @@ class Handler(SimpleHTTPServer.SimpleHTTPRequestHandler):
             if not arg_str.startswith('pubkey='):
                 self.respond({'response':'import_auditee_pubkey', 'status':'wrong HEAD parameter'})                        
                 return
-            auditee_pubkey_pem_stub = arg_str[len('pubkey='):]
-            import_auditee_pubkey(auditee_pubkey_pem_stub)
+            auditee_pubkey_b64modulus = arg_str[len('pubkey='):]            
+            import_auditee_pubkey(auditee_pubkey_b64modulus)
             self.respond({'response':'import_auditee_pubkey', 'status':'success'})                                    
             return
        #----------------------------------------------------------------------# 
@@ -551,11 +553,12 @@ class Handler(SimpleHTTPServer.SimpleHTTPRequestHandler):
             return
  
     
-def import_auditee_pubkey(auditee_pubkey_pem_stub): 
-    global auditeePublicKey
-    auditee_pubkey_pem_stub = auditee_pubkey_pem_stub.replace('_', '\n')
-    auditee_pubkey_pem = '-----BEGIN RSA PUBLIC KEY-----\nMIGJAoGBA' + auditee_pubkey_pem_stub + 'AgMBAAE=\n-----END RSA PUBLIC KEY-----\n'
-    auditeePublicKey = rsa.PublicKey.load_pkcs1(auditee_pubkey_pem)
+def import_auditee_pubkey(auditee_pubkey_b64modulus): 
+    auditee_pubkey_modulus = base64.b64decode(auditee_pubkey_b64modulus)
+    auditee_pubkey_modulus_int = int(auditee_pubkey_modulus.encode('hex'),16)
+    global auditeePublicKey    
+    auditeePublicKey = rsa.PublicKey(auditee_pubkey_modulus_int, 65537)         
+    auditee_pubkey_pem = auditeePublicKey.save_pkcs1()                
     with open(os.path.join(current_sessiondir, 'auditeepubkey'), 'w') as f: f.write(auditee_pubkey_pem)
     #also save the key as recent, so that they could be reused in the next session
     if not os.path.exists(os.path.join(datadir, 'recentkeys')): os.makedirs(os.path.join(datadir, 'recentkeys'))
@@ -811,8 +814,9 @@ if __name__ == "__main__":
         if ('genkey' in sys.argv) or (my_pubkey_pem_stub == ''):
             my_pubkey_pem = new_keypair()
             my_pubkey_pem_stub = my_pubkey_pem[40:-38].replace('\n', '_')
-            print ('Generated a new key which you must pass to the auditee:')
+            print ('Pass this key to the auditee and restart:')
             print (my_pubkey_pem_stub)
+            exit(0)
         else:
             print ('Reusing your key from the previous session:')
             print (my_pubkey_pem_stub)

@@ -94,6 +94,7 @@ class HandlerClass(SimpleHTTPServer.SimpleHTTPRequestHandler):
     protocol_version = 'HTTP/1.0'      
     
     def respond(self, headers):
+        # we need to adhere to CORS and add extra Access-Control-* headers in server replies                
         keys = [k for k in headers]
         self.send_response(200)
         self.send_header('Access-Control-Allow-Origin', '*')
@@ -102,15 +103,9 @@ class HandlerClass(SimpleHTTPServer.SimpleHTTPRequestHandler):
             self.send_header(key, headers[key])
         self.end_headers()        
     
-    def do_HEAD(self):
-        global myPrvKey
-        global auditorPubKey
-        global bIsStcppipeStarted
-        
+    def do_HEAD(self):      
         print ('minihttp received ' + self.path + ' request',end='\r\n')
         # example HEAD string "/command?parameter=124value1&para2=123value2"    
-        # we need to adhere to CORS and add extra Access-Control-* headers in server replies        
-        #--------------------------------------------------------------------------------------------------------------------------------------------#
         if self.path.startswith('/get_recent_keys'):
             #the very first command from addon 
             #on tlsnotary frst run, there will be no saved keys
@@ -122,24 +117,28 @@ class HandlerClass(SimpleHTTPServer.SimpleHTTPRequestHandler):
                     with open(os.path.join(datadir, 'recentkeys', 'mypubkey'), 'rb') as f: my_pubkey_pem = f.read()
                     with open(os.path.join(current_sessiondir, 'myprivkey'), 'wb') as f: f.write(my_prvkey_pem)
                     with open(os.path.join(current_sessiondir, 'mypubkey'), 'wb') as f: f.write(my_pubkey_pem)
+                    global myPrvKey                    
                     myPrvKey = rsa.PrivateKey.load_pkcs1(my_prvkey_pem)
                 if os.path.exists(os.path.join(datadir, 'recentkeys', 'auditorpubkey')):
                     with open(os.path.join(datadir, 'recentkeys', 'auditorpubkey'), 'rb') as f: auditor_pubkey_pem = f.read()
                     with open(os.path.join(current_sessiondir, 'auditorpubkey'), 'wb') as f: f.write(auditor_pubkey_pem)
+                    global auditorPubKey                    
                     auditorPubKey = rsa.PublicKey.load_pkcs1(auditor_pubkey_pem)
-            #if pem keys were empty '' then slicing[:] will produce an empty string ''
-            #Esthetic step: cut off the standard header and footer to make keys look smaller 
-            #replace newlines with underscores, so that user can triple-click an copy
-            my_pubkey_pem_stub = my_pubkey_pem[40:-38].replace('\n', '_')
-            auditor_pubkey_pem_stub = auditor_pubkey_pem[40:-38].replace('\n', '_')
-            self.respond({'response':'get_recent_keys', 'mypubkey':my_pubkey_pem_stub,
-                     'auditorpubkey':auditor_pubkey_pem_stub})
+                my_pubkey = rsa.PublicKey.load_pkcs1(my_pubkey_pem)
+                my_pubkey_export = base64.b64encode(bigint_to_bytearray(my_pubkey.n))
+                if auditor_pubkey_pem == '': auditor_pubkey_export = ''
+                else: auditor_pubkey_export = base64.b64encode(bigint_to_bytearray(auditorPubKey.n))
+                self.respond({'response':'get_recent_keys', 'mypubkey':my_pubkey_export,
+                         'auditorpubkey':auditor_pubkey_export})
+            else:
+                self.respond({'response':'get_recent_keys', 'mypubkey':'', 'auditorpubkey':''})                
             return            
         #---------------------------------------------------------------------#     
         if self.path.startswith('/new_keypair'):
             #Usually the auditee would reuse a keypair from previous session
             #but for privacy reason the auditee may generate a new key
             pubkey, privkey = rsa.newkeys(1024)
+            global myPrvKey            
             myPrvKey = privkey
             my_pem_pubkey = pubkey.save_pkcs1()
             my_pem_privkey = privkey.save_pkcs1()
@@ -149,7 +148,8 @@ class HandlerClass(SimpleHTTPServer.SimpleHTTPRequestHandler):
             if not os.path.exists(os.path.join(datadir, 'recentkeys')): os.makedirs(os.path.join(datadir, 'recentkeys'))
             with open(os.path.join(datadir, 'recentkeys' , 'myprivkey'), 'wb') as f: f.write(my_pem_privkey)
             with open(os.path.join(datadir, 'recentkeys', 'mypubkey'), 'wb') as f: f.write(my_pem_pubkey)
-            self.respond({'response':'new_keypair', 'pubkey':my_pubkey_pem_stub,
+            pubkey_export = base64.b64encode(bigint_to_bytearray(pubkey.n))
+            self.respond({'response':'new_keypair', 'pubkey':pubkey_export,
                                  'status':'success'})
             return        
         #----------------------------------------------------------------------#
@@ -160,11 +160,13 @@ class HandlerClass(SimpleHTTPServer.SimpleHTTPRequestHandler):
                 return
             #else
             status = 'success' #this won't change unless there was an error
-            auditor_pubkey_pem_stub = arg_str[len('pubkey='):]
-            auditor_pubkey_pem_stub = auditor_pubkey_pem_stub.replace('_', '\n')
-            auditor_pubkey_pem = '-----BEGIN RSA PUBLIC KEY-----\nMIGJAoGBA' + auditor_pubkey_pem_stub + 'AgMBAAE=\n-----END RSA PUBLIC KEY-----\n'
+            auditor_pubkey_b64modulus = arg_str[len('pubkey='):]
+            auditor_pubkey_modulus = base64.b64decode(auditor_pubkey_b64modulus)
+            auditor_pubkey_modulus_int = int(auditor_pubkey_modulus.encode('hex'),16)      
             try:
-                auditorPubKey = rsa.PublicKey.load_pkcs1(auditor_pubkey_pem)            
+                global auditorPubKey                
+                auditorPubKey = rsa.PublicKey(auditor_pubkey_modulus_int, 65537)
+                auditor_pubkey_pem = auditorPubKey.save_pkcs1()
                 with open(os.path.join(current_sessiondir, 'auditorpubkey'), 'wb') as f: f.write(auditor_pubkey_pem)
                 #also save the key as recent, so that they could be reused in the next session
                 if not os.path.exists(os.path.join(datadir, 'recentkeys')): os.makedirs(os.path.join(datadir, 'recentkeys'))
@@ -180,6 +182,7 @@ class HandlerClass(SimpleHTTPServer.SimpleHTTPRequestHandler):
             return       
         #----------------------------------------------------------------------#
         if self.path.startswith('/start_recording'):
+            global bIsStcppipeStarted            
             if not bIsStcppipeStarted:
                 bIsStcppipeStarted = True
                 rv = start_recording()

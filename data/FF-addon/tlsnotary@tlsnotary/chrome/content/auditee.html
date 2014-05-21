@@ -122,10 +122,10 @@ function startPressed(){
 	//provided during the get_recent_keys() call. Makes life simpler.
 	var textarea_auditorkey = document.getElementById("textarea_auditorkey");
     var auditorpubkey = textarea_auditorkey.value;
-	if (auditorpubkey.length != 173){
+	if (auditorpubkey.length != 172){
 		var help = document.getElementById("help");
-		help.value = "ERROR Wrong auditee pubkey length. Expected 173 characters";
-		alert("Wrong auditee pubkey length. Expected 173 characters");
+		help.value = "ERROR Wrong auditee pubkey length. Expected 172 characters";
+		alert("Wrong auditee pubkey length. Expected 172 characters");
 		return;
 	}
 	reqImportAuditorPubkey = new XMLHttpRequest();
