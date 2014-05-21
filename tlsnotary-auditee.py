@@ -1,13 +1,14 @@
 #!/usr/bin/env python
 from __future__ import print_function
 
-import base64
+from base64 import b64decode, b64encode
 import BaseHTTPServer
 import binascii
 import codecs
-import hashlib
+from hashlib import md5, sha1, sha256
 import hmac
 import os
+from os.path import join
 import platform
 import Queue
 import random
@@ -25,11 +26,11 @@ import time
 import zipfile
 
 installdir = os.path.dirname(os.path.realpath(__file__))
-datadir = os.path.join(installdir, 'data')
-sessionsdir = os.path.join(datadir, 'sessions')
+datadir = join(installdir, 'data')
+sessionsdir = join(datadir, 'sessions')
 time_str = time.strftime('%d-%b-%Y-%H-%M-%S', time.gmtime())
-current_sessiondir = os.path.join(sessionsdir, time_str)
-nss_patch_dir = os.path.join(current_sessiondir, 'nsspatchdir')
+current_sessiondir = join(sessionsdir, time_str)
+nss_patch_dir = join(current_sessiondir, 'nsspatchdir')
 os.makedirs(nss_patch_dir)
 
 m_platform = platform.system()
@@ -93,14 +94,14 @@ class ThreadWithRetval(threading.Thread):
 def import_auditor_pubkey(auditor_pubkey_b64modulus):
     global auditorPubKey                      
     try:
-        auditor_pubkey_modulus = base64.b64decode(auditor_pubkey_b64modulus)
+        auditor_pubkey_modulus = b64decode(auditor_pubkey_b64modulus)
         auditor_pubkey_modulus_int =  ba2int(auditor_pubkey_modulus)
         auditorPubKey = rsa.PublicKey(auditor_pubkey_modulus_int, 65537)
         auditor_pubkey_pem = auditorPubKey.save_pkcs1()
-        with open(os.path.join(current_sessiondir, 'auditorpubkey'), 'wb') as f: f.write(auditor_pubkey_pem)
+        with open(join(current_sessiondir, 'auditorpubkey'), 'wb') as f: f.write(auditor_pubkey_pem)
         #also save the key as recent, so that they could be reused in the next session
-        if not os.path.exists(os.path.join(datadir, 'recentkeys')): os.makedirs(os.path.join(datadir, 'recentkeys'))
-        with open(os.path.join(datadir, 'recentkeys' , 'auditorpubkey'), 'wb') as f: f.write(auditor_pubkey_pem)
+        if not os.path.exists(join(datadir, 'recentkeys')): os.makedirs(join(datadir, 'recentkeys'))
+        with open(join(datadir, 'recentkeys' , 'auditorpubkey'), 'wb') as f: f.write(auditor_pubkey_pem)
         return ('success')
     except Exception,e:
         print (e)
@@ -115,13 +116,13 @@ def newkeys():
     myPrvKey = privkey
     my_pem_pubkey = pubkey.save_pkcs1()
     my_pem_privkey = privkey.save_pkcs1()
-    with open(os.path.join(current_sessiondir, 'myprivkey'), 'wb') as f: f.write(my_pem_privkey)
-    with open(os.path.join(current_sessiondir, 'mypubkey'), 'wb') as f: f.write(my_pem_pubkey)
+    with open(join(current_sessiondir, 'myprivkey'), 'wb') as f: f.write(my_pem_privkey)
+    with open(join(current_sessiondir, 'mypubkey'), 'wb') as f: f.write(my_pem_pubkey)
     #also save the keys as recent, so that they could be reused in the next session
-    if not os.path.exists(os.path.join(datadir, 'recentkeys')): os.makedirs(os.path.join(datadir, 'recentkeys'))
-    with open(os.path.join(datadir, 'recentkeys' , 'myprivkey'), 'wb') as f: f.write(my_pem_privkey)
-    with open(os.path.join(datadir, 'recentkeys', 'mypubkey'), 'wb') as f: f.write(my_pem_pubkey)
-    pubkey_export = base64.b64encode(bigint_to_bytearray(pubkey.n))
+    if not os.path.exists(join(datadir, 'recentkeys')): os.makedirs(join(datadir, 'recentkeys'))
+    with open(join(datadir, 'recentkeys' , 'myprivkey'), 'wb') as f: f.write(my_pem_privkey)
+    with open(join(datadir, 'recentkeys', 'mypubkey'), 'wb') as f: f.write(my_pem_pubkey)
+    pubkey_export = b64encode(bigint_to_bytearray(pubkey.n))
     return pubkey_export
 
 
@@ -149,23 +150,23 @@ class HandlerClass(SimpleHTTPServer.SimpleHTTPRequestHandler):
             #on tlsnotary frst run, there will be no saved keys
             #otherwise we load up the keys saved from previous session
             my_prvkey_pem = my_pubkey_pem = auditor_pubkey_pem = ''
-            if os.path.exists(os.path.join(datadir, 'recentkeys')):
-                if os.path.exists(os.path.join(datadir, 'recentkeys', 'myprivkey')) and os.path.exists(os.path.join(datadir, 'recentkeys', 'mypubkey')):
-                    with open(os.path.join(datadir, 'recentkeys', 'myprivkey'), 'rb') as f: my_prvkey_pem = f.read()
-                    with open(os.path.join(datadir, 'recentkeys', 'mypubkey'), 'rb') as f: my_pubkey_pem = f.read()
-                    with open(os.path.join(current_sessiondir, 'myprivkey'), 'wb') as f: f.write(my_prvkey_pem)
-                    with open(os.path.join(current_sessiondir, 'mypubkey'), 'wb') as f: f.write(my_pubkey_pem)
+            if os.path.exists(join(datadir, 'recentkeys')):
+                if os.path.exists(join(datadir, 'recentkeys', 'myprivkey')) and os.path.exists(join(datadir, 'recentkeys', 'mypubkey')):
+                    with open(join(datadir, 'recentkeys', 'myprivkey'), 'rb') as f: my_prvkey_pem = f.read()
+                    with open(join(datadir, 'recentkeys', 'mypubkey'), 'rb') as f: my_pubkey_pem = f.read()
+                    with open(join(current_sessiondir, 'myprivkey'), 'wb') as f: f.write(my_prvkey_pem)
+                    with open(join(current_sessiondir, 'mypubkey'), 'wb') as f: f.write(my_pubkey_pem)
                     global myPrvKey                    
                     myPrvKey = rsa.PrivateKey.load_pkcs1(my_prvkey_pem)
-                if os.path.exists(os.path.join(datadir, 'recentkeys', 'auditorpubkey')):
-                    with open(os.path.join(datadir, 'recentkeys', 'auditorpubkey'), 'rb') as f: auditor_pubkey_pem = f.read()
-                    with open(os.path.join(current_sessiondir, 'auditorpubkey'), 'wb') as f: f.write(auditor_pubkey_pem)
+                if os.path.exists(join(datadir, 'recentkeys', 'auditorpubkey')):
+                    with open(join(datadir, 'recentkeys', 'auditorpubkey'), 'rb') as f: auditor_pubkey_pem = f.read()
+                    with open(join(current_sessiondir, 'auditorpubkey'), 'wb') as f: f.write(auditor_pubkey_pem)
                     global auditorPubKey                    
                     auditorPubKey = rsa.PublicKey.load_pkcs1(auditor_pubkey_pem)
                 my_pubkey = rsa.PublicKey.load_pkcs1(my_pubkey_pem)
-                my_pubkey_export = base64.b64encode(bigint_to_bytearray(my_pubkey.n))
+                my_pubkey_export = b64encode(bigint_to_bytearray(my_pubkey.n))
                 if auditor_pubkey_pem == '': auditor_pubkey_export = ''
-                else: auditor_pubkey_export = base64.b64encode(bigint_to_bytearray(auditorPubKey.n))
+                else: auditor_pubkey_export = b64encode(bigint_to_bytearray(auditorPubKey.n))
                 self.respond({'response':'get_recent_keys', 'mypubkey':my_pubkey_export,
                          'auditorpubkey':auditor_pubkey_export})
             else:
@@ -211,7 +212,7 @@ class HandlerClass(SimpleHTTPServer.SimpleHTTPRequestHandler):
         if self.path.startswith('/stop_recording'):
             rv = stop_recording()
             self.respond({'response':'stop_recording', 'status':rv,
-                          'session_path':os.path.join(current_sessiondir, 'mytrace')})
+                          'session_path':join(current_sessiondir, 'mytrace')})
             return      
         #----------------------------------------------------------------------#
         if self.path.startswith('/prepare_pms'):
@@ -231,19 +232,19 @@ class HandlerClass(SimpleHTTPServer.SimpleHTTPRequestHandler):
         if self.path.startswith('/get_html_paths'):
             rv = get_html_paths()
             b64_paths = ''
-            if rv[0] == 'success': b64_paths = base64.b64encode(rv[1])
+            if rv[0] == 'success': b64_paths = b64encode(rv[1])
             status = 'success' if rv[0] == 'success' else rv[1]
             self.respond({'response':'get_html_paths', 'status':status, 'html_paths':b64_paths})
             return                  
         #----------------------------------------------------------------------#
         if self.path.startswith('/selftest'):
-            output = subprocess.check_output([sys.executable, os.path.join(installdir, 'tlsnotary-auditor.py'), 'daemon', 'genkey'])
+            output = subprocess.check_output([sys.executable, join(installdir, 'tlsnotary-auditor.py'), 'daemon', 'genkey'])
             auditor_key = output.split()[-1]
             import_auditor_pubkey(auditor_key)
             print ('Imported auditor key')
             print (auditor_key)
             my_newkey = newkeys()
-            proc = subprocess.Popen([sys.executable, os.path.join(installdir, 'tlsnotary-auditor.py'), 'daemon', 'hiskey='+my_newkey])
+            proc = subprocess.Popen([sys.executable, join(installdir, 'tlsnotary-auditor.py'), 'daemon', 'hiskey='+my_newkey])
             global selftest_pid
             selftest_pid = proc.pid
             self.respond({'response':'selftest', 'status':'success'})
@@ -257,39 +258,39 @@ def get_html_paths():
     cr = cr_list[-1]
     #find tracefile containing cr and commit to its hash as well as the hash of md5hmac (for MS)
     #Construct MS and decrypt HTML files to be presented to auditee for approval
-    tracelog_dir = os.path.join(current_sessiondir, 'tracelog')
+    tracelog_dir = join(current_sessiondir, 'tracelog')
     tracelog_files = os.listdir(tracelog_dir)
     bFoundCR = False
     for one_trace in tracelog_files:
-        with open(os.path.join(tracelog_dir, one_trace), 'rb') as f: data=f.read()
+        with open(join(tracelog_dir, one_trace), 'rb') as f: data=f.read()
         if not data.count(cr) == 1: continue
         #else client random found
         bFoundCR = True
         break 
     if not bFoundCR: raise Exception ('Client random not found in trace files')
     #copy the tracefile to a new location, b/c stcppipe may still be appending it 
-    commit_dir = os.path.join(current_sessiondir, 'commit')
+    commit_dir = join(current_sessiondir, 'commit')
     if not os.path.exists(commit_dir): os.makedirs(commit_dir)
-    tracecopy_path = os.path.join(commit_dir, 'trace'+ str(len(cr_list)) )
-    md5hmac_path = os.path.join(commit_dir, 'md5hmac'+ str(len(cr_list)) )
+    tracecopy_path = join(commit_dir, 'trace'+ str(len(cr_list)) )
+    md5hmac_path = join(commit_dir, 'md5hmac'+ str(len(cr_list)) )
     with open(md5hmac_path, 'wb') as f: f.write(md5hmac)
-    shutil.copyfile(os.path.join(tracelog_dir, one_trace), tracecopy_path)
+    shutil.copyfile(join(tracelog_dir, one_trace), tracecopy_path)
     #send the hash of tracefile and md5hmac
     with open(tracecopy_path, 'rb') as f: data=f.read()
-    commit_hash = hashlib.sha256(data).digest()
-    md5hmac_hash = hashlib.sha256(md5hmac).digest()  
-    b64_commit_hash = base64.b64encode(commit_hash+md5hmac_hash)
+    commit_hash = sha256(data).digest()
+    md5hmac_hash = sha256(md5hmac).digest()  
+    b64_commit_hash = b64encode(commit_hash+md5hmac_hash)
     reply = send_and_recv('commit_hash:'+b64_commit_hash)
     if reply[0] != 'success': raise Exception ('Failed to receive a reply')
     if not reply[1].startswith('sha1hmac_for_MS:'):
         raise Exception ('bad reply. Expected sha1hmac_for_MS')
     b64_sha1hmac_for_MS = reply[1][len('sha1hmac_for_MS:'):]
-    try: sha1hmac_for_MS = base64.b64decode(b64_sha1hmac_for_MS)
+    try: sha1hmac_for_MS = b64decode(b64_sha1hmac_for_MS)
     except:  raise Exception ('base64 decode error in sha1hmac_for_MS')
     #construct MS
     ms = xor(md5hmac, sha1hmac_for_MS)[:48]
-    sslkeylog = os.path.join(commit_dir, 'sslkeylog' + str(len(cr_list)))
-    ssldebuglog = os.path.join(commit_dir, 'ssldebuglog' + str(len(cr_list)))    
+    sslkeylog = join(commit_dir, 'sslkeylog' + str(len(cr_list)))
+    ssldebuglog = join(commit_dir, 'ssldebuglog' + str(len(cr_list)))    
     cr_hexl = binascii.hexlify(cr)
     ms_hexl = binascii.hexlify(ms)
     skl_fd = open(sslkeylog, 'wb')
@@ -322,7 +323,7 @@ def get_html_paths():
     html_paths = ''
     for index,oneframe in enumerate(frames):
         html = get_html_from_asciidump(oneframe)
-        path = os.path.join(commit_dir, 'html-' + str(len(cr_list)) + '-' + str(index))
+        path = join(commit_dir, 'html-' + str(len(cr_list)) + '-' + str(index))
         with open(path, 'wb') as f: f.write(html)
         html_paths += path + '&'    
     return ('success', html_paths)
@@ -400,7 +401,7 @@ def get_html_from_asciidump(ascii_dump):
     
 
 def send_link(filelink):
-    b64_link = base64.b64encode(filelink)
+    b64_link = b64encode(filelink)
     reply = send_and_recv('link:'+b64_link)
     if not reply[0] == 'success' : return 'failure'
     if not reply[1].startswith('response:') : return 'failure'
@@ -442,12 +443,12 @@ def prepare_pms():
         sr = sh[11:43]
         #give auditor cr&sr and get an encrypted second half of PMS,
         #and shahmac that needs to be xored with my md5hmac to get MS
-        b64_crsr = base64.b64encode(cr+sr)
+        b64_crsr = b64encode(cr+sr)
         reply = send_and_recv('gcr_gsr:'+b64_crsr)       
         if reply[0] != 'success': raise Exception ('Failed to receive a reply for gcr_gsr:')
         if not reply[1].startswith('grsapms_ghmac:'): raise Exception ('bad reply. Expected grsapms_ghmac:')    
         b64_grsapms_ghmac = reply[1][len('grsapms_ghmac:'):]
-        try: grsapms_ghmac = base64.b64decode(b64_grsapms_ghmac)    
+        try: grsapms_ghmac = b64decode(b64_grsapms_ghmac)    
         except: raise Exception ('base64 decode error in grsapms_ghmac')       
         rsapms2 = grsapms_ghmac[:256]
         shahmac = grsapms_ghmac[256:304]
@@ -457,12 +458,12 @@ def prepare_pms():
         #derive MS
         label = 'master secret'
         seed = cr + sr       
-        md5A1 = hmac.new(pms1, label+seed, hashlib.md5).digest()
-        md5A2 = hmac.new(pms1, md5A1, hashlib.md5).digest()
-        md5A3 = hmac.new(pms1, md5A2, hashlib.md5).digest()      
-        md5hmac1 = hmac.new(pms1, md5A1 + label + seed, hashlib.md5).digest()
-        md5hmac2 = hmac.new(pms1, md5A2 + label + seed, hashlib.md5).digest()
-        md5hmac3 = hmac.new(pms1, md5A3 + label + seed, hashlib.md5).digest()
+        md5A1 = hmac.new(pms1, label+seed, md5).digest()
+        md5A2 = hmac.new(pms1, md5A1, md5).digest()
+        md5A3 = hmac.new(pms1, md5A2, md5).digest()      
+        md5hmac1 = hmac.new(pms1, md5A1 + label + seed, md5).digest()
+        md5hmac2 = hmac.new(pms1, md5A2 + label + seed, md5).digest()
+        md5hmac3 = hmac.new(pms1, md5A3 + label + seed, md5).digest()
         md5hmac = md5hmac1+md5hmac2+md5hmac3
         ms = xor(md5hmac, shahmac)[:48]
         #derive expanded keys for AES256
@@ -471,42 +472,42 @@ def prepare_pms():
         ms_second_half = ms[24:]
         label = 'key expansion'
         seed = sr + cr
-        md5A1 = hmac.new(ms_first_half, label+seed, hashlib.md5).digest()
-        md5A2 = hmac.new(ms_first_half, md5A1, hashlib.md5).digest()
-        md5A3 = hmac.new(ms_first_half, md5A2, hashlib.md5).digest()
-        md5A4 = hmac.new(ms_first_half, md5A3, hashlib.md5).digest()
-        md5A5 = hmac.new(ms_first_half, md5A4, hashlib.md5).digest()
-        md5A6 = hmac.new(ms_first_half, md5A5, hashlib.md5).digest()
-        md5A7 = hmac.new(ms_first_half, md5A6, hashlib.md5).digest()
-        md5A8 = hmac.new(ms_first_half, md5A7, hashlib.md5).digest()
-        md5A9 = hmac.new(ms_first_half, md5A8, hashlib.md5).digest()
+        md5A1 = hmac.new(ms_first_half, label+seed, md5).digest()
+        md5A2 = hmac.new(ms_first_half, md5A1, md5).digest()
+        md5A3 = hmac.new(ms_first_half, md5A2, md5).digest()
+        md5A4 = hmac.new(ms_first_half, md5A3, md5).digest()
+        md5A5 = hmac.new(ms_first_half, md5A4, md5).digest()
+        md5A6 = hmac.new(ms_first_half, md5A5, md5).digest()
+        md5A7 = hmac.new(ms_first_half, md5A6, md5).digest()
+        md5A8 = hmac.new(ms_first_half, md5A7, md5).digest()
+        md5A9 = hmac.new(ms_first_half, md5A8, md5).digest()
         #---------#
-        md5hmac1 = hmac.new(ms_first_half, md5A1 + label + seed, hashlib.md5).digest()
-        md5hmac2 = hmac.new(ms_first_half, md5A2 + label + seed, hashlib.md5).digest()
-        md5hmac3 = hmac.new(ms_first_half, md5A3 + label + seed, hashlib.md5).digest()
-        md5hmac4 = hmac.new(ms_first_half, md5A4 + label + seed, hashlib.md5).digest()
-        md5hmac5 = hmac.new(ms_first_half, md5A5 + label + seed, hashlib.md5).digest()
-        md5hmac6 = hmac.new(ms_first_half, md5A6 + label + seed, hashlib.md5).digest()
-        md5hmac7 = hmac.new(ms_first_half, md5A7 + label + seed, hashlib.md5).digest()
-        md5hmac8 = hmac.new(ms_first_half, md5A8 + label + seed, hashlib.md5).digest()
-        md5hmac9 = hmac.new(ms_first_half, md5A9 + label + seed, hashlib.md5).digest()       
+        md5hmac1 = hmac.new(ms_first_half, md5A1 + label + seed, md5).digest()
+        md5hmac2 = hmac.new(ms_first_half, md5A2 + label + seed, md5).digest()
+        md5hmac3 = hmac.new(ms_first_half, md5A3 + label + seed, md5).digest()
+        md5hmac4 = hmac.new(ms_first_half, md5A4 + label + seed, md5).digest()
+        md5hmac5 = hmac.new(ms_first_half, md5A5 + label + seed, md5).digest()
+        md5hmac6 = hmac.new(ms_first_half, md5A6 + label + seed, md5).digest()
+        md5hmac7 = hmac.new(ms_first_half, md5A7 + label + seed, md5).digest()
+        md5hmac8 = hmac.new(ms_first_half, md5A8 + label + seed, md5).digest()
+        md5hmac9 = hmac.new(ms_first_half, md5A9 + label + seed, md5).digest()       
         md5hmac = md5hmac1+md5hmac2+md5hmac3+md5hmac4+md5hmac5+md5hmac6+md5hmac7+md5hmac8+md5hmac9
         #---------#    
-        sha1A1 = hmac.new(ms_second_half, label+seed, hashlib.sha1).digest()
-        sha1A2 = hmac.new(ms_second_half, sha1A1, hashlib.sha1).digest()
-        sha1A3 = hmac.new(ms_second_half, sha1A2, hashlib.sha1).digest()
-        sha1A4 = hmac.new(ms_second_half, sha1A3, hashlib.sha1).digest()
-        sha1A5 = hmac.new(ms_second_half, sha1A4, hashlib.sha1).digest()
-        sha1A6 = hmac.new(ms_second_half, sha1A5, hashlib.sha1).digest()
-        sha1A7 = hmac.new(ms_second_half, sha1A6, hashlib.sha1).digest()
+        sha1A1 = hmac.new(ms_second_half, label+seed, sha1).digest()
+        sha1A2 = hmac.new(ms_second_half, sha1A1, sha1).digest()
+        sha1A3 = hmac.new(ms_second_half, sha1A2, sha1).digest()
+        sha1A4 = hmac.new(ms_second_half, sha1A3, sha1).digest()
+        sha1A5 = hmac.new(ms_second_half, sha1A4, sha1).digest()
+        sha1A6 = hmac.new(ms_second_half, sha1A5, sha1).digest()
+        sha1A7 = hmac.new(ms_second_half, sha1A6, sha1).digest()
         #---------#        
-        sha1hmac1 = hmac.new(ms_second_half, sha1A1 + label + seed, hashlib.sha1).digest()
-        sha1hmac2 = hmac.new(ms_second_half, sha1A2 + label + seed, hashlib.sha1).digest()
-        sha1hmac3 = hmac.new(ms_second_half, sha1A3 + label + seed, hashlib.sha1).digest()
-        sha1hmac4 = hmac.new(ms_second_half, sha1A4 + label + seed, hashlib.sha1).digest()
-        sha1hmac5 = hmac.new(ms_second_half, sha1A5 + label + seed, hashlib.sha1).digest()
-        sha1hmac6 = hmac.new(ms_second_half, sha1A6 + label + seed, hashlib.sha1).digest()
-        sha1hmac7 = hmac.new(ms_second_half, sha1A7 + label + seed, hashlib.sha1).digest()        
+        sha1hmac1 = hmac.new(ms_second_half, sha1A1 + label + seed, sha1).digest()
+        sha1hmac2 = hmac.new(ms_second_half, sha1A2 + label + seed, sha1).digest()
+        sha1hmac3 = hmac.new(ms_second_half, sha1A3 + label + seed, sha1).digest()
+        sha1hmac4 = hmac.new(ms_second_half, sha1A4 + label + seed, sha1).digest()
+        sha1hmac5 = hmac.new(ms_second_half, sha1A5 + label + seed, sha1).digest()
+        sha1hmac6 = hmac.new(ms_second_half, sha1A6 + label + seed, sha1).digest()
+        sha1hmac7 = hmac.new(ms_second_half, sha1A7 + label + seed, sha1).digest()        
         sha1hmac = sha1hmac1+sha1hmac2+sha1hmac3+sha1hmac4+sha1hmac5+sha1hmac6+sha1hmac7        
         gexpanded_keys = xor(md5hmac, sha1hmac)
         client_mac_key = gexpanded_keys[:20]
@@ -521,19 +522,19 @@ def prepare_pms():
         #see RFC2246 7.4.9. Finished & 5. HMAC and the pseudorandom function
         client_key_exchange = '\x16\x03\x01\x01\x06\x10\x00\x01\x02\x01\00' + encpms        
         handshake_messages = client_hello[5:]+sh[5:]+cert[5:]+shd[5:]+client_key_exchange[5:]
-        sha = hashlib.sha1(handshake_messages).digest()
-        md5 = hashlib.md5(handshake_messages).digest()
+        sha_verify = sha1(handshake_messages).digest()
+        md5_verify = md5(handshake_messages).digest()
         label = 'client finished'
-        seed = md5 + sha
+        seed = md5_verify + sha_verify
         ms_first_half = ms[:24]
         ms_second_half = ms[24:]       
-        md5A1 = hmac.new(ms_first_half, label+seed, hashlib.md5).digest()
-        md5hmac1 = hmac.new(ms_first_half, md5A1 + label + seed, hashlib.md5).digest()        
-        sha1A1 = hmac.new(ms_second_half, label+seed, hashlib.sha1).digest()
-        sha1hmac1 = hmac.new(ms_second_half, sha1A1 + label + seed, hashlib.sha1).digest()
+        md5A1 = hmac.new(ms_first_half, label+seed, md5).digest()
+        md5hmac1 = hmac.new(ms_first_half, md5A1 + label + seed, md5).digest()        
+        sha1A1 = hmac.new(ms_second_half, label+seed, sha1).digest()
+        sha1hmac1 = hmac.new(ms_second_half, sha1A1 + label + seed, sha1).digest()
         verify_data = xor(md5hmac1, sha1hmac1)[:12]
         #HMAC and AES-encrypt the verify_data      
-        hmac_for_verify_data = hmac.new(client_mac_key, '\x00\x00\x00\x00\x00\x00\x00\x00' + '\x16' + '\x03\x01' + '\x00\x10' + '\x14\x00\x00\x0c' + verify_data, hashlib.sha1).digest()
+        hmac_for_verify_data = hmac.new(client_mac_key, '\x00\x00\x00\x00\x00\x00\x00\x00' + '\x16' + '\x03\x01' + '\x00\x10' + '\x14\x00\x00\x0c' + verify_data, sha1).digest()
         moo = AESModeOfOperation()
         cleartext = '\x14\x00\x00\x0c' + verify_data + hmac_for_verify_data     
         cleartext_list = bigint_to_list(ba2int(cleartext))
@@ -659,18 +660,18 @@ def stop_recording():
     #TODO stop https proxy. 
 
     #trace* files in committed dir is what auditor needs
-    tracedir = os.path.join(current_sessiondir, 'mytrace')
+    tracedir = join(current_sessiondir, 'mytrace')
     os.makedirs(tracedir)
-    zipf = zipfile.ZipFile(os.path.join(tracedir, 'mytrace.zip'), 'w')
-    commit_dir = os.path.join(current_sessiondir, 'commit')
+    zipf = zipfile.ZipFile(join(tracedir, 'mytrace.zip'), 'w')
+    commit_dir = join(current_sessiondir, 'commit')
     com_dir_files = os.listdir(commit_dir)
     for onefile in com_dir_files:
         if not onefile.startswith(('trace', 'md5hmac')): continue
-        zipf.write(os.path.join(commit_dir, onefile), onefile)
+        zipf.write(join(commit_dir, onefile), onefile)
     zipf.close()
-    try: link = sendspace_getlink(os.path.join(tracedir, 'mytrace.zip'))
+    try: link = sendspace_getlink(join(tracedir, 'mytrace.zip'))
     except:
-        try: link = pipebytes_getlink(os.path.join(tracedir, 'mytrace.zip'))
+        try: link = pipebytes_getlink(join(tracedir, 'mytrace.zip'))
         except: return 'failure'
     rv = send_link(link)
     if rv != 'failure':
@@ -682,12 +683,12 @@ def stop_recording():
 def new_audited_connection(uid): 
     global md5hmac
     
-    with  open(os.path.join(nss_patch_dir, 'der'+uid), 'rb') as fd: der = fd.read()
+    with  open(join(nss_patch_dir, 'der'+uid), 'rb') as fd: der = fd.read()
     #TODO: find out why on windows \r\n newline makes its way into der encoding
     if OS=='mswin': der = der.replace('\r\n', '\n')
-    with  open(os.path.join(nss_patch_dir, 'cr'+uid), 'rb') as fd: cr = fd.read()
-    with open(os.path.join(nss_patch_dir, 'sr'+uid), 'rb') as fd: sr = fd.read()
-    with open(os.path.join(nss_patch_dir, 'cipher_suite'+uid), 'rb') as fd: cs = fd.read()
+    with  open(join(nss_patch_dir, 'cr'+uid), 'rb') as fd: cr = fd.read()
+    with open(join(nss_patch_dir, 'sr'+uid), 'rb') as fd: sr = fd.read()
+    with open(join(nss_patch_dir, 'cipher_suite'+uid), 'rb') as fd: cs = fd.read()
     #cipher suite 2 bytes long in network byte order, we need only the first byte
     cipher_suite_first_byte = cs[:1]
     cipher_suite_int = ba2int(cipher_suite_first_byte)
@@ -728,24 +729,24 @@ def new_audited_connection(uid):
     #get my md5hmac half which auditor uses to get his half of MS
     label = 'master secret'
     seed = cr + sr    
-    md5A1 = hmac.new(PMS1, label+seed, hashlib.md5).digest()
-    md5A2 = hmac.new(PMS1, md5A1, hashlib.md5).digest()
-    md5A3 = hmac.new(PMS1, md5A2, hashlib.md5).digest()
-    md5hmac1 = hmac.new(PMS1, md5A1 + label + seed, hashlib.md5).digest()
-    md5hmac2 = hmac.new(PMS1, md5A2 + label + seed, hashlib.md5).digest()
-    md5hmac3 = hmac.new(PMS1, md5A3 + label + seed, hashlib.md5).digest()
+    md5A1 = hmac.new(PMS1, label+seed, md5).digest()
+    md5A2 = hmac.new(PMS1, md5A1, md5).digest()
+    md5A3 = hmac.new(PMS1, md5A2, md5).digest()
+    md5hmac1 = hmac.new(PMS1, md5A1 + label + seed, md5).digest()
+    md5hmac2 = hmac.new(PMS1, md5A2 + label + seed, md5).digest()
+    md5hmac3 = hmac.new(PMS1, md5A3 + label + seed, md5).digest()
     md5hmac = md5hmac1+md5hmac2+md5hmac3
     md5hmac1_for_MS = md5hmac[:24]
     md5hmac2_for_MS = md5hmac[24:48]
           
-    b64_cr_sr_hmac_n_e= base64.b64encode(cipher_suite_first_byte+cr+sr+
+    b64_cr_sr_hmac_n_e= b64encode(cipher_suite_first_byte+cr+sr+
                                              md5hmac1_for_MS+modulus_len+n+e)
     reply = send_and_recv('cr_sr_hmac_n_e:'+b64_cr_sr_hmac_n_e)    
     if reply[0] != 'success': return ('Failed to receive a reply for cr_sr_hmac_n_e:')
     if not reply[1].startswith('rsapms_hmacms_hmacek:'):
         return 'bad reply. Expected rsapms_hmacms_hmacek_grsapms_ghmac:'
     b64_rsapms_hmacms_hmacek = reply[1][len('rsapms_hmacms_hmacek:'):]
-    try: rsapms_hmacms_hmacek = base64.b64decode(b64_rsapms_hmacms_hmacek)    
+    try: rsapms_hmacms_hmacek = b64decode(b64_rsapms_hmacms_hmacek)    
     except: return ('base64 decode error in rsapms_hmacms_hmacek')
   
     RSA_PMS2 = rsapms_hmacms_hmacek[:modulus_len_int]
@@ -764,8 +765,8 @@ def new_audited_connection(uid):
                                 PMS1+('\x00'*24))) + 1, exponent_int, modulus_int)
     enc_pms_int = (RSA_PMS2_int*RSA_PMS1_int) % modulus_int 
     enc_pms = bigint_to_bytearray(enc_pms_int)
-    with open(os.path.join(nss_patch_dir, 'encpms'+uid), 'wb') as f: f.write(enc_pms)
-    with open(os.path.join(nss_patch_dir, 'encpms'+uid+'ready' ), 'wb') as f: f.close()   
+    with open(join(nss_patch_dir, 'encpms'+uid), 'wb') as f: f.write(enc_pms)
+    with open(join(nss_patch_dir, 'encpms'+uid+'ready' ), 'wb') as f: f.close()   
     #master secret key expansion
     MS2 = xor(md5hmac2_for_MS, shahmac2_for_MS)        
     #see RFC2246 6.3. Key calculation & 5. HMAC and the pseudorandom function
@@ -778,20 +779,20 @@ def new_audited_connection(uid):
     label = 'key expansion'
     seed = sr + cr
     #this is not optimized in a loop on purpose. I want people to see exactly what is going on   
-    sha1A1 = hmac.new(MS2, label+seed, hashlib.sha1).digest()
-    sha1A2 = hmac.new(MS2, sha1A1, hashlib.sha1).digest()
-    sha1A3 = hmac.new(MS2, sha1A2, hashlib.sha1).digest()
-    sha1A4 = hmac.new(MS2, sha1A3, hashlib.sha1).digest()
-    sha1A5 = hmac.new(MS2, sha1A4, hashlib.sha1).digest()
-    sha1A6 = hmac.new(MS2, sha1A5, hashlib.sha1).digest()
-    sha1A7 = hmac.new(MS2, sha1A6, hashlib.sha1).digest()   
-    sha1hmac1 = hmac.new(MS2, sha1A1 + label + seed, hashlib.sha1).digest()
-    sha1hmac2 = hmac.new(MS2, sha1A2 + label + seed, hashlib.sha1).digest()
-    sha1hmac3 = hmac.new(MS2, sha1A3 + label + seed, hashlib.sha1).digest()
-    sha1hmac4 = hmac.new(MS2, sha1A4 + label + seed, hashlib.sha1).digest()
-    sha1hmac5 = hmac.new(MS2, sha1A5 + label + seed, hashlib.sha1).digest()
-    sha1hmac6 = hmac.new(MS2, sha1A6 + label + seed, hashlib.sha1).digest()
-    sha1hmac7 = hmac.new(MS2, sha1A7 + label + seed, hashlib.sha1).digest()    
+    sha1A1 = hmac.new(MS2, label+seed, sha1).digest()
+    sha1A2 = hmac.new(MS2, sha1A1, sha1).digest()
+    sha1A3 = hmac.new(MS2, sha1A2, sha1).digest()
+    sha1A4 = hmac.new(MS2, sha1A3, sha1).digest()
+    sha1A5 = hmac.new(MS2, sha1A4, sha1).digest()
+    sha1A6 = hmac.new(MS2, sha1A5, sha1).digest()
+    sha1A7 = hmac.new(MS2, sha1A6, sha1).digest()   
+    sha1hmac1 = hmac.new(MS2, sha1A1 + label + seed, sha1).digest()
+    sha1hmac2 = hmac.new(MS2, sha1A2 + label + seed, sha1).digest()
+    sha1hmac3 = hmac.new(MS2, sha1A3 + label + seed, sha1).digest()
+    sha1hmac4 = hmac.new(MS2, sha1A4 + label + seed, sha1).digest()
+    sha1hmac5 = hmac.new(MS2, sha1A5 + label + seed, sha1).digest()
+    sha1hmac6 = hmac.new(MS2, sha1A6 + label + seed, sha1).digest()
+    sha1hmac7 = hmac.new(MS2, sha1A7 + label + seed, sha1).digest()    
     sha1hmac140bytes = sha1hmac1+sha1hmac2+sha1hmac3+sha1hmac4+sha1hmac5+sha1hmac6+sha1hmac7
     #this if/else is purely for expliciteness, we could simply xor the 140bytes with however long the md5hmac is
     if cipher_suite == 'AES256': sha1hmac_for_ek = sha1hmac140bytes[:136]
@@ -800,34 +801,34 @@ def new_audited_connection(uid):
     elif cipher_suite == 'RC4MD5': sha1hmac_for_ek = sha1hmac140bytes[:64]     
     expanded_keys =  xor(sha1hmac_for_ek, md5hmac_for_ek)     
     #server mac key == expanded_keys[20:40]( or [16:32] for RC4MD5) contains random garbage from auditor
-    with open(os.path.join(nss_patch_dir, 'expanded_keys'+uid), 'wb') as f: f.write(expanded_keys)
-    with open(os.path.join(nss_patch_dir, 'expanded_keys'+uid+'ready'), 'wb') as f: f.close()     
+    with open(join(nss_patch_dir, 'expanded_keys'+uid), 'wb') as f: f.write(expanded_keys)
+    with open(join(nss_patch_dir, 'expanded_keys'+uid+'ready'), 'wb') as f: f.close()     
     #wait for nss patch to create md5 and then sha files
     while True:
-        if not os.path.isfile(os.path.join(nss_patch_dir, 'sha'+uid)):
+        if not os.path.isfile(join(nss_patch_dir, 'sha'+uid)):
             time.sleep(0.1)
         else:
             time.sleep(0.1)
             break  
-    with open(os.path.join(nss_patch_dir, 'md5'+uid), 'rb') as f: md5_digest = f.read()
-    with open(os.path.join(nss_patch_dir, 'sha'+uid), 'rb') as f: sha_digest = f.read()
+    with open(join(nss_patch_dir, 'md5'+uid), 'rb') as f: md5_digest = f.read()
+    with open(join(nss_patch_dir, 'sha'+uid), 'rb') as f: sha_digest = f.read()
     
-    b64_verify_md5sha = base64.b64encode(md5_digest+sha_digest)
+    b64_verify_md5sha = b64encode(md5_digest+sha_digest)
     reply = send_and_recv('verify_md5sha:'+b64_verify_md5sha)
     if reply[0] != 'success': return ('Failed to receive a reply')
     if not reply[1].startswith('verify_hmac:'): return 'bad reply. Expected verify_hmac:'
     b64_verify_hmac = reply[1][len('verify_hmac:'):]
-    try: verify_hmac = base64.b64decode(b64_verify_hmac)    
+    try: verify_hmac = b64decode(b64_verify_hmac)    
     except: return ('base64 decode error')    
     #calculate verify_data for Finished message
     #see RFC2246 7.4.9. Finished & 5. HMAC and the pseudorandom function
     label = 'client finished'
     seed = md5_digest + sha_digest
-    sha1A1 = hmac.new(MS2, label+seed, hashlib.sha1).digest()
-    sha1hmac1 = hmac.new(MS2, sha1A1 + label + seed, hashlib.sha1).digest()
+    sha1A1 = hmac.new(MS2, label+seed, sha1).digest()
+    sha1hmac1 = hmac.new(MS2, sha1A1 + label + seed, sha1).digest()
     verify_data = xor(verify_hmac, sha1hmac1)[:12]   
-    with open(os.path.join(nss_patch_dir, 'verify_data'+uid), 'wb') as f: f.write(bytearray(verify_data))
-    with open(os.path.join(nss_patch_dir, 'verify_data'+uid+'ready'), 'wb') as f: f.close()
+    with open(join(nss_patch_dir, 'verify_data'+uid), 'wb') as f: f.write(bytearray(verify_data))
+    with open(join(nss_patch_dir, 'verify_data'+uid+'ready'), 'wb') as f: f.close()
     return 'success'
     
    
@@ -978,7 +979,7 @@ def start_recording():
     print ('Started HTTPS proxy on port ' + str(HTTPS_proxy_port))
     #start stcppipe making sure the port is not in use
     bWasStarted = False
-    logdir = os.path.join(current_sessiondir, 'tracelog')
+    logdir = join(current_sessiondir, 'tracelog')
     os.makedirs(logdir)
     if OS=='mswin': stcppipe_exename = 'stcppipe.exe'
     elif OS=='linux': 
@@ -990,7 +991,7 @@ def start_recording():
     for i in range(3):
         FF_proxy_port = random.randint(1025,65535)     
         stcppipe_proc = subprocess.Popen([
-            os.path.join(datadir, 'stcppipe', stcppipe_exename), '-d', logdir,
+            join(datadir, 'stcppipe', stcppipe_exename), '-d', logdir,
             '-b', '127.0.0.1', str(HTTPS_proxy_port), str(FF_proxy_port)])
         time.sleep(1)
         if stcppipe_proc.poll() != None:
@@ -1127,8 +1128,8 @@ def start_irc():
     # ----------------------------------END get the certficate for google.com and extract modulus/exponent
     modulus = bigint_to_bytearray(auditorPubKey.n)[:10]
     signed_hello = rsa.sign('client_hello', myPrvKey, 'SHA-1')
-    b64_hello = base64.b64encode(modulus+signed_hello)
-    b64_google_pubkey = base64.b64encode(google_n+google_e)
+    b64_hello = b64encode(modulus+signed_hello)
+    b64_google_pubkey = b64encode(google_n+google_e)
     #hello contains the first 10 bytes of modulus of the auditor's pubkey
     #this is how the auditor knows on IRC that we are addressing him.
     IRCsocket.settimeout(1)
@@ -1157,7 +1158,7 @@ def start_irc():
                 if not (msg[1]=='PRIVMSG' and msg[2]==channel_name and msg[3]==':'+my_nick and msg[4].startswith('server_hello:')): continue
                 b64_signed_hello = msg[4][len('server_hello:'):]
                 try:
-                    signed_hello = base64.b64decode(b64_signed_hello)
+                    signed_hello = b64decode(b64_signed_hello)
                     rsa.verify('server_hello', signed_hello, auditorPubKey)
                     #if no exception:
                     exclamaitionMarkPosition = msg[0].find('!')
@@ -1181,38 +1182,38 @@ def start_irc():
     
 def start_firefox(FF_to_backend_port):    
     if OS=='linux':
-        firefox_exepath = os.path.join(datadir, 'firefoxcopy', 'firefox')
+        firefox_exepath = join(datadir, 'firefoxcopy', 'firefox')
         if not os.path.exists(firefox_exepath): raise Exception('firefox missing')
     if OS=='mswin':
-        firefox_exepath = os.path.join(datadir, 'firefoxcopy', 'firefox.exe')
+        firefox_exepath = join(datadir, 'firefoxcopy', 'firefox.exe')
         if not os.path.exists(firefox_exepath): raise Exception('firefox missing')
     if OS=='macos':
-        firefox_exepath = os.path.join(datadir, 'firefoxcopy', 'Contents', 'MacOS', 
+        firefox_exepath = join(datadir, 'firefoxcopy', 'Contents', 'MacOS', 
                                        'TorBrowser.app', 'Contents', 'MacOS', 'firefox')
         if not os.path.exists(firefox_exepath): raise Exception('firefox missing')  
     import stat
     os.chmod(firefox_exepath,stat.S_IRWXU)
-    logs_dir = os.path.join(datadir, 'logs')
+    logs_dir = join(datadir, 'logs')
     if not os.path.isdir(logs_dir): os.makedirs(logs_dir)
-    with open(os.path.join(logs_dir, 'firefox.stdout'), 'w') as f: pass
-    with open(os.path.join(logs_dir, 'firefox.stderr'), 'w') as f: pass
-    ffprof_dir = os.path.join(datadir, 'FF-profile')
+    with open(join(logs_dir, 'firefox.stdout'), 'w') as f: pass
+    with open(join(logs_dir, 'firefox.stderr'), 'w') as f: pass
+    ffprof_dir = join(datadir, 'FF-profile')
     if not os.path.exists(ffprof_dir): os.makedirs(ffprof_dir)
     #show addon bar
-    with codecs.open(os.path.join(ffprof_dir, 'localstore.rdf'), 'w') as f:
+    with codecs.open(join(ffprof_dir, 'localstore.rdf'), 'w') as f:
         f.write('<?xml version="1.0"?>'
                 '<RDF:RDF xmlns:NC="http://home.netscape.com/NC-rdf#" xmlns:RDF="http://www.w3.org/1999/02/22-rdf-syntax-ns#">'
                 '<RDF:Description RDF:about="chrome://browser/content/browser.xul">'
                 '<NC:persist RDF:resource="chrome://browser/content/browser.xul#addon-bar" collapsed="false"/>'
                 '</RDF:Description></RDF:RDF>')        
-    bundles_dir = os.path.join(os.path.dirname(firefox_exepath), 'distribution', 'bundles')
+    bundles_dir = join(os.path.dirname(firefox_exepath), 'distribution', 'bundles')
     if not os.path.exists(bundles_dir):
         os.makedirs(bundles_dir)
-        addons = os.listdir(os.path.join(datadir, 'FF-addon'))
+        addons = os.listdir(join(datadir, 'FF-addon'))
         for oneaddon in addons:
-            shutil.copytree(os.path.join(datadir, 'FF-addon', oneaddon), 
-                            os.path.join(bundles_dir, oneaddon))
-    with open(os.path.join(ffprof_dir, 'prefs.js'), 'w') as f:
+            shutil.copytree(join(datadir, 'FF-addon', oneaddon), 
+                            join(bundles_dir, oneaddon))
+    with open(join(ffprof_dir, 'prefs.js'), 'w') as f:
         f.writelines([
         'user_pref("browser.startup.homepage", "chrome://tlsnotary/content/auditee.html");\n',
         'user_pref("browser.startup.homepage_override.mstone", "ignore");\n', #prevents welcome page
@@ -1238,12 +1239,12 @@ def start_firefox(FF_to_backend_port):
     os.putenv('FF_to_backend_port', str(FF_to_backend_port))
     os.putenv('FF_first_window', 'true')   #prevents addon confusion when websites open multiple FF windows
     #keep trailing slash to tell the patch which path delimiter to use (nix vs win)
-    os.putenv('NSS_PATCH_DIR', os.path.join(nss_patch_dir, ''))
+    os.putenv('NSS_PATCH_DIR', join(nss_patch_dir, ''))
     
     print ('Starting a new instance of Firefox with tlsnotary profile',end='\r\n')
     try: ff_proc = subprocess.Popen([firefox_exepath,'-no-remote', '-profile', ffprof_dir],
-                                   stdout=open(os.path.join(logs_dir, 'firefox.stdout'),'w'), 
-                                   stderr=open(os.path.join(logs_dir, 'firefox.stderr'), 'w'))
+                                   stdout=open(join(logs_dir, 'firefox.stdout'),'w'), 
+                                   stderr=open(join(logs_dir, 'firefox.stderr'), 'w'))
     except Exception,e: return ('Error starting Firefox: %s' %e,)
     return ('success', ff_proc)
 
@@ -1300,49 +1301,49 @@ def quit(sig=0, frame=0):
  
 def first_run_check():
     #On first run, extract rsa,pyasn1,firefox and check hashes
-    rsa_dir = os.path.join(datadir, 'python', 'rsa-3.1.4')
+    rsa_dir = join(datadir, 'python', 'rsa-3.1.4')
     if not os.path.exists(rsa_dir):
         print ('Extracting rsa-3.1.4.tar.gz...')
-        with open(os.path.join(datadir, 'python', 'rsa-3.1.4.tar.gz'), 'rb') as f: tarfile_data = f.read()
+        with open(join(datadir, 'python', 'rsa-3.1.4.tar.gz'), 'rb') as f: tarfile_data = f.read()
         #for md5 hash, see https://pypi.python.org/pypi/rsa/3.1.4
-        if hashlib.md5(tarfile_data).hexdigest() != 'b6b1c80e1931d4eba8538fd5d4de1355':
+        if md5(tarfile_data).hexdigest() != 'b6b1c80e1931d4eba8538fd5d4de1355':
             raise Exception ('Wrong hash')
-        os.chdir(os.path.join(datadir, 'python'))
-        tar = tarfile.open(os.path.join(datadir, 'python', 'rsa-3.1.4.tar.gz'), 'r:gz')
+        os.chdir(join(datadir, 'python'))
+        tar = tarfile.open(join(datadir, 'python', 'rsa-3.1.4.tar.gz'), 'r:gz')
         tar.extractall()
         tar.close()
       
-    pyasn1_dir = os.path.join(datadir, 'python', 'pyasn1-0.1.7')
+    pyasn1_dir = join(datadir, 'python', 'pyasn1-0.1.7')
     if not os.path.exists(pyasn1_dir):
         print ('Extracting pyasn1-0.1.7.tar.gz...')
-        with open(os.path.join(datadir, 'python', 'pyasn1-0.1.7.tar.gz'), 'rb') as f: tarfile_data = f.read()
+        with open(join(datadir, 'python', 'pyasn1-0.1.7.tar.gz'), 'rb') as f: tarfile_data = f.read()
         #for md5 hash, see https://pypi.python.org/pypi/pyasn1/0.1.7
-        if hashlib.md5(tarfile_data).hexdigest() != '2cbd80fcd4c7b1c82180d3d76fee18c8':
+        if md5(tarfile_data).hexdigest() != '2cbd80fcd4c7b1c82180d3d76fee18c8':
             raise Exception ('Wrong hash')
-        os.chdir(os.path.join(datadir, 'python'))
-        tar = tarfile.open(os.path.join(datadir, 'python', 'pyasn1-0.1.7.tar.gz'), 'r:gz')
+        os.chdir(join(datadir, 'python'))
+        tar = tarfile.open(join(datadir, 'python', 'pyasn1-0.1.7.tar.gz'), 'r:gz')
         tar.extractall()
         tar.close()
         
-    requests_dir = os.path.join(datadir, 'python', 'requests-2.3.0')
+    requests_dir = join(datadir, 'python', 'requests-2.3.0')
     if not os.path.exists(requests_dir):
         print ('Extracting requests-2.3.0.tar.gz...')
-        with open(os.path.join(datadir, 'python', 'requests-2.3.0.tar.gz'), 'rb') as f: tarfile_data = f.read()
+        with open(join(datadir, 'python', 'requests-2.3.0.tar.gz'), 'rb') as f: tarfile_data = f.read()
         #for md5 hash, see https://pypi.python.org/pypi/requests/2.3.0
-        if hashlib.md5(tarfile_data).hexdigest() != '7449ffdc8ec9ac37bbcd286003c80f00':
+        if md5(tarfile_data).hexdigest() != '7449ffdc8ec9ac37bbcd286003c80f00':
             raise Exception ('Wrong hash')
-        os.chdir(os.path.join(datadir, 'python'))
-        tar = tarfile.open(os.path.join(datadir, 'python', 'requests-2.3.0.tar.gz'), 'r:gz')
+        os.chdir(join(datadir, 'python'))
+        tar = tarfile.open(join(datadir, 'python', 'requests-2.3.0.tar.gz'), 'r:gz')
         tar.extractall()
         tar.close()    
     
-    if not os.path.exists(os.path.join(datadir, 'firefoxcopy')):
+    if not os.path.exists(join(datadir, 'firefoxcopy')):
         print ('Extracting Firefox ...')
         if OS=='linux':
             #github doesn't allow to upload .tar.xz, so we add extension now
             zipname = 'firefox-linux'
             zipname += '64' if platform.machine() == 'x86_64' else '32'
-            fullpath = os.path.join(installdir, zipname)
+            fullpath = join(installdir, zipname)
             if os.path.exists(fullpath): 
                 os.rename(fullpath, fullpath + '.tar.xz')
             elif not os.path.exists(fullpath + '.tar.xz'):
@@ -1355,28 +1356,28 @@ def first_run_check():
                 raise Exception ('Could not extract ' + browser_zip_path +
                                  '.Make sure xz is installed on your system')
             #The result of the extraction will be firefox-linux*.tar
-            tarball_path = os.path.join(installdir, 'firefox-linux')
+            tarball_path = join(installdir, 'firefox-linux')
             tarball_path += '64.tar' if platform.machine() == 'x86_64' else '32.tar'
             m_tarfile = tarfile.open(tarball_path)
             #tarball extracts into current working dir
-            os.makedirs(os.path.join(datadir, 'tmpextract'))
-            os.chdir(os.path.join(datadir, 'tmpextract'))
+            os.makedirs(join(datadir, 'tmpextract'))
+            os.chdir(join(datadir, 'tmpextract'))
             m_tarfile.extractall()
             m_tarfile.close()
             os.remove(tarball_path)
             #change working dir away from the deleted one, otherwise FF will not start
             os.chdir(datadir)
-            source_dir = os.path.join(datadir, 'tmpextract', 'tor-browser_en-US', 'Browser')
-            shutil.copytree(source_dir, os.path.join(datadir, 'firefoxcopy'))
-            shutil.rmtree(os.path.join(datadir, 'tmpextract'))
+            source_dir = join(datadir, 'tmpextract', 'tor-browser_en-US', 'Browser')
+            shutil.copytree(source_dir, join(datadir, 'firefoxcopy'))
+            shutil.rmtree(join(datadir, 'tmpextract'))
             
         if OS=='mswin':
             exename = 'firefox-windows'
-            installer_exe_path = os.path.join(installdir, exename)
+            installer_exe_path = join(installdir, exename)
             if not os.path.exists(installer_exe_path):
                 raise Exception ('Couldn\'t find '+exename+'  in '+installdir)
             os.chdir(installdir) #installer silently extract into the current working dir XXX: do we need this line?
-            installer_proc = subprocess.Popen(installer_exe_path + ' /S' + ' /D='+os.path.join(datadir, 'tmpextract')) #silently extract into destination
+            installer_proc = subprocess.Popen(installer_exe_path + ' /S' + ' /D='+join(datadir, 'tmpextract')) #silently extract into destination
             bInstallerFinished = False
             for i in range(30): #give the installer 30 secs to extract the files and exit
                 time.sleep(1)                
@@ -1387,31 +1388,31 @@ def first_run_check():
             if not bInstallerFinished:
                 raise Exception ('Installer took too long to extract files')
             #Copy the extracted files and delete them to keep datadir organized
-            source_dir = os.path.join(datadir, 'tmpextract', 'Browser')
-            shutil.copytree(source_dir, os.path.join(datadir, 'firefoxcopy'))
-            shutil.rmtree(os.path.join(datadir, 'tmpextract'))
+            source_dir = join(datadir, 'tmpextract', 'Browser')
+            shutil.copytree(source_dir, join(datadir, 'firefoxcopy'))
+            shutil.rmtree(join(datadir, 'tmpextract'))
                
         if OS=='macos':
             zipname = 'firefox-macosx'
-            if os.path.exists(os.path.join(installdir, zipname)):
-                browser_zip_path = os.path.join(installdir, zipname)
+            if os.path.exists(join(installdir, zipname)):
+                browser_zip_path = join(installdir, zipname)
             else:
                 raise Exception ('Couldn\'t find '+zipname+' in '+installdir)
             m_zipfile = zipfile.ZipFile(browser_zip_path, 'r')
-            m_zipfile.extractall(os.path.join(datadir, 'tmpextract'))
+            m_zipfile.extractall(join(datadir, 'tmpextract'))
             #files get extracted in a root dir Browser
-            source_dir = os.path.join(datadir, 'tmpextract', 'TorBrowserBundle_en-US.app')
-            shutil.copytree(source_dir, os.path.join(datadir, 'firefoxcopy'))
-            shutil.rmtree(os.path.join(datadir, 'tmpextract'))    
+            source_dir = join(datadir, 'tmpextract', 'TorBrowserBundle_en-US.app')
+            shutil.copytree(source_dir, join(datadir, 'firefoxcopy'))
+            shutil.rmtree(join(datadir, 'tmpextract'))    
     
     
     
 if __name__ == "__main__":
     first_run_check()
-    sys.path.append(os.path.join(datadir, 'python', 'rsa-3.1.4'))
-    sys.path.append(os.path.join(datadir, 'python', 'pyasn1-0.1.7'))
-    sys.path.append(os.path.join(datadir, 'python', 'slowaes'))
-    sys.path.append(os.path.join(datadir, 'python', 'requests-2.3.0'))    
+    sys.path.append(join(datadir, 'python', 'rsa-3.1.4'))
+    sys.path.append(join(datadir, 'python', 'pyasn1-0.1.7'))
+    sys.path.append(join(datadir, 'python', 'slowaes'))
+    sys.path.append(join(datadir, 'python', 'requests-2.3.0'))    
     import rsa
     import pyasn1
     import requests
@@ -1421,9 +1422,9 @@ if __name__ == "__main__":
     
     if OS=='linux': tshark_exepath = 'tshark'
     elif OS=='mswin':
-        tshark64 = os.path.join(os.getenv('ProgramW6432'), 'Wireshark',  'tshark.exe' )
+        tshark64 = join(os.getenv('ProgramW6432'), 'Wireshark',  'tshark.exe' )
         if os.path.isfile(tshark64): tshark_exepath = tshark64
-        tshark32 = os.path.join(os.getenv('ProgramFiles(x86)'), 'Wireshark',  'tshark.exe' )
+        tshark32 = join(os.getenv('ProgramFiles(x86)'), 'Wireshark',  'tshark.exe' )
         if os.path.isfile(tshark32): tshark_exepath = tshark32
         if tshark_exepath == '' : raise Exception(
             'Failed to find wireshark in your Program Files', end='\r\n')
