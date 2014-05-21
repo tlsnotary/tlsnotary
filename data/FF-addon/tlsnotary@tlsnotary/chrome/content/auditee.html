@@ -49,7 +49,7 @@
 
 <script>
 
-var port = Components.classes["@mozilla.org/process/environment;1"].getService(Components.interfaces.nsIEnvironment).get("FF_to_backend_port");	
+var port = Components.classes["@mozilla.org/process/environment;1"].getService(Components.interfaces.nsIEnvironment).get("FF_to_backend_port");
 var bGetRecentKeysResponded = false;
 var bImportAuditorPubkeyResponded = false;
 var bStartIRCResponded = false;
@@ -58,6 +58,15 @@ var reqGetRecentKeys;
 var reqImportAuditorPubkey;
 var reqStartIRC;
 var reqNewKeypair;
+
+
+function setError(errortext){
+	Components.classes["@mozilla.org/process/environment;1"].getService(Components.interfaces.nsIEnvironment).set("TLSNOTARY_ERROR", errortext);	
+	//just in case, make sure the value has been set, because alert that follows will freeze the code execution
+	var check_value = Components.classes["@mozilla.org/process/environment;1"].getService(Components.interfaces.nsIEnvironment).get("TLSNOTARY_ERROR");
+	if (errortext != check_value){ alert("Internal error - could not set the error text"); return;}
+	alert(errortext);
+}
 
 
 function inputReceived(){
@@ -84,12 +93,7 @@ function homepageLoaded () {
 
 function responseGetRecentKeys(iteration){
     if (typeof iteration == "number"){
-        if (iteration > 5){
-			var help = document.getElementById("help");
-			help.value = "ERROR responseGetRecentKeys timed out";
-            alert("responseGetRecentKeys timed out");
-            return;
-        }
+        if (iteration > 5){setError("ERROR responseGetRecentKeys timed out");return;}
         if (!bGetRecentKeysResponded){ setTimeout(responseGetRecentKeys, 1000, ++iteration); }
         return;
     }
@@ -98,16 +102,11 @@ function responseGetRecentKeys(iteration){
     var query = reqGetRecentKeys.getResponseHeader("response");
     var mypubkey = reqGetRecentKeys.getResponseHeader("mypubkey");
     var auditorpubkey = reqGetRecentKeys.getResponseHeader("auditorpubkey");
-    if (query != "get_recent_keys"){
-		var help = document.getElementById("help");
-		help.value = "ERROR Internal error. Wrong response header";
-        alert("Internal error. Wrong response header: "+query);
-        return;
-    }
+    if (query != "get_recent_keys"){setError("ERROR Internal error. Wrong response header");return;}
 	//else correct response
 	var textarea_mykey = document.getElementById("textarea_mykey");
-    textarea_mykey.value = mypubkey;
 	var textarea_auditorkey = document.getElementById("textarea_auditorkey");
+    textarea_mykey.value = mypubkey;
     textarea_auditorkey.value = auditorpubkey;
 	//we get an empty pubkey on the very first run, request a new pubkey
 	if (mypubkey == null){
@@ -122,12 +121,7 @@ function startPressed(){
 	//provided during the get_recent_keys() call. Makes life simpler.
 	var textarea_auditorkey = document.getElementById("textarea_auditorkey");
     var auditorpubkey = textarea_auditorkey.value;
-	if (auditorpubkey.length != 172){
-		var help = document.getElementById("help");
-		help.value = "ERROR Wrong auditee pubkey length. Expected 172 characters";
-		alert("Wrong auditee pubkey length. Expected 172 characters");
-		return;
-	}
+	if (auditorpubkey.length != 172){setError("ERROR Wrong auditee pubkey length. Expected 172 characters");return;}
 	reqImportAuditorPubkey = new XMLHttpRequest();
     reqImportAuditorPubkey.onload = responseImportAuditorPubkey;
     reqImportAuditorPubkey.open("HEAD", "http://127.0.0.1:"+port+"/import_auditor_pubkey?pubkey="+auditorpubkey, true);
@@ -138,12 +132,7 @@ function startPressed(){
 
 function responseImportAuditorPubkey(iteration){
     if (typeof iteration == "number"){
-        if (iteration > 5){
-			var help = document.getElementById("help");
-			help.value = "ERROR responseImportAuditorPubkey timed out";
-            alert("responseImportAuditorPubkey timed out");
-            return;
-        }
+        if (iteration > 5){setError("ERROR responseImportAuditorPubkey timed out");return;}
         if (!bImportAuditorPubkeyResponded) setTimeout(responseImportAuditorPubkey, 1000, ++iteration)
         return;
     }
@@ -151,27 +140,15 @@ function responseImportAuditorPubkey(iteration){
 	bImportAuditorPubkeyResponded = true;
     var query = reqImportAuditorPubkey.getResponseHeader("response");
     var status = reqImportAuditorPubkey.getResponseHeader("status");
-    if (query != "import_auditor_pubkey"){
-		var help = document.getElementById("help");
-		help.value = "ERROR Internal error. Wrong response header";
-        alert("Internal error. Wrong response header: "+query);
-        return;
-    }
-	if (status != "success"){
-		var help = document.getElementById("help");
-		help.value = "ERROR Received an error message";
-		alert ("Received an error message: " + status);
-		return;
-	}
+    if (query != "import_auditor_pubkey"){setError("ERROR Internal error. Wrong response header");return;}
+	if (status != "success"){setError("ERROR Received an error message");return;}
 	//else successful response
 	startIRC();
 }
 
 function progressBar(){
 	var progress_bar = document.getElementById("progress_bar");
-	if (progress_bar.value >= 100){
-		return;
-	} 
+	if (progress_bar.value >= 100){return;} 
 	progress_bar.value += 1;
 	setTimeout(progressBar, 150);
 }
@@ -179,12 +156,11 @@ function progressBar(){
 function startIRC(){
 	setTimeout(progressBar, 1);
 	var button_start_button = document.getElementById("start_button");
-	button_start_button.setAttribute("disabled", "true");
 	var button_new_keypair = document.getElementById("new_keypair");
-	button_new_keypair.setAttribute("disabled", "true");
 	var progress_bar = document.getElementById("progress_bar");
+	button_start_button.setAttribute("disabled", "true");
+	button_new_keypair.setAttribute("disabled", "true");
 	progress_bar.setAttribute("disabled", "true");
-	var help = document.getElementById("help");
 
 	reqStartIRC = new XMLHttpRequest();
     reqStartIRC.onload = responseStartIRC;
@@ -195,12 +171,7 @@ function startIRC(){
 
 function responseStartIRC(iteration){
     if (typeof iteration == "number"){
-        if (iteration > 20){
-			var help = document.getElementById("help");
-			help.value = "ERROR responseStartIRC timed out";
-            alert("responseStartIRC timed out")
-            return
-        }
+        if (iteration > 20){setError("ERROR responseStartIRC timed out");return;}
         if (!bStartIRCResponded) setTimeout(responseStartIRC, 1000, ++iteration)
         return;
     }
@@ -208,18 +179,8 @@ function responseStartIRC(iteration){
 	bStartIRCResponded = true;
     var query = reqStartIRC.getResponseHeader("response");
     var status = reqStartIRC.getResponseHeader("status");
-    if (query != "start_irc"){
-		var help = document.getElementById("help");
-		help.value = "ERROR Internal error. Wrong response header";
-        alert("Internal error. Wrong response header: "+query);
-        return;
-    }
-	if (status != "success"){
-		var help = document.getElementById("help");
-		help.value = "ERROR Received an error message";
-		alert ("Received an error message: " + status);
-		return;
-	}
+    if (query != "start_irc"){setError("ERROR Internal error. Wrong response header" + query);return;}
+	if (status != "success"){setError("ERROR Received an error message");return;}
 	//else successful response
 	var progress_bar = document.getElementById("progress_bar");
 	progress_bar.value = 100;
@@ -241,12 +202,7 @@ function newKeypair() {
 
 function responseNewKeypair(iteration){
     if (typeof iteration == "number"){
-        if (iteration > 5){
-			var help = document.getElementById("help");
-			help.value = "ERROR responseNewKeypair timed out";
-            alert("responseNewKeypair timed out");
-            return;
-        }
+        if (iteration > 5){setError("ERROR responseNewKeypair timed out");return;}
         if (!bNewKeypairResponded) setTimeout(responseNewKeypair, 1000, ++iteration)
         return;
     }
@@ -255,18 +211,8 @@ function responseNewKeypair(iteration){
     var query = reqNewKeypair.getResponseHeader("response");
     var status = reqNewKeypair.getResponseHeader("status");
     var mypubkey = reqNewKeypair.getResponseHeader("pubkey");
-    if (query != "new_keypair"){
-		var help = document.getElementById("help");
-		help.value = "ERROR responseNewKeypair timed out";
-        alert("Internal error. Wrong response header: "+query);
-        return;
-    }
-	if (status != "success"){
-		var help = document.getElementById("help");
-		help.value = "ERROR Received an error message";
-		alert ("Received an error message: " + status);
-		return;
-	}
+    if (query != "new_keypair"){setError("ERROR responseNewKeypair timed out");return;}
+	if (status != "success"){setError("ERROR Received an error message" + status);return;}
 	//else successful response
 	var textarea_mykey = document.getElementById("textarea_mykey");
     textarea_mykey.value = mypubkey;
