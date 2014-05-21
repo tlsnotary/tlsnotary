@@ -78,6 +78,10 @@ def bigint_to_list(bigint):
 def xor(a,b):
     return bytearray([ord(a) ^ ord(b) for a,b in zip(a,b)])
 
+#convert bytearray into int
+def ba2int(byte_array):
+    return int(str(byte_array).encode('hex'), 16)
+
 #a thread which returns a value. This is achieved by passing self as the first argument to a target function
 #the target_function(parentthread, arg1, arg2) can then set, e.g parentthread.retval
 class ThreadWithRetval(threading.Thread):
@@ -90,7 +94,7 @@ def import_auditor_pubkey(auditor_pubkey_b64modulus):
     global auditorPubKey                      
     try:
         auditor_pubkey_modulus = base64.b64decode(auditor_pubkey_b64modulus)
-        auditor_pubkey_modulus_int = int(auditor_pubkey_modulus.encode('hex'),16)              
+        auditor_pubkey_modulus_int =  ba2int(auditor_pubkey_modulus)
         auditorPubKey = rsa.PublicKey(auditor_pubkey_modulus_int, 65537)
         auditor_pubkey_pem = auditorPubKey.save_pkcs1()
         with open(os.path.join(current_sessiondir, 'auditorpubkey'), 'wb') as f: f.write(auditor_pubkey_pem)
@@ -509,8 +513,8 @@ def prepare_pms():
         client_encryption_key = gexpanded_keys[40:72]
         client_iv = gexpanded_keys[104:120]
         #RSA-encrypt my half of PMS with google's pubkey
-        RSA_PMS1_int = pow( int(('\x02'+('\x01'*156)+'\x00'+pms1+('\x00'*24)).encode('hex'), 16) + 1, google_exponent, google_modulus)
-        RSA_PMS2_int = int(rsapms2.encode('hex'), 16)
+        RSA_PMS1_int = pow( ba2int('\x02'+('\x01'*156)+'\x00'+pms1+('\x00'*24)) + 1, google_exponent, google_modulus)
+        RSA_PMS2_int = ba2int(rsapms2)
         enc_pms_int = (RSA_PMS1_int*RSA_PMS2_int) % google_modulus 
         encpms = bigint_to_bytearray(enc_pms_int)    
         #calculate verify_data for Finished message
@@ -532,9 +536,9 @@ def prepare_pms():
         hmac_for_verify_data = hmac.new(client_mac_key, '\x00\x00\x00\x00\x00\x00\x00\x00' + '\x16' + '\x03\x01' + '\x00\x10' + '\x14\x00\x00\x0c' + verify_data, hashlib.sha1).digest()
         moo = AESModeOfOperation()
         cleartext = '\x14\x00\x00\x0c' + verify_data + hmac_for_verify_data     
-        cleartext_list = bigint_to_list(int(str(cleartext).encode('hex'),16))
-        client_encryption_key_list =  bigint_to_list(int(str(client_encryption_key).encode('hex'),16))
-        client_iv_list =  bigint_to_list(int(str(client_iv).encode('hex'),16))    
+        cleartext_list = bigint_to_list(ba2int(cleartext))
+        client_encryption_key_list =  bigint_to_list(ba2int(client_encryption_key))
+        client_iv_list =  bigint_to_list(ba2int(client_iv))
         padded_cleartext = cleartext + ('\x0b' * 12) #this is TLS CBC padding, NOT PKCS7
         try:
             mode, orig_len, encrypted_verify_data_and_hmac_for_verify_data = moo.encrypt( str(padded_cleartext), moo.modeOfOperation['CBC'], client_encryption_key_list, moo.aes.keySize['SIZE_256'], client_iv_list)
@@ -686,7 +690,7 @@ def new_audited_connection(uid):
     with open(os.path.join(nss_patch_dir, 'cipher_suite'+uid), 'rb') as fd: cs = fd.read()
     #cipher suite 2 bytes long in network byte order, we need only the first byte
     cipher_suite_first_byte = cs[:1]
-    cipher_suite_int = int(cipher_suite_first_byte.encode('hex'), 16)
+    cipher_suite_int = ba2int(cipher_suite_first_byte)
     if cipher_suite_int == 4: cipher_suite = 'RC4MD5'
     elif cipher_suite_int == 5: cipher_suite = 'RC4SHA'
     elif cipher_suite_int == 47: cipher_suite = 'AES128'
@@ -745,7 +749,7 @@ def new_audited_connection(uid):
     except: return ('base64 decode error in rsapms_hmacms_hmacek')
   
     RSA_PMS2 = rsapms_hmacms_hmacek[:modulus_len_int]
-    RSA_PMS2_int = int(RSA_PMS2.encode('hex'), 16)
+    RSA_PMS2_int = ba2int(RSA_PMS2)
     shahmac2_for_MS = rsapms_hmacms_hmacek[modulus_len_int:modulus_len_int+24]
     if cipher_suite == 'AES256': 
         md5hmac_for_ek = rsapms_hmacms_hmacek[modulus_len_int+24:modulus_len_int+24+136]
@@ -756,8 +760,8 @@ def new_audited_connection(uid):
     elif cipher_suite == 'RC4MD5': 
         md5hmac_for_ek = rsapms_hmacms_hmacek[modulus_len_int+24:modulus_len_int+24+64]       
     #RSA encryption without padding: ciphertext = plaintext^e mod n
-    RSA_PMS1_int = pow( int(('\x02'+('\x01'*(modulus_len_int - 100))+
-                                       '\x00'+PMS1+('\x00'*24)).encode('hex'), 16) + 1, exponent_int, modulus_int)
+    RSA_PMS1_int = pow(ba2int(('\x02'+('\x01'*(modulus_len_int - 100))+'\x00'+
+                                PMS1+('\x00'*24))) + 1, exponent_int, modulus_int)
     enc_pms_int = (RSA_PMS2_int*RSA_PMS1_int) % modulus_int 
     enc_pms = bigint_to_bytearray(enc_pms_int)
     with open(os.path.join(nss_patch_dir, 'encpms'+uid), 'wb') as f: f.write(enc_pms)
@@ -1092,7 +1096,7 @@ def start_irc():
     cert_start_position = cert_match.start()
     certificate = serverhello_certificate_serverhellodone[cert_start_position : -len(serverhellodone)]
     #extract modulus and exponent from the certificate
-    cert_len = int(certificate[12:15].encode('hex'),16)
+    cert_len = ba2int(certificate[12:15])
     google_cert = certificate[15:15+cert_len]
     try:       
         rv  = decoder.decode(google_cert, asn1Spec=univ.Sequence())
