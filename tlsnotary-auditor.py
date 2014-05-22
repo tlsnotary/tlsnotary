@@ -23,6 +23,8 @@ import time
 import random
 import urllib2
 import zipfile
+try: import wingdbstub
+except: pass
 
 installdir = os.path.dirname(os.path.realpath(__file__))
 datadir = os.path.join(installdir, 'auditor')

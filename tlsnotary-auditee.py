@@ -18,12 +18,14 @@ import shutil
 import signal
 import SimpleHTTPServer
 import socket
-import subprocess
+from subprocess import Popen, check_output
 import sys
 import tarfile
 import threading
 import time
 import zipfile
+try: import wingdbstub
+except: pass
 
 installdir = os.path.dirname(os.path.realpath(__file__))
 datadir = join(installdir, 'data')
@@ -105,13 +107,13 @@ def import_auditor_pubkey(auditor_pubkey_b64modulus):
         return ('success')
     except Exception,e:
         print (e)
-        return ('failue')
+        return ('failure')
 
 
 def newkeys():
     global myPrvKey                
-    #Usually the auditee would reuse a keypair from previous session
-    #but for privacy reason the auditee may generate a new key
+    #Usually the auditee would reuse a keypair from the previous session
+    #but for privacy reasons the auditee may want to generate a new key
     pubkey, privkey = rsa.newkeys(1024)
     myPrvKey = privkey
     my_pem_pubkey = pubkey.save_pkcs1()
@@ -120,7 +122,7 @@ def newkeys():
     with open(join(current_sessiondir, 'mypubkey'), 'wb') as f: f.write(my_pem_pubkey)
     #also save the keys as recent, so that they could be reused in the next session
     if not os.path.exists(join(datadir, 'recentkeys')): os.makedirs(join(datadir, 'recentkeys'))
-    with open(join(datadir, 'recentkeys' , 'myprivkey'), 'wb') as f: f.write(my_pem_privkey)
+    with open(join(datadir, 'recentkeys', 'myprivkey'), 'wb') as f: f.write(my_pem_privkey)
     with open(join(datadir, 'recentkeys', 'mypubkey'), 'wb') as f: f.write(my_pem_pubkey)
     pubkey_export = b64encode(bigint_to_bytearray(pubkey.n))
     return pubkey_export
@@ -238,13 +240,13 @@ class HandlerClass(SimpleHTTPServer.SimpleHTTPRequestHandler):
             return                  
         #----------------------------------------------------------------------#
         if self.path.startswith('/selftest'):
-            output = subprocess.check_output([sys.executable, join(installdir, 'tlsnotary-auditor.py'), 'daemon', 'genkey'])
+            output = check_output([sys.executable, join(installdir, 'tlsnotary-auditor.py'), 'daemon', 'genkey'])
             auditor_key = output.split()[-1]
             import_auditor_pubkey(auditor_key)
             print ('Imported auditor key')
             print (auditor_key)
             my_newkey = newkeys()
-            proc = subprocess.Popen([sys.executable, join(installdir, 'tlsnotary-auditor.py'), 'daemon', 'hiskey='+my_newkey])
+            proc = Popen([sys.executable, join(installdir, 'tlsnotary-auditor.py'), 'daemon', 'hiskey='+my_newkey])
             global selftest_pid
             selftest_pid = proc.pid
             self.respond({'response':'selftest', 'status':'success'})
@@ -297,7 +299,7 @@ def get_html_paths():
     skl_fd.write('CLIENT_RANDOM ' + cr_hexl + ' ' + ms_hexl + '\n')
     skl_fd.close()
     #use tshark to extract HTML
-    try: output = subprocess.check_output([tshark_exepath, '-r', tracecopy_path,
+    try: output = check_output([tshark_exepath, '-r', tracecopy_path,
                                           '-Y', 'ssl and http.content_type contains html',
                                           '-o', 'http.ssl.port:1025-65535', 
                                           '-o', 'ssl.keylog_file:'+ sslkeylog,
@@ -305,7 +307,7 @@ def get_html_paths():
                                           '-o', 'ssl.debug_file:' + ssldebuglog,
                                           '-x'])
     except: #maybe this is an old tshark version, change -Y to -R
-        try: output = subprocess.check_output([tshark_exepath, '-r', tracecopy_path,
+        try: output = check_output([tshark_exepath, '-r', tracecopy_path,
                                               '-R', 'ssl and http.content_type contains html', 
                                                '-o', 'http.ssl.port:1025-65535', 
                                                '-o', 'ssl.keylog_file:'+ sslkeylog,
@@ -816,7 +818,7 @@ def new_audited_connection(uid):
     b64_verify_md5sha = b64encode(md5_digest+sha_digest)
     reply = send_and_recv('verify_md5sha:'+b64_verify_md5sha)
     if reply[0] != 'success': return ('Failed to receive a reply')
-    if not reply[1].startswith('verify_hmac:'): return 'bad reply. Expected verify_hmac:'
+    if not reply[1].startswith('verify_hmac:'): return ('bad reply. Expected verify_hmac:')
     b64_verify_hmac = reply[1][len('verify_hmac:'):]
     try: verify_hmac = b64decode(b64_verify_hmac)    
     except: return ('base64 decode error')    
@@ -990,9 +992,8 @@ def start_recording():
         else: stcppipe_exename = 'stcppipe_mac'                
     for i in range(3):
         FF_proxy_port = random.randint(1025,65535)     
-        stcppipe_proc = subprocess.Popen([
-            join(datadir, 'stcppipe', stcppipe_exename), '-d', logdir,
-            '-b', '127.0.0.1', str(HTTPS_proxy_port), str(FF_proxy_port)])
+        stcppipe_proc = Popen([join(datadir, 'stcppipe', stcppipe_exename),'-d',
+                               logdir, '-b', '127.0.0.1', str(HTTPS_proxy_port), str(FF_proxy_port)])
         time.sleep(1)
         if stcppipe_proc.poll() != None:
             print ('Maybe the port was in use, trying again with a new port')
@@ -1242,7 +1243,7 @@ def start_firefox(FF_to_backend_port):
     os.putenv('NSS_PATCH_DIR', join(nss_patch_dir, ''))
     
     print ('Starting a new instance of Firefox with tlsnotary profile',end='\r\n')
-    try: ff_proc = subprocess.Popen([firefox_exepath,'-no-remote', '-profile', ffprof_dir],
+    try: ff_proc = Popen([firefox_exepath,'-no-remote', '-profile', ffprof_dir],
                                    stdout=open(join(logs_dir, 'firefox.stdout'),'w'), 
                                    stderr=open(join(logs_dir, 'firefox.stderr'), 'w'))
     except Exception,e: return ('Error starting Firefox: %s' %e,)
@@ -1351,7 +1352,7 @@ def first_run_check():
                                  zipname+'.tar.xz in '+installdir)
             browser_zip_path = fullpath + '.tar.xz'              
             try:
-                subprocess.check_output(['xz', '-d', '-k', browser_zip_path]) #extract and keep the sourcefile
+                check_output(['xz', '-d', '-k', browser_zip_path]) #extract and keep the sourcefile
             except:
                 raise Exception ('Could not extract ' + browser_zip_path +
                                  '.Make sure xz is installed on your system')
@@ -1377,7 +1378,7 @@ def first_run_check():
             if not os.path.exists(installer_exe_path):
                 raise Exception ('Couldn\'t find '+exename+'  in '+installdir)
             os.chdir(installdir) #installer silently extract into the current working dir XXX: do we need this line?
-            installer_proc = subprocess.Popen(installer_exe_path + ' /S' + ' /D='+join(datadir, 'tmpextract')) #silently extract into destination
+            installer_proc = Popen(installer_exe_path + ' /S' + ' /D='+join(datadir, 'tmpextract')) #silently extract into destination
             bInstallerFinished = False
             for i in range(30): #give the installer 30 secs to extract the files and exit
                 time.sleep(1)                
