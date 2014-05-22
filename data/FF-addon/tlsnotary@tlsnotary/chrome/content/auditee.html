@@ -8,45 +8,72 @@
 
 <body onload="homepageLoaded()">
 
-<div class="hero-unit">
-<p  style="margin-left:0;margin-bottom:0;margin-top:0;">In order to be audited please do the following.
-</p>
-<ol>
-<li>Give the auditor your key</li>
-<li>Paste the Auditor's key</li>
-<li>Wait for the auditor to inform you that they are ready to audit you</li>
-<li>Press "Connect to IRC"</li>
-</ol>
-
-<table>
-<tr>
-<td>
-<button id="start_button" autofocus="autofocus" class="btn btn-primary btn-lg" style="width:100%;" onclick="startPressed()">Connect to IRC</button>
-<button id="selftest_button" autofocus="autofocus" class="btn btn-primary btn-lg" style="width:100%;" onclick="selfTest()">Self test start</button>
-<button id="selftest_button" autofocus="autofocus" class="btn btn-primary btn-lg" style="width:100%;" onclick="startIRC()">Self test startRC</button>
-</td>
-</tr>
-<tr>
-<td>
-<progress id="progress_bar" value="0" max="100"></progress>
-</td>
-</tr>
-</table>
-
-
-</div>
-
-
 <div>
-<p>Your key:</p>
-<textarea id="textarea_mykey" cols="40" rows="2" type="text" name="key" style="width:60%;resize:none;" autocomplete="off" oninput="inputReceived()" readonly>
-</textarea>
-<button id="new_keypair" class="btn btn-primary btn-lg" style="margin-bottom:30px;" onclick="newKeypair()">Generate a new key</button>
+	<div class="btn-group" data-toggle-name="is_private" data-toggle="buttons-radio">
+  <button id="normal_mode_button" autofocus="autofocus" type="button" value="0" class="btn" data-toggle="button" onclick="normalMode()">Normal mode</button>
+  <button id="selftest_mode_button" autofocus="autofocus" type="button" value="1" class="btn" data-toggle="button" onclick="selftestMode()">Selftest mode</button>
+	</div>
 </div>
-<p>Auditor's key:</p>
-<textarea id="textarea_auditorkey" cols="40" rows="2" type="text" name="key" style="width:60%;resize:none;" autocomplete="off" oninput="inputReceived()">
-</textarea>
+
+
+<div id="selftest_screen" class="hero-unit">
+	<ul>
+	<li>You are running tlsnotary in a selftest mode.</li>
+	<li>This mode is useful to determine if your website is compatible with tlsnotary</li>
+	<li>Press "Start selftest" and follow the prompt on the statusbar below</li>
+	</ul>
+	<table>
+	<tr>
+	<td>
+	<button id="selftest_button" autofocus="autofocus" class="btn btn-primary btn-lg" style="width:100%;" onclick="startSelftest()">Self test start</button>		
+	</td>
+	</tr>
+	<tr>
+	<td>
+	<progress id="progress_bar" value="0" max="100"></progress>
+	</td>
+	</tr>
+	</table>
 </div>
+
+
+<div id="normal_screen" class="hero-unit">
+	<p  style="margin-left:0;margin-bottom:0;margin-top:0;">In order to be audited please do the following.
+	</p>
+	<ol>
+	<li>Give the auditor your key</li>
+	<li>Paste the Auditor's key</li>
+	<li>Wait for the auditor to inform you that they are ready to audit you</li>
+	<li>Press "Connect to IRC"</li>
+	</ol>
+
+	<table>
+	<tr>
+	<td>
+	<button id="start_button" autofocus="autofocus" class="btn btn-primary btn-lg" style="width:100%;" onclick="startPressed()">Connect to IRC</button>
+	</td>
+	</tr>
+	<tr>
+	<td>
+	<progress id="progress_bar" value="0" max="100"></progress>
+	</td>
+	</tr>
+	</table>
+
+	<div id="key_area">
+		<div>
+			<p>Your key:</p>
+			<textarea id="textarea_mykey" cols="40" rows="2" type="text" name="key" style="width:60%;resize:none;" autocomplete="off" oninput="inputReceived()" readonly>
+			</textarea>
+			<button id="new_keypair" class="btn btn-primary btn-lg" style="margin-bottom:30px;" onclick="newKeypair()">Generate a new key</button>
+		</div>
+			<p>Auditor's key:</p>
+			<textarea id="textarea_auditorkey" cols="40" rows="2" type="text" name="key" style="width:60%;resize:none;" autocomplete="off" oninput="inputReceived()">
+			</textarea>
+		</div>
+	</div>
+</div>
+
 
 
 <script>
@@ -61,6 +88,21 @@ var reqImportAuditorPubkey;
 var reqStartIRC;
 var reqNewKeypair;
 
+
+
+function selftestMode(){
+	var normal_screen = document.getElementById("normal_screen");
+	normal_screen.style.display="none";
+	var selftest_screen = document.getElementById("selftest_screen");
+	selftest_screen.style.display="";	
+}
+
+function normalMode(){
+	var selftest_screen = document.getElementById("selftest_screen");
+	selftest_screen.style.display="none";	
+	var normal_screen = document.getElementById("normal_screen");
+	normal_screen.style.display="";
+}
 
 function setError(errortext){
 	Components.classes["@mozilla.org/process/environment;1"].getService(Components.interfaces.nsIEnvironment).set("TLSNOTARY_ERROR", errortext);	
@@ -86,6 +128,7 @@ function inputReceived(){
 
 
 function homepageLoaded () {
+	selftestMode();
 	reqGetRecentKeys = new XMLHttpRequest();
     reqGetRecentKeys.onload = responseGetRecentKeys;
     reqGetRecentKeys.open("HEAD", "http://127.0.0.1:"+port+"/get_recent_keys", true);
@@ -157,7 +200,9 @@ function progressBar(){
 
 var bSelfTestResponded = false;
 var reqSelfTest;
-function selfTest(){
+function startSelftest(){
+	var selftest_button = document.getElementById("selftest_button");
+	selftest_button.setAttribute("disabled", "true");
 	reqSelfTest = new XMLHttpRequest();
     reqSelfTest.onload = responseSelfTest;
     reqSelfTest.open("HEAD", "http://127.0.0.1:"+port+"/selftest", true);
@@ -179,7 +224,7 @@ function responseSelfTest(iteration){
     if (query != "selftest"){setError("ERROR Internal error. Wrong response header" + query);return;}
 	if (status != "success"){setError("ERROR Received an error message");return;}
 	//else successful response
-	alert("Selftest: press start IRC")	
+	startIRC();
 }
 
 function startIRC(){

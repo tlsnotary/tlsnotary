@@ -563,7 +563,7 @@ def get_recent_keys():
     #this is the very first command that we expect in a new session.
     #If this is the very first time tlsnotary is run, there will be no saved keys
     #otherwise we load up the saved keys which the user can override with new keys if need be
-    my_privkey_export = auditee_pubkey_export = ''
+    my_pubkey_export = auditee_pubkey_export = ''
     if os.path.exists(os.path.join(datadir, 'recentkeys')):
         if os.path.exists(os.path.join(datadir, 'recentkeys', 'myprivkey')) and os.path.exists(os.path.join(datadir, 'recentkeys', 'mypubkey')):
             with open(os.path.join(datadir, 'recentkeys', 'myprivkey'), 'r') as f: my_privkey_pem = f.read()
