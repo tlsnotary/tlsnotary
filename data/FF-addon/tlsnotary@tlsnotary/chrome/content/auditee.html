@@ -8,11 +8,17 @@
 
 <body onload="homepageLoaded()">
 
-<div>
-	<div class="btn-group" data-toggle-name="is_private" data-toggle="buttons-radio">
-  <button id="normal_mode_button" autofocus="autofocus" type="button" value="0" class="btn" data-toggle="button" onclick="normalMode()">Normal mode</button>
-  <button id="selftest_mode_button" autofocus="autofocus" type="button" value="1" class="btn" data-toggle="button" onclick="selftestMode()">Selftest mode</button>
+<div align="right">
+	
+	<div class="btn-group" data-toggle="buttons">
+  <label class="btn btn-primary">
+    <input type="radio" name="options" id="option1" onclick="normalMode()">Normal mode
+  </label>
+  <label class="btn btn-primary">
+    <input type="radio" name="options" id="option2" onclick="selftestMode()" checked="checked">Selftest mode
+  </label>
 	</div>
+
 </div>
 
 
@@ -30,47 +36,62 @@
 	</tr>
 	<tr>
 	<td>
-	<progress id="progress_bar" value="0" max="100"></progress>
+	<progress id="progress_bar_selftest" value="0" max="100" style="visibility:hidden"></progress>
 	</td>
 	</tr>
 	</table>
 </div>
 
 
-<div id="normal_screen" class="hero-unit">
-	<p  style="margin-left:0;margin-bottom:0;margin-top:0;">In order to be audited please do the following.
+<div id="normal_screen" class="hero-unit" style="margin-top:0;margin-bottom:0";>
+	<p  style="margin-left:0;margin-bottom:0;margin-top:-3%;">In order to be audited please do the following.
 	</p>
-	<ol>
+	<ul>
 	<li>Give the auditor your key</li>
 	<li>Paste the Auditor's key</li>
 	<li>Wait for the auditor to inform you that they are ready to audit you</li>
-	<li>Press "Connect to IRC"</li>
-	</ol>
+	<li>Press "Connect"</li>
+	</ul>
 
 	<table>
 	<tr>
 	<td>
-	<button id="start_button" autofocus="autofocus" class="btn btn-primary btn-lg" style="width:100%;" onclick="startPressed()">Connect to IRC</button>
+	<button id="start_button" autofocus="autofocus" class="btn btn-primary btn-lg" style="width:100%;" onclick="startPressed()">Connect</button>
 	</td>
 	</tr>
 	<tr>
 	<td>
-	<progress id="progress_bar" value="0" max="100"></progress>
+	<progress id="progress_bar" value="0" max="100" style="visibility:hidden"></progress>
 	</td>
 	</tr>
 	</table>
 
 	<div id="key_area">
+		
+		<table style="width:80%">
+			<tr>
+				<td>
+					<p>Your key:</p>
+				</td>
+				<td style="text-align:right;">
+					<a id="new_keypair" href="#" onclick="newKeypair();"><h6>Expert only: generate a new key</h6></a>
+					<h6 id="generating_cell">Generating...</h6>
+				</td>
+			</tr>
+			<tr>
+				<td colspan="2">	
+					<textarea id="textarea_mykey" cols="40" rows="2" type="text" name="key" style="width:100%;resize:none;" autocomplete="off" oninput="inputReceived()" readonly>
+					</textarea>
+				</td>
+			</tr>
+		</table>
+			
 		<div>
-			<p>Your key:</p>
-			<textarea id="textarea_mykey" cols="40" rows="2" type="text" name="key" style="width:60%;resize:none;" autocomplete="off" oninput="inputReceived()" readonly>
-			</textarea>
-			<button id="new_keypair" class="btn btn-primary btn-lg" style="margin-bottom:30px;" onclick="newKeypair()">Generate a new key</button>
-		</div>
 			<p>Auditor's key:</p>
-			<textarea id="textarea_auditorkey" cols="40" rows="2" type="text" name="key" style="width:60%;resize:none;" autocomplete="off" oninput="inputReceived()">
+			<textarea id="textarea_auditorkey" cols="40" rows="2" type="text" name="key" style="width:80%;resize:none;" autocomplete="off" oninput="inputReceived()">
 			</textarea>
 		</div>
+
 	</div>
 </div>
 
@@ -87,17 +108,19 @@ var reqGetRecentKeys;
 var reqImportAuditorPubkey;
 var reqStartIRC;
 var reqNewKeypair;
+var mode = 0; //0 - test mode, 1 - normal mode
 
 
 
 function selftestMode(){
-	var normal_screen = document.getElementById("normal_screen");
-	normal_screen.style.display="none";
-	var selftest_screen = document.getElementById("selftest_screen");
-	selftest_screen.style.display="";	
+	mode = 0;
+	document.getElementById("normal_screen").style.display="none";
+	document.getElementById("selftest_screen").style.display="";
+	document.getElementById("generating_cell").style.display = "none";
 }
 
 function normalMode(){
+	mode = 1;
 	var selftest_screen = document.getElementById("selftest_screen");
 	selftest_screen.style.display="none";	
 	var normal_screen = document.getElementById("normal_screen");
@@ -193,16 +216,27 @@ function responseImportAuditorPubkey(iteration){
 
 function progressBar(){
 	var progress_bar = document.getElementById("progress_bar");
-	if (progress_bar.value >= 100){return;} 
-	progress_bar.value += 1;
+	var progress_bar_selftest = document.getElementById("progress_bar_selftest");
+	if (mode == 1) { 
+		if (progress_bar.value >= 100){return;} 
+		progress_bar.value += 1;
+	}
+	if (mode == 0) { 
+		if (progress_bar_selftest.value >= 100){return;} 
+		progress_bar_selftest.value += 1;
+	}
 	setTimeout(progressBar, 150);
+
 }
 
 var bSelfTestResponded = false;
 var reqSelfTest;
 function startSelftest(){
 	var selftest_button = document.getElementById("selftest_button");
+	var progress_bar_selftest = document.getElementById("progress_bar_selftest");
+	progress_bar_selftest.style.visibility = "visible";
 	selftest_button.setAttribute("disabled", "true");
+	setTimeout(progressBar, 1);
 	reqSelfTest = new XMLHttpRequest();
     reqSelfTest.onload = responseSelfTest;
     reqSelfTest.open("HEAD", "http://127.0.0.1:"+port+"/selftest", true);
@@ -228,13 +262,16 @@ function responseSelfTest(iteration){
 }
 
 function startIRC(){
-	setTimeout(progressBar, 1);
-	var button_start_button = document.getElementById("start_button");
-	var button_new_keypair = document.getElementById("new_keypair");
-	var progress_bar = document.getElementById("progress_bar");
-	button_start_button.setAttribute("disabled", "true");
-	button_new_keypair.setAttribute("disabled", "true");
-	progress_bar.setAttribute("disabled", "true");
+	if (mode == 1) {
+		setTimeout(progressBar, 1);
+		var button_start_button = document.getElementById("start_button");
+		var button_new_keypair = document.getElementById("new_keypair");
+		var progress_bar = document.getElementById("progress_bar");
+		progress_bar.style.visibility = "visible";
+		button_start_button.setAttribute("disabled", "true");
+		button_new_keypair.setAttribute("disabled", "true");
+		progress_bar.setAttribute("disabled", "true");
+	}
 
 	reqStartIRC = new XMLHttpRequest();
     reqStartIRC.onload = responseStartIRC;
@@ -267,6 +304,8 @@ function responseStartIRC(iteration){
 }
 
 function newKeypair() {
+	document.getElementById("generating_cell").style.display = "";
+	document.getElementById("new_keypair").style.display = "none";
 	reqNewKeypair = new XMLHttpRequest();
     reqNewKeypair.onload = responseNewKeypair;
     reqNewKeypair.open("HEAD", "http://127.0.0.1:"+port+"/new_keypair", true);
@@ -290,6 +329,8 @@ function responseNewKeypair(iteration){
 	//else successful response
 	var textarea_mykey = document.getElementById("textarea_mykey");
     textarea_mykey.value = mypubkey;
+    document.getElementById("generating_cell").style.display = "none";
+	document.getElementById("new_keypair").style.display = "";
 }
 
 </script>
