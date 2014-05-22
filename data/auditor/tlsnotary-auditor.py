@@ -783,19 +783,29 @@ if __name__ == "__main__":
             print('Running auditor in daemon mode')
         
     if OS=='mswin':
-        if not daemon_mode:
-            browser_exepath= ''
-            ff64 = os.path.join(os.getenv('ProgramW6432'), "Mozilla Firefox",  "firefox.exe")
+        prog64 = os.getenv('ProgramW6432')
+        prog32 = os.getenv('ProgramFiles(x86)')
+        progxp = os.getenv('ProgramFiles')                
+        browser_exepath= tshark_exepath = ''
+        if prog64:
+            ff64 = os.path.join(prog64, "Mozilla Firefox",  "firefox.exe")
             if os.path.isfile(ff64): browser_exepath = ff64
-            ff32 = os.path.join(os.getenv('ProgramFiles(x86)'), "Mozilla Firefox",  "firefox.exe" )
-            if  os.path.isfile(ff32): browser_exepath = ff32
-            if browser_exepath == '': raise Exception('Failed to find Firefox in your Program Files location')
-        tshark_exepath = ''
-        tshark64 = os.path.join(os.getenv('ProgramW6432'), "Wireshark",  "tshark.exe" )
-        if os.path.isfile(tshark64): tshark_exepath = tshark64
-        tshark32 = os.path.join(os.getenv('ProgramFiles(x86)'), "Wireshark",  "tshark.exe" )
-        if  os.path.isfile(tshark32): tshark_exepath = tshark32
-        if tshark_exepath == '':  raise Exception('Failed to find Wireshark in your Program Files location')
+            tshark64 = os.path.join(prog64, "Wireshark",  "tshark.exe" )
+            if os.path.isfile(tshark64): tshark_exepath = tshark64            
+        if prog32:            
+            ff32 = os.path.join(prog32, "Mozilla Firefox",  "firefox.exe" )
+            if os.path.isfile(ff32): browser_exepath = ff32
+            tshark32 = os.path.join(prog32, "Wireshark",  "tshark.exe" )
+            if  os.path.isfile(tshark32): tshark_exepath = tshark32            
+        if progxp:
+            ff32 = os.path.join(progxp, "Mozilla Firefox",  "firefox.exe" ))
+            if os.path.isfile(ff32): browser_exepath = ff32
+            tshark32 = os.path.join(progxp, "Wireshark",  "tshark.exe" )
+            if  os.path.isfile(tshark32): tshark_exepath = tshark32
+        if not daemon_mode and browser_exepath == '': raise Exception(
+            'Failed to find Firefox in your Program Files location')     
+        if tshark_exepath == '':  raise Exception(
+            'Failed to find Wireshark in your Program Files location')
     elif OS=='linux':
         if not daemon_mode: browser_exepath = 'firefox'
         tshark_exepath = 'tshark'
