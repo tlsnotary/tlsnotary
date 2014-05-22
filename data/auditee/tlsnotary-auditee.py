@@ -51,7 +51,7 @@ google_modulus = 0
 google_exponent = 0
 
 stcppipe_proc = None
-tshark_exepath = ''
+tshark_exepath = editcap_exepath= ''
 bReceivingThreadStopFlagIsSet = False
 secretbytes_amount=13
 firefox_pid = stcppipe_pid = selftest_pid = 0
@@ -278,6 +278,32 @@ def get_html_paths():
     md5hmac_path = join(commit_dir, 'md5hmac'+ str(len(cr_list)) )
     with open(md5hmac_path, 'wb') as f: f.write(md5hmac)
     shutil.copyfile(join(tracelog_dir, one_trace), tracecopy_path)
+    #Remove the data from the auditee to the auditor (except handshake) from the copied
+    #trace using editcap. (To address the small possibility of data leakage from request urls)
+    output = check_output([tshark_exepath,'-r',tracecopy_path,'-Y',
+                                    'ssl.handshake.certificate','-T','fields',
+                                    '-e','tcp.srcport'])
+    if not output:
+        raise Exception("No certificate found in trace.")
+    #gather the trace frames which were sent from the same port as the certificate
+    output = check_output([tshark_exepath,'-r',tracecopy_path,'-Y',
+                                    'ssl.handshake or tcp.srcport=='+output.strip(),
+                                    '-T','fields','-e','frame.number'])
+    if not output:
+        raise Exception("Error parsing trace for server frames")
+
+    #output should now contain the list of frames which were from the server
+    frames_to_send = [x.strip() for x in output.split('\n')]
+    #create a new version of the trace without sent data
+    trimmed_trace_path = os.path.join(commit_dir,'trace_trimmed'+str(len(cr_list)))
+    output = check_output([editcap_exepath,'-r',tracecopy_path,trimmed_trace_path]+frames_to_send)
+
+    #overwrite trace to be committed , but keep a backup of the original
+    backup_full_trace_path = os.path.join(current_sessiondir, 'backup_trace'+str(len(cr_list)))
+    shutil.move(tracecopy_path,backup_full_trace_path)
+    shutil.move(trimmed_trace_path,tracecopy_path)    
+    
+    
     #send the hash of tracefile and md5hmac
     with open(tracecopy_path, 'rb') as f: data=f.read()
     commit_hash = sha256(data).digest()
@@ -1422,7 +1448,11 @@ if __name__ == "__main__":
     from pyasn1.codec.der import encoder, decoder
     from slowaes import AESModeOfOperation        
     
-    if OS=='linux': tshark_exepath = 'tshark'
+    if OS=='linux':
+        if not (check_output(['which','tshark']) and check_output(['which','editcap'])):
+            raise Exception("Please install tshark and editcap before running tlsnotary")
+        tshark_exepath = 'tshark'
+        editcap_exepath = 'editcap'
     elif OS=='mswin':
         tshark64 = join(os.getenv('ProgramW6432'), 'Wireshark',  'tshark.exe' )
         if os.path.isfile(tshark64): tshark_exepath = tshark64
@@ -1430,10 +1460,19 @@ if __name__ == "__main__":
         if os.path.isfile(tshark32): tshark_exepath = tshark32
         if tshark_exepath == '' : raise Exception(
             'Failed to find wireshark in your Program Files', end='\r\n')
+        editcap64 = join(os.getenv('ProgramW6432'), 'Wireshark', 'editcap.exe' )
+        if os.path.isfile(editcap64): editcap_exepath = editcap64
+        editcap32 = join(os.getenv('ProgramFiles(x86)'), 'Wireshark', 'editcap.exe' )
+        if os.path.isfile(editcap32): editcap_exepath = editcap32
+        if editcap_exepath == '' : raise Exception(
+                'Failed to find Wireshark component editcap in your Program Files', end='\r\n')        
     elif OS=='macos':
         tshark_osx = '/Applications/Wireshark.app/Contents/Resources/bin/tshark'
+        editcap_osx = '/Applications/Wireshark.app/Contents/Resources/bin/editcap'        
         if os.path.isfile(tshark_osx): tshark_exepath = tshark_osx
-        else: raise  Exception('Failed to find wireshark in your Applications folder', end='\r\n')    
+        else: raise  Exception('Failed to find wireshark in your Applications folder', end='\r\n')
+        if os.path.isfile(editcap_osx): editcap_exepath = editcap_osx
+        else: raise  Exception('Failed to find Wireshark component editcap in your Applications folder', end='\r\n')            
       
     thread = ThreadWithRetval(target= http_server)
     thread.daemon = True
