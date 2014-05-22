@@ -27,8 +27,8 @@ import zipfile
 try: import wingdbstub
 except: pass
 
-installdir = os.path.dirname(os.path.realpath(__file__))
-datadir = join(installdir, 'data')
+datadir = os.path.dirname(os.path.realpath(__file__))
+installdir = os.path.dirname(os.path.dirname(datadir))
 sessionsdir = join(datadir, 'sessions')
 time_str = time.strftime('%d-%b-%Y-%H-%M-%S', time.gmtime())
 current_sessiondir = join(sessionsdir, time_str)
@@ -240,13 +240,14 @@ class HandlerClass(SimpleHTTPServer.SimpleHTTPRequestHandler):
             return                  
         #----------------------------------------------------------------------#
         if self.path.startswith('/selftest'):
-            output = check_output([sys.executable, join(installdir, 'tlsnotary-auditor.py'), 'daemon', 'genkey'])
+            auditor_py = join(installdir, 'data', 'auditor', 'tlsnotary-auditor.py')
+            output = check_output([sys.executable, auditor_py, 'daemon', 'genkey'])
             auditor_key = output.split()[-1]
             import_auditor_pubkey(auditor_key)
             print ('Imported auditor key')
             print (auditor_key)
             my_newkey = newkeys()
-            proc = Popen([sys.executable, join(installdir, 'tlsnotary-auditor.py'), 'daemon', 'hiskey='+my_newkey])
+            proc = Popen([sys.executable, auditor_py, 'daemon', 'hiskey='+my_newkey])
             global selftest_pid
             selftest_pid = proc.pid
             self.respond({'response':'selftest', 'status':'success'})

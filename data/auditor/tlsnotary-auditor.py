@@ -26,8 +26,7 @@ import zipfile
 try: import wingdbstub
 except: pass
 
-installdir = os.path.dirname(os.path.realpath(__file__))
-datadir = os.path.join(installdir, 'auditor')
+datadir = os.path.dirname(os.path.realpath(__file__))
 sessionsdir = os.path.join(datadir, 'sessions')
 time_str = time.strftime("%d-%b-%Y-%H-%M-%S", time.gmtime())
 current_sessiondir = os.path.join(sessionsdir, time_str)

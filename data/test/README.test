@@ -1,4 +1,4 @@
-to test, place testdriver@testdriver into data/FF-addon
-remove folders data/FF-profile data/firefoxcopy, so that the new addon can be picked up
+to test, place testdriver@testdriver into data/auditee/FF-addon
+remove folders data/auditee/FF-profile data/auditee/firefoxcopy, so that the new addon can be picked up
 
 python tlsnotary-test.py websitelist.txt
