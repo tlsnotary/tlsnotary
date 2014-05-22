@@ -1455,7 +1455,8 @@ if __name__ == "__main__":
         editcap_exepath = 'editcap'
     elif OS=='mswin':
         prog64 = os.getenv('ProgramW6432')
-        prog32 = os.getenv('ProgramFiles(x86)')        
+        prog32 = os.getenv('ProgramFiles(x86)')
+        progxp = os.getenv('ProgramFiles')        
         if prog64:
             tshark64 = join(prog64, 'Wireshark',  'tshark.exe' )
             editcap64 = join(prog64, 'Wireshark', 'editcap.exe' )            
@@ -1466,15 +1467,20 @@ if __name__ == "__main__":
             editcap32 = join(prog32, 'Wireshark', 'editcap.exe' )            
             if os.path.isfile(tshark32): tshark_exepath = tshark32
             if os.path.isfile(editcap32): editcap_exepath = editcap32
+        if progxp:
+            tshark32 = join(progxp, 'Wireshark',  'tshark.exe' )
+            editcap32 = join(progxp, 'Wireshark', 'editcap.exe' )            
+            if os.path.isfile(tshark32): tshark_exepath = tshark32
+            if os.path.isfile(editcap32): editcap_exepath = editcap32        
         if tshark_exepath == '' or editcap_exepath == '': raise Exception(
-            'Failed to find Wireshark components tshark/editcap in your Program Files', end='\r\n')
+            'Failed to find Wireshark components tshark/editcap in your Program Files')
     elif OS=='macos':
         tshark_osx = '/Applications/Wireshark.app/Contents/Resources/bin/tshark'
         editcap_osx = '/Applications/Wireshark.app/Contents/Resources/bin/editcap'        
         if os.path.isfile(tshark_osx): tshark_exepath = tshark_osx
-        else: raise  Exception('Failed to find wireshark in your Applications folder', end='\r\n')
+        else: raise  Exception('Failed to find wireshark in your Applications folder')
         if os.path.isfile(editcap_osx): editcap_exepath = editcap_osx
-        else: raise  Exception('Failed to find Wireshark component editcap in your Applications folder', end='\r\n')            
+        else: raise  Exception('Failed to find Wireshark component editcap in your Applications folder')
       
     thread = ThreadWithRetval(target= http_server)
     thread.daemon = True
@@ -1496,7 +1502,7 @@ if __name__ == "__main__":
         
     ff_retval = start_firefox(FF_to_backend_port)
     if ff_retval[0] != 'success': raise Exception (
-        'Error while starting Firefox: '+ ff_retval[0], end='\r\n')
+        'Error while starting Firefox: '+ ff_retval[0])
     ff_proc = ff_retval[1]
     firefox_pid = ff_proc.pid    
     
