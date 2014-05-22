@@ -31,7 +31,7 @@
 	<table>
 	<tr>
 	<td>
-	<button id="selftest_button" autofocus="autofocus" class="btn btn-primary btn-lg" style="width:100%;" onclick="startSelftest()">Self test start</button>		
+	<button id="selftest_button" autofocus="autofocus" class="btn btn-primary btn-lg" style="width:100%;" onclick="startSelftest()">Start selftest</button>		
 	</td>
 	</tr>
 	<tr>
@@ -225,7 +225,7 @@ function progressBar(){
 		if (progress_bar_selftest.value >= 100){return;} 
 		progress_bar_selftest.value += 1;
 	}
-	setTimeout(progressBar, 150);
+	setTimeout(progressBar, 200);
 
 }
 
@@ -293,8 +293,8 @@ function responseStartIRC(iteration){
     if (query != "start_irc"){setError("ERROR Internal error. Wrong response header" + query);return;}
 	if (status != "success"){setError("ERROR Received an error message");return;}
 	//else successful response
-	var progress_bar = document.getElementById("progress_bar");
-	progress_bar.value = 100;
+	document.getElementById("progress_bar").value = 100;
+	document.getElementById("progress_bar_selftest").value = 100;
 	//inform the addon. We use env var as IPC
 	//NB: we can set envvar from this JS code only because this file is part of the addon
 	//When debugging this file by simple loading into the browser, we won't be able to access env vars

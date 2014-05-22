@@ -798,7 +798,7 @@ if __name__ == "__main__":
             tshark32 = os.path.join(prog32, "Wireshark",  "tshark.exe" )
             if  os.path.isfile(tshark32): tshark_exepath = tshark32            
         if progxp:
-            ff32 = os.path.join(progxp, "Mozilla Firefox",  "firefox.exe" ))
+            ff32 = os.path.join(progxp, "Mozilla Firefox",  "firefox.exe" )
             if os.path.isfile(ff32): browser_exepath = ff32
             tshark32 = os.path.join(progxp, "Wireshark",  "tshark.exe" )
             if  os.path.isfile(tshark32): tshark_exepath = tshark32
