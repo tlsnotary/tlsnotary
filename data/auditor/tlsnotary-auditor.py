@@ -501,7 +501,7 @@ class Handler(SimpleHTTPServer.SimpleHTTPRequestHandler):
         if self.path.startswith('/get_recent_keys'):
             my_pubkey_export, auditee_pubkey_export = get_recent_keys()
             self.respond({'response':'get_recent_keys', 'mypubkey':my_pubkey_export,
-                                             'auditorpubkey':auditee_pubkey_export})
+                                             'auditeepubkey':auditee_pubkey_export})
             return
         #----------------------------------------------------------------------#
         if self.path.startswith('/new_keypair'):
