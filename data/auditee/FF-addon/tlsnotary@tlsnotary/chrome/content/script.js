@@ -218,6 +218,16 @@ function get_html_paths(){
     responseGetHTMLPaths(0);	
 }
 
+//NB: FF ignores offline mode when proxy is set to manual
+function toggleOffline(){
+	var curvalue = Cc["@mozilla.org/preferences-service;1"].getService(Ci.nsIPrefService).getBranch("network.proxy.").getIntPref("type");
+	var newvalue;
+	if (curvalue == 0) newvalue = 1;
+	if (curvalue == 1) newvalue = 0;
+	Cc["@mozilla.org/preferences-service;1"].getService(Ci.nsIPrefService).getBranch("network.proxy.").setIntPref("type", newvalue);
+	BrowserOffline.toggleOfflineStatus(); //analogous to toggling "Work Offline" in File menu
+}
+
 
 function responseGetHTMLPaths(iteration){
     if (typeof iteration == "number"){
@@ -252,10 +262,13 @@ function responseGetHTMLPaths(iteration){
 	b64_html_paths = reqGetHTMLPaths.getResponseHeader("html_paths");
 	html_paths_string = atob(b64_html_paths);
 	html_paths = html_paths_string.split("&");
+	toggleOffline();
 	for (var i=0; i<html_paths.length; i++){
 		if (html_paths[i] == "") continue;
 		gBrowser.addTab(html_paths[i]);
 	}
+	//FIXME: we should install a pageload listener here rather than relying on timeout
+	setTimeout(toggleOffline, 3000);
 	help.value = "Navigate to a webpage and press RECORD. The page will reload automatically.";
 	button_record_enabled.hidden = false;
 	button_spinner.hidden = true;
