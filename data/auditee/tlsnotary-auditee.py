@@ -1454,18 +1454,20 @@ if __name__ == "__main__":
         tshark_exepath = 'tshark'
         editcap_exepath = 'editcap'
     elif OS=='mswin':
-        tshark64 = join(os.getenv('ProgramW6432'), 'Wireshark',  'tshark.exe' )
-        if os.path.isfile(tshark64): tshark_exepath = tshark64
-        tshark32 = join(os.getenv('ProgramFiles(x86)'), 'Wireshark',  'tshark.exe' )
-        if os.path.isfile(tshark32): tshark_exepath = tshark32
-        if tshark_exepath == '' : raise Exception(
-            'Failed to find wireshark in your Program Files', end='\r\n')
-        editcap64 = join(os.getenv('ProgramW6432'), 'Wireshark', 'editcap.exe' )
-        if os.path.isfile(editcap64): editcap_exepath = editcap64
-        editcap32 = join(os.getenv('ProgramFiles(x86)'), 'Wireshark', 'editcap.exe' )
-        if os.path.isfile(editcap32): editcap_exepath = editcap32
-        if editcap_exepath == '' : raise Exception(
-                'Failed to find Wireshark component editcap in your Program Files', end='\r\n')        
+        prog64 = os.getenv('ProgramW6432')
+        prog32 = os.getenv('ProgramFiles(x86)')        
+        if prog64:
+            tshark64 = join(prog64, 'Wireshark',  'tshark.exe' )
+            editcap64 = join(prog64, 'Wireshark', 'editcap.exe' )            
+            if os.path.isfile(tshark64): tshark_exepath = tshark64
+            if os.path.isfile(editcap64): editcap_exepath = editcap64            
+        if prog32:
+            tshark32 = join(prog32, 'Wireshark',  'tshark.exe' )
+            editcap32 = join(prog32, 'Wireshark', 'editcap.exe' )            
+            if os.path.isfile(tshark32): tshark_exepath = tshark32
+            if os.path.isfile(editcap32): editcap_exepath = editcap32
+        if tshark_exepath == '' or editcap_exepath == '': raise Exception(
+            'Failed to find Wireshark components tshark/editcap in your Program Files', end='\r\n')
     elif OS=='macos':
         tshark_osx = '/Applications/Wireshark.app/Contents/Resources/bin/tshark'
         editcap_osx = '/Applications/Wireshark.app/Contents/Resources/bin/editcap'        
