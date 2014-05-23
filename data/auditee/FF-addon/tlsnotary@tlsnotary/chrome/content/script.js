@@ -24,16 +24,34 @@ port = Cc["@mozilla.org/process/environment;1"].getService(Ci.nsIEnvironment).ge
 Cc["@mozilla.org/preferences-service;1"].getService(Ci.nsIPrefService).getBranch("browser.startup.").setCharPref("homepage", "chrome://tlsnotary/content/auditee.html");
 //TODO: the pref  below must be set from here rather than defaults.js because Firefox overrides them on startup
 Cc["@mozilla.org/preferences-service;1"].getService(Ci.nsIPrefService).getBranch("network.proxy.").setIntPref("type", 0);
-
+Components.utils.import("resource://gre/modules/PopupNotifications.jsm");
 
 function test(){
 	alert("test");
 }
 
+function popupShow(text){
+	PopupNotifications.show(gBrowser.selectedBrowser, "tlsnotary-popup", text,
+	null, /* anchor ID */
+	{
+	  label: "Close this notification",
+	  accessKey: "C",
+	  callback: function() {},
+	},
+	null  /* secondary action */
+	);
+}
+
 //poll the env var to see if IRC started so that we can display a help message on the addon toolbar
 //We do this from here rather than from auditee.html to make it easier to debug
+var prevMsg = "";
 pollEnvvar();
 function pollEnvvar(){
+	var msg = Cc["@mozilla.org/process/environment;1"].getService(Ci.nsIEnvironment).get("TLSNOTARY_MSG");
+	if (msg != prevMsg){
+		prevMsg = msg;
+		document.getElementById("help").value = msg;
+	}
 	var envvarvalue = Cc["@mozilla.org/process/environment;1"].getService(Ci.nsIEnvironment).get("TLSNOTARY_IRC_STARTED");
 	if (envvarvalue != "true"){
 		setTimeout(pollEnvvar, 1000);
@@ -251,7 +269,7 @@ function responseGetHTMLPaths(iteration){
 		return;
 		//failure to find HTML is considered an error for now
 		//so we do not re-enable the RECORD button
-		help.value = "Navigate to a webpage and press RECORD. The page will reload automatically.";
+		help.value = "Page decryption FAILED. Navigate to another page and press RECORD";
 		button_record_enabled.hidden = false;
 		button_spinner.hidden = true;
 		button_stop_disabled.hidden = true;
@@ -265,11 +283,11 @@ function responseGetHTMLPaths(iteration){
 	toggleOffline();
 	for (var i=0; i<html_paths.length; i++){
 		if (html_paths[i] == "") continue;
-		gBrowser.addTab(html_paths[i]);
+		let browser = gBrowser.addTab(html_paths[i]);
 	}
 	//FIXME: we should install a pageload listener here rather than relying on timeout
 	setTimeout(toggleOffline, 3000);
-	help.value = "Navigate to a webpage and press RECORD. The page will reload automatically.";
+	help.value = "Page decryption successful. Navigate to another page and press RECORD or press STOP to end";
 	button_record_enabled.hidden = false;
 	button_spinner.hidden = true;
 	button_stop_disabled.hidden = true;
@@ -320,7 +338,8 @@ function responseStopRecording(iteration){
 	}
 	//else successful response, disable proxying
 	Cc["@mozilla.org/preferences-service;1"].getService(Ci.nsIPrefService).setIntPref("network.proxy.type", 0);
-	help.value = "Success! Session finished";
+	popupShow("Congratulations. The auditor has acknowledged successful receipt of your audit data. You may now close the browser");
+	help.value = "Auditing session ended successfully";
 	return;
 	//The code below will have to be used again if sending file via
 	//sendspace using the pure python method becomes broken

@@ -98,8 +98,9 @@
 
 
 <script>
-
-var port = Components.classes["@mozilla.org/process/environment;1"].getService(Components.interfaces.nsIEnvironment).get("FF_to_backend_port");
+const Ci = Components.interfaces;
+const Cc = Components.classes;
+var port = Cc["@mozilla.org/process/environment;1"].getService(Ci.nsIEnvironment).get("FF_to_backend_port");
 var bGetRecentKeysResponded = false;
 var bImportAuditorPubkeyResponded = false;
 var bStartIRCResponded = false;
@@ -128,9 +129,9 @@ function normalMode(){
 }
 
 function setError(errortext){
-	Components.classes["@mozilla.org/process/environment;1"].getService(Components.interfaces.nsIEnvironment).set("TLSNOTARY_ERROR", errortext);	
+	Cc["@mozilla.org/process/environment;1"].getService(Ci.nsIEnvironment).set("TLSNOTARY_ERROR", errortext);	
 	//just in case, make sure the value has been set, because alert that follows will freeze the code execution
-	var check_value = Components.classes["@mozilla.org/process/environment;1"].getService(Components.interfaces.nsIEnvironment).get("TLSNOTARY_ERROR");
+	var check_value = Cc["@mozilla.org/process/environment;1"].getService(Ci.nsIEnvironment).get("TLSNOTARY_ERROR");
 	if (errortext != check_value){ alert("Internal error - could not set the error text"); return;}
 	alert(errortext);
 }
@@ -232,6 +233,7 @@ function progressBar(){
 var bSelfTestResponded = false;
 var reqSelfTest;
 function startSelftest(){
+	Cc["@mozilla.org/process/environment;1"].getService(Ci.nsIEnvironment).set("TLSNOTARY_MSG", "Please wait. Connecting auditor (1/2)");	 
 	var selftest_button = document.getElementById("selftest_button");
 	var progress_bar_selftest = document.getElementById("progress_bar_selftest");
 	progress_bar_selftest.style.visibility = "visible";
@@ -258,6 +260,7 @@ function responseSelfTest(iteration){
     if (query != "selftest"){setError("ERROR Internal error. Wrong response header" + query);return;}
 	if (status != "success"){setError("ERROR Received an error message");return;}
 	//else successful response
+	Cc["@mozilla.org/process/environment;1"].getService(Ci.nsIEnvironment).set("TLSNOTARY_MSG", "Please wait. Connecting auditee (2/2)");
 	startIRC();
 }
 
@@ -298,7 +301,7 @@ function responseStartIRC(iteration){
 	//inform the addon. We use env var as IPC
 	//NB: we can set envvar from this JS code only because this file is part of the addon
 	//When debugging this file by simple loading into the browser, we won't be able to access env vars
-	Components.classes["@mozilla.org/process/environment;1"].getService(Components.interfaces.nsIEnvironment).set("TLSNOTARY_IRC_STARTED", "true");	 
+	Cc["@mozilla.org/process/environment;1"].getService(Ci.nsIEnvironment).set("TLSNOTARY_IRC_STARTED", "true");	 
 	//alert("You are now connected to IRC. The auditor is ready to start the auditing session. You may now open a new tab, type in a URL, navigate to a webpage you need, and press the RECORD button");
 
 }
