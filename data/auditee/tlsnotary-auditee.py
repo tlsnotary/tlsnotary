@@ -258,7 +258,16 @@ class HandlerClass(SimpleHTTPServer.SimpleHTTPRequestHandler):
             return
 
 def get_html_paths():
+    #there is an edge case when the request fails to trigger the nss patch, e.g. https://github.com/angular/angular.js
+    #FIXME: find a more elegant way to handle such a scenario
+    if not hasattr(get_html_paths, 'prev_cr'):
+        get_html_paths.prev_cr = 0 #static variable. Initialized only on first function's run    
+    if len(cr_list) == 0: #when the edge case is the 1st recorded page in session
+        return ('failure', 'Failed to record HTML')
     cr = cr_list[-1]
+    if cr == get_html_paths.prev_cr: #no new cr was added since the previous invocation
+        return ('failure', 'Failed to record HTML')
+    get_html_paths.prev_cr = cr
     #find tracefile containing cr and commit to its hash as well as the hash of md5hmac (for MS)
     #Construct MS and decrypt HTML files to be presented to auditee for approval
     tracelog_dir = join(current_sessiondir, 'tracelog')
