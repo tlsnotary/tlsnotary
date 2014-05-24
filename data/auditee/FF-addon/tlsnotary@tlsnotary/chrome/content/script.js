@@ -26,11 +26,8 @@ Cc["@mozilla.org/preferences-service;1"].getService(Ci.nsIPrefService).getBranch
 Cc["@mozilla.org/preferences-service;1"].getService(Ci.nsIPrefService).getBranch("network.proxy.").setIntPref("type", 0);
 Components.utils.import("resource://gre/modules/PopupNotifications.jsm");
 
-function test(){
-	alert("test");
-}
 
-function popupShow(text){
+function popupShow(text) {
 	PopupNotifications.show(gBrowser.selectedBrowser, "tlsnotary-popup", text,
 	null, /* anchor ID */
 	{
@@ -48,12 +45,12 @@ var prevMsg = "";
 pollEnvvar();
 function pollEnvvar(){
 	var msg = Cc["@mozilla.org/process/environment;1"].getService(Ci.nsIEnvironment).get("TLSNOTARY_MSG");
-	if (msg != prevMsg){
+	if (msg != prevMsg) {
 		prevMsg = msg;
 		document.getElementById("help").value = msg;
 	}
 	var envvarvalue = Cc["@mozilla.org/process/environment;1"].getService(Ci.nsIEnvironment).get("TLSNOTARY_IRC_STARTED");
-	if (envvarvalue != "true"){
+	if (envvarvalue != "true") {
 		setTimeout(pollEnvvar, 1000);
 		return;
 	}
@@ -286,7 +283,7 @@ function responseGetHTMLPaths(iteration){
 		let browser = gBrowser.addTab(html_paths[i]);
 	}
 	//FIXME: we should install a pageload listener here rather than relying on timeout
-	setTimeout(toggleOffline, 3000);
+	setTimeout(toggleOffline, 1000);
 	help.value = "Page decryption successful. Navigate to another page and press RECORD or press STOP to end";
 	button_record_enabled.hidden = false;
 	button_spinner.hidden = true;

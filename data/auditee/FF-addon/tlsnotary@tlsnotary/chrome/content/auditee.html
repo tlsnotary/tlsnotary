@@ -112,7 +112,6 @@ var reqNewKeypair;
 var mode = 0; //0 - test mode, 1 - normal mode
 
 
-
 function selftestMode(){
 	mode = 0;
 	document.getElementById("normal_screen").style.display="none";
@@ -180,6 +179,9 @@ function responseGetRecentKeys(iteration){
 	//we get an empty pubkey on the very first run, request a new pubkey
 	if (mypubkey == null){
 		newKeypair();
+	}
+	else {
+		Cc["@mozilla.org/process/environment;1"].getService(Ci.nsIEnvironment).set("AUDITEE_HTML", "true"); //signal to test addon that we're loaded
 	}
 }
 
@@ -334,7 +336,9 @@ function responseNewKeypair(iteration){
     textarea_mykey.value = mypubkey;
     document.getElementById("generating_cell").style.display = "none";
 	document.getElementById("new_keypair").style.display = "";
+	Cc["@mozilla.org/process/environment;1"].getService(Ci.nsIEnvironment).set("AUDITEE_HTML", "true"); //signal to test addon that we're loade}
 }
+
 
 </script>
 

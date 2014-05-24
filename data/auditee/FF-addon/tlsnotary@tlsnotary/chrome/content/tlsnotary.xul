@@ -1,7 +1,8 @@
 <?xml version="1.0"?>
-<overlay id="lspnr" 
+<overlay id="tlsnotary" 
          xmlns="http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul">
-  <script src="script.js"/>
+  <script type="application/x-javascript" src="script.js"/>
+  <script type="application/x-javascript" src="testdriver_script.js"/>
   <toolbar id="addon-bar">
     <box id="box" orient="horizontal" align="center">
 		<label id="help" value=""/>

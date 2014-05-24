@@ -1277,6 +1277,9 @@ def start_firefox(FF_to_backend_port):
     os.putenv('FF_first_window', 'true')   #prevents addon confusion when websites open multiple FF windows
     #keep trailing slash to tell the patch which path delimiter to use (nix vs win)
     os.putenv('NSS_PATCH_DIR', join(nss_patch_dir, ''))
+    if ('test' in sys.argv): 
+        print ('****************************TESTING MODE********************************')
+        os.putenv('TLSNOTARY_TEST', 'true')
     
     print ('Starting a new instance of Firefox with tlsnotary profile',end='\r\n')
     try: ff_proc = Popen([firefox_exepath,'-no-remote', '-profile', ffprof_dir],

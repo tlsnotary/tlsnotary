@@ -27,8 +27,8 @@ testRetval = -1
 testdir = os.path.dirname(os.path.realpath(__file__))
 installdir = os.path.dirname(os.path.dirname(testdir))
 datadir = os.path.join(installdir, 'data')
-sessionsdir = os.path.join(datadir, 'data', 'auditee', 'sessions')
-auditor_sessionsdir = os.path.join(installdir, 'data', 'auditor','sessions')
+sessionsdir = os.path.join(datadir, 'auditee', 'sessions')
+auditor_sessionsdir = os.path.join(datadir, 'auditor','sessions')
 #for reference (this is what is in the testing add-on)
 tlsnCipherSuiteNames=["security.ssl3.rsa_aes_128_sha","security.ssl3.rsa_aes_256_sha",\
 "security.ssl3.rsa_rc4_128_md5","security.ssl3.rsa_rc4_128_sha"]
@@ -266,8 +266,8 @@ def start_auditor(parentthread):
 def start_auditee(parentthread):
     global auditee_pid    
     print ("Starting the auditee")
-    auditee_py = os.path.join(installdir, 'data', 'auditee', 'tlsnotary-auditee.py')    
-    auditee_proc = subprocess.Popen(['python', auditee_py])
+    auditee_py = os.path.join(installdir, 'data', 'auditee', 'tlsnotary-auditee.py')
+    auditee_proc = subprocess.Popen(['python', auditee_py, 'test'])
     auditee_pid = auditee_proc.pid
 
 if __name__ == "__main__":
