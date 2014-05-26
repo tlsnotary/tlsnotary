@@ -232,8 +232,15 @@ class HandlerClass(SimpleHTTPServer.SimpleHTTPRequestHandler):
             return      
         #----------------------------------------------------------------------#
         if self.path.startswith('/get_html_paths'):
-            rv = get_html_paths()
-            b64_paths = ''
+            b64_paths = ''            
+            arg_str = self.path.split('?', 1)[1]
+            if not arg_str.startswith('domain='):
+                self.respond({'response':'get_html_paths', 'status':'wrong HEAD parameter', 'html_paths':b64_paths})
+                return
+            #else
+            b64domain = arg_str[len('pubkey='):]
+            domain = b64decode(b64domain)
+            rv = get_html_paths(domain)
             if rv[0] == 'success': b64_paths = b64encode(rv[1])
             status = 'success' if rv[0] == 'success' else rv[1]
             self.respond({'response':'get_html_paths', 'status':status, 'html_paths':b64_paths})
@@ -257,7 +264,8 @@ class HandlerClass(SimpleHTTPServer.SimpleHTTPRequestHandler):
             self.respond({'response':'unknown command'})
             return
 
-def get_html_paths():
+
+def get_html_paths(domain):
     #there is an edge case when the request fails to trigger the nss patch, e.g. https://github.com/angular/angular.js
     #FIXME: find a more elegant way to handle such a scenario
     if not hasattr(get_html_paths, 'prev_cr'):
@@ -286,6 +294,8 @@ def get_html_paths():
     tracecopy_path = join(commit_dir, 'trace'+ str(len(cr_list)) )
     md5hmac_path = join(commit_dir, 'md5hmac'+ str(len(cr_list)) )
     with open(md5hmac_path, 'wb') as f: f.write(md5hmac)
+    domain_path = join(commit_dir, 'domain'+ str(len(cr_list)) )
+    with open(domain_path, 'wb') as f: f.write(domain)    
     shutil.copyfile(join(tracelog_dir, one_trace), tracecopy_path)
     #Remove the data from the auditee to the auditor (except handshake) from the copied
     #trace using editcap. (To address the small possibility of data leakage from request urls)
@@ -704,7 +714,7 @@ def stop_recording():
     commit_dir = join(current_sessiondir, 'commit')
     com_dir_files = os.listdir(commit_dir)
     for onefile in com_dir_files:
-        if not onefile.startswith(('trace', 'md5hmac')): continue
+        if not onefile.startswith(('trace', 'md5hmac', 'domain')): continue
         zipf.write(join(commit_dir, onefile), onefile)
     zipf.close()
     try: link = sendspace_getlink(join(tracedir, 'mytrace.zip'))

@@ -368,7 +368,12 @@ def process_messages():
             last_seqno = max([0] + seqnos) #avoid throwing by feeding at least one value 0
             my_seqno = last_seqno+1
             trace_hash_path = os.path.join(commit_dir, 'tracehash'+str(my_seqno))
+            n_hexlified = binascii.hexlify(n)
+            n_write = " ".join(n_hexlified[i:i+2] for i in range(0, len(n_hexlified), 2)) #pubkey in the format 09 56 23 ....
+            pubkey_path = os.path.join(commit_dir, 'pubkey'+str(my_seqno))
+            trace_hash_path = os.path.join(commit_dir, 'tracehash'+str(my_seqno))
             md5hmac_hash_path =  os.path.join(commit_dir, 'md5hmac_hash'+str(my_seqno))
+            with open(pubkey_path, 'wb') as f: f.write(n_write)            
             with open(trace_hash_path, 'wb') as f: f.write(trace_hash)
             with open(md5hmac_hash_path, 'wb') as f: f.write(md5hmac_hash)
             sha1hmac_path = os.path.join(commit_dir, 'sha1hmac'+str(my_seqno))
@@ -418,6 +423,9 @@ def process_messages():
                 with open(os.path.join(commit_dir, 'md5hmac_hash'+str(this_seqno)), 'rb') as f: commited_md5hmac_hash = f.read()
                 if not md5hmac_hash == commited_md5hmac_hash:
                     raise Exception ('WARNING: mismatch in committed md5hmac hashes')
+                domain_path = os.path.join(auditeetrace_dir, 'domain'+str(this_seqno))
+                if not os.path.exists(domain_path):
+                    raise Exception ('WARNING: Could not find domain in auditeetrace')                
                 #elif no errors
                 seqnos.append(this_seqno)
                 continue
@@ -433,9 +441,9 @@ def process_messages():
             for one_trace in adir_list:
                 if not one_trace.startswith('trace'): continue
                 seqno = one_trace[len('trace'):]
-                with open(os.path.join(auditeetrace_dir, 'md5hmac'+seqno)) as f: md5hmac = f.read()
-                with open(os.path.join(commit_dir, 'sha1hmac'+seqno)) as f: sha1hmac = f.read()
-                with open(os.path.join(commit_dir, 'cr'+seqno)) as f: cr = f.read()
+                with open(os.path.join(auditeetrace_dir, 'md5hmac'+seqno), 'rb') as f: md5hmac = f.read()
+                with open(os.path.join(commit_dir, 'sha1hmac'+seqno), 'rb') as f: sha1hmac = f.read()
+                with open(os.path.join(commit_dir, 'cr'+seqno), 'rb') as f: cr = f.read()
                 ms = xor(md5hmac, sha1hmac)
                 sslkeylog = os.path.join(decr_dir, 'sslkeylog'+seqno)
                 ssldebuglog = os.path.join(decr_dir, 'ssldebuglog'+seqno)
@@ -474,6 +482,11 @@ def process_messages():
                     html = get_html_from_asciidump(oneframe)
                     path = os.path.join(decr_dir, 'html-'+seqno+'-'+str(index))
                     with open(path, 'wb') as f: f.write(html)
+                #also create a file where the auditor can see the domain and pubkey
+                with open (os.path.join(auditeetrace_dir, 'domain'+seqno), 'rb') as f: domain_data = f.read()
+                with open (os.path.join(commit_dir, 'pubkey'+seqno), 'rb') as f: pubkey_data = f.read()
+                write_data = domain_data + '\n\n' + 'The auditee claims that the server above presented the public key below\n' + 'Open the server address in your browser and check that the public key matches\n' + 'This step is mandatory to ascertain that the auditee hasn\'t tampered with the audit data\n' + pubkey_data
+                with open(os.path.join(decr_dir, 'domain'+seqno), 'wb') as f: f.write(write_data)               
             progressQueue.put(time.strftime('%H:%M:%S', time.localtime()) + ': All decrypted HTML can be found in ' + decr_dir)
             progressQueue.put(time.strftime('%H:%M:%S', time.localtime()) + ': You may now close the browser.')
             continue
