@@ -1,3 +1,0 @@
-content     testdriver    chrome/content/
-skin	testdriver	classic/1.0	chrome/skin/
-overlay chrome://browser/content/browser.xul chrome://testdriver/content/testdriver.xul
