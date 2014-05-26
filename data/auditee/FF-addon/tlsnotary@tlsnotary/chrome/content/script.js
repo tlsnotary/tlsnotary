@@ -65,6 +65,7 @@ function pollEnvvar(){
 	help.value = "Navigate to a webpage and press RECORD. The page will reload automatically.";
 	button_record_disabled.hidden = true;
 	button_record_enabled.hidden = false;
+	popupShow("The connection to the auditor has been established. You may now open a new tab and go to a webpage. Please follow the instructions on the status bar below.")
 }
 
 
