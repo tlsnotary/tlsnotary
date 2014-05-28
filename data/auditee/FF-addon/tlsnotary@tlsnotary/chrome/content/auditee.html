@@ -222,13 +222,13 @@ function progressBar(){
 	var progress_bar_selftest = document.getElementById("progress_bar_selftest");
 	if (mode == 1) { 
 		if (progress_bar.value >= 100){return;} 
-		progress_bar.value += 1;
+		progress_bar.value += 2;
 	}
 	if (mode == 0) { 
 		if (progress_bar_selftest.value >= 100){return;} 
 		progress_bar_selftest.value += 1;
 	}
-	setTimeout(progressBar, 200);
+	setTimeout(progressBar, 400);
 
 }
 
@@ -287,7 +287,7 @@ function startIRC(){
 
 function responseStartIRC(iteration){
     if (typeof iteration == "number"){
-        if (iteration > 20){setError("ERROR responseStartIRC timed out");return;}
+        if (iteration > 40){setError("ERROR responseStartIRC timed out");return;}
         if (!bStartIRCResponded) setTimeout(responseStartIRC, 1000, ++iteration)
         return;
     }
