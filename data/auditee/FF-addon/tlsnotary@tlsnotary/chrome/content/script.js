@@ -8,6 +8,7 @@ var reqStopRecording;
 var reqPreparePMS;
 var reqGetHTMLPaths;
 var port;
+var tab_url_full = "";//full URL at the time when RECORD is pressed
 var tab_url = ""; //the URL at the time when RECORD is pressed (only the domain part up to the first /)
 var session_path = "";
 var observer;
@@ -71,12 +72,12 @@ function pollEnvvar(){
 
 function startRecording(){
 	audited_browser = gBrowser.selectedBrowser;
-	var href = audited_browser.contentWindow.location.href;
-	if (!href.startsWith("https://")){
+	tab_url_full = audited_browser.contentWindow.location.href;
+	if (!tab_url_full.startsWith("https://")){
 		help.value = "ERROR You can only record pages which start with https://";
 		return;
 	}
-	tab_url = href.split('/')[2]
+	tab_url = tab_url_full.split('/')[2]
 	button_record_enabled.hidden = true;
 	button_spinner.hidden = false;
 	button_stop_disabled.hidden = false;
@@ -171,19 +172,8 @@ function myObserver() {}
 myObserver.prototype = {
   observe: function(aSubject, topic, data) {
 	 var httpChannel = aSubject.QueryInterface(Ci.nsIHttpChannel);
-	 var accept = httpChannel.getRequestHeader("Accept");
 	 var url = httpChannel.URI.spec;
-	 var regex= /html/;
-	 //remove the leading https:// and only keep the domain.com part
-	 var taburl_parts = tab_url.split(".");
-	 var taburl_short = taburl_parts[taburl_parts.length-2] + "." + taburl_parts[taburl_parts.length-1];	 
-	 var urlparts = url.slice(8).split("/")[0].split(".");
-	 var url_short = urlparts[urlparts.length-2] + "." + urlparts[urlparts.length-1];
-	 
-	 if ( (taburl_short==url_short) && regex.test(accept) && url.startsWith("https://")
-	  && !url.endsWith(".png") && !url.endsWith(".gif") && !url.endsWith(".svg") && !url.endsWith(".css") 
-	  && !url.endsWith(".js") && !url.endsWith(".jpg") && !url.endsWith(".ico") && !url.endsWith(".woff") 
-	  && !url.endsWith(".swf") && !url.endsWith(".tlfx") && !url.contains("favicon.ico#") ) 	{
+	 if (url == tab_url_full) {
 		observer.unregister();
 		//don't reuse TLS sessions
 		var sdr = Cc["@mozilla.org/security/sdr;1"].getService(Ci.nsISecretDecoderRing);
