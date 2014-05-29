@@ -58,6 +58,17 @@ WRONG_HASH = 8
 CANT_FIND_XZ = 9
 TSHARK_NOT_FOUND = 10
 
+
+def cleanup_and_exit():
+    if testRetval != 0: #there was an error, leave the auditee's browser running for some post-mortem analysis
+        os.kill(auditor_pid, signal.SIGTERM)
+        exit(1)
+    else:
+        os.kill(auditor_pid, signal.SIGTERM)
+        os.kill(auditee_pid, signal.SIGTERM)
+        exit(0)
+
+
 #logging, primitively
 def log_to_file(message,bdir='.',p=False):
     msg = time.strftime("%a, %d %b %Y %H:%M:%S +0000", time.gmtime())+': '+message+PINL
@@ -103,7 +114,7 @@ class HandlerClass(SimpleHTTPServer.SimpleHTTPRequestHandler):
         print ('minihttp received ' + self.path + ' request',end='\r\n')
         # example HEAD string "/command?parameter=124value1&para2=123value2"
         # we need to adhere to CORS and add extra Access-Control-* headers in server replies
-        
+       
         if self.path.startswith('/type_filepath'):
             rv = type_filepath()
             self.send_response(200)
@@ -136,11 +147,10 @@ class HandlerClass(SimpleHTTPServer.SimpleHTTPRequestHandler):
             err_msg = arg_str[len('errmsg='):]
             log_to_file("Front end sent error condition: "+urllib.unquote(err_msg),p=True)
             global testFinished
-            global testRetval  
-            #os.kill(auditor_pid, signal.SIGTERM)
-            #os.kill(auditee_pid, signal.SIGTERM)
+            global testRetval
             testFinished = True
-            testRetval = 1
+            testRetval = 1            
+            cleanup_and_exit()
 
         if self.path.startswith('/end_test'):
             perform_final_check()
@@ -184,22 +194,28 @@ def perform_final_check():
             with open(os.path.join(auditor_decrypted_dir,i),'rb') as f: dh = f.read()
             auditee_md5s[i] = hashlib.md5(dh).hexdigest()
 
-    if not auditee_md5s: log_to_file("No html found in auditee session directory: "+auditee_decrypted_dir)
-    if not auditor_md5s: log_to_file("No html found in auditor session directory: "+auditor_decrypted_dir)
+    bCheckFailed = False
+    if not auditee_md5s: 
+        log_to_file("No html found in auditee session directory: "+auditee_decrypted_dir)
+        bCheckFailed = True
+    if not auditor_md5s: 
+        log_to_file("No html found in auditor session directory: "+auditor_decrypted_dir)
+        bCheckFailed = True
 
     if (auditee_md5s != auditor_md5s):
         log_to_file('Hash mismatch: Auditor: '+str(auditor_md5s)+', Auditee: '+str(auditee_md5s))
         log_to_file("hash mismatch, test run failed.",p=True)
+        bCheckFailed = True
     else:
         log_to_file('Hashes matched: Auditor: '+str(auditor_md5s)+', Auditee: '+str(auditee_md5s))
         log_to_file('TlsNotary test run successful! See log for details.',p=True)
     log_to_file("**************END TEST RUN*************************")
     global testFinished
     global testRetval  
-    os.kill(auditor_pid, signal.SIGTERM)
-    os.kill(auditee_pid, signal.SIGTERM)
     testFinished = True
-    testRetval = 0
+    if bCheckFailed: testRetval = 1
+    else: testRetval = 0
+    cleanup_and_exit()
     
 
 #use miniHTTP server to receive commands from Firefox addon and respond to them
@@ -313,7 +329,5 @@ if __name__ == "__main__":
 
     while True:
         if testFinished == True:
-            exit(testRetval)
-        time.sleep(3)
-        #print ("listening")
-        
+            cleanup_and_exit()
+        time.sleep(1)        
