@@ -18,6 +18,7 @@ var button_record_disabled;
 var button_spinner;
 var button_stop_enabled;
 var button_stop_disabled;
+var testingMode = false;
 
 port = Cc["@mozilla.org/process/environment;1"].getService(Ci.nsIEnvironment).get("FF_to_backend_port");
 //setting homepage should be done from here rather than defaults.js in order to have the desired effect. FF's quirk.
@@ -265,11 +266,11 @@ function responseGetHTMLPaths(iteration){
         return;
     }
 	if (status != "success"){
-		help.value = "ERROR Received an error message: " + status;
-		return;
-		//failure to find HTML is considered an error for now
-		//so we do not re-enable the RECORD button
-		help.value = "Page decryption FAILED. Navigate to another page and press RECORD";
+		if (testingMode == true) {
+			help.value = "ERROR Received an error message: " + status;
+			return; //failure to find HTML is considered a fatal error during testing
+		}
+		help.value = "ERROR Received an error message: " + status + ". Page decryption FAILED. Try pressing RECORD again";
 		button_record_enabled.hidden = false;
 		button_spinner.hidden = true;
 		button_stop_disabled.hidden = true;

@@ -30,6 +30,7 @@ var tlsnLoadListener = {
 
 if ("true" == Cc["@mozilla.org/process/environment;1"].getService(Ci.nsIEnvironment).get("TLSNOTARY_TEST")){
 		setTimeout(tlsnInitTesting,3000); //allow some time for startIRC button to activate
+		testingMode = true;
 }
 
 
