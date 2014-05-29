@@ -168,7 +168,20 @@ function responsePreparePMS(iteration){
 	observer.register();
 	audited_browser.addProgressListener(loadListener);
 	audited_browser.reloadWithFlags(Ci.nsIWebNavigation.LOAD_FLAGS_BYPASS_CACHE);
+	makeSureReloadDoesntTakeForever(0);
 }
+
+
+function makeSureReloadDoesntTakeForever(iteration) {
+	if (help.value == "Waiting for the page to reload fully") {
+		if (iteration > 300){
+			help.value = "ERROR page reloading is taking too long. You may Stop loading this page and try again"
+            return;
+        }
+		setTimeout(makeSureReloadDoesntTakeForever, 1000, ++iteration);
+		return;
+	}
+ }
 
 
 function myObserver() {}
