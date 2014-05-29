@@ -151,8 +151,8 @@ function waitForRecordingToFinish(iteration){
         return; //give up
     }
     if (!(helpmsg.startsWith("Page decryption successful."))) {    
-		if (iteration > 60){
-			tlsnSendErrorMsg("Timed out waiting for page load complete, for site: "
+		if (iteration > 360){
+			tlsnSendErrorMsg("Timed out waiting for page to load and reload "
 							 +linkArray[tlsnLinkIndex-1]+" and cipher suite: "+
 							 tlsnCipherSuiteNames[tlsnCipherSuiteList[tlsnLinkIndex-1]]);
 			return;
