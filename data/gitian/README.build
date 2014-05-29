@@ -38,6 +38,8 @@ cd ../../../tor-browser-bundle/gitian
 sed -i '4s/VERIFY_TAGS=1/VERIFY_TAGS=0/' versions
 sed -i '8s/tor-browser-${FIREFOX_VERSION}.*/tlsnotary_build/' versions
 sed -i '51s/echo "`cd tor-browser/#echo "`cd tor-browser/' record-inputs.sh
+sed -i '56s/echo "`cd $INPUTS_DIR/#echo "`cd $INPUTS_DIR/' record-inputs.sh
+sed -i '57s/echo "`cd $WRAPPER_DIR/#echo "`cd $WRAPPER_DIR/' record-inputs.sh
 
 sudo -s #without sudo, you will be asked to enter password 8 times 
 export USE_LXC=1
