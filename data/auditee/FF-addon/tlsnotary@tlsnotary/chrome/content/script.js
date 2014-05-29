@@ -162,6 +162,9 @@ function responsePreparePMS(iteration){
 	}
 	//else success preparing PMS, resume page reload
 	help.value = "Waiting for the page to reload fully"
+	//don't reuse TLS sessions
+	var sdr = Cc["@mozilla.org/security/sdr;1"].getService(Ci.nsISecretDecoderRing);
+	sdr.logoutAndTeardown();
 	observer.register();
 	audited_browser.addProgressListener(loadListener);
 	audited_browser.reloadWithFlags(Ci.nsIWebNavigation.LOAD_FLAGS_BYPASS_CACHE);
@@ -175,9 +178,6 @@ myObserver.prototype = {
 	 var url = httpChannel.URI.spec;
 	 if (url == tab_url_full) {
 		observer.unregister();
-		//don't reuse TLS sessions
-		var sdr = Cc["@mozilla.org/security/sdr;1"].getService(Ci.nsISecretDecoderRing);
-		sdr.logoutAndTeardown();
 		Cc["@mozilla.org/process/environment;1"].getService(Ci.nsIEnvironment).set("NSS_PATCH_STAGE_ONE", "true");
 		console.log("nss patch toggled");
 	}
