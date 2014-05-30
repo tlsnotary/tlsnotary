@@ -13,7 +13,7 @@ git clone https://git.torproject.org/builders/tor-browser-bundle.git
 git clone -b tor-browser-builder-3 https://git.torproject.org/builders/gitian-builder.git
 cd tor-browser-bundle
 #checkout a specific commit (tag tbb-3.6-build4)
-git checkout 793a4cd404516b032bc696b4b0e6bb43bafb2e18
+git checkout a9233e60ea2f8b80c42998800cc9e7324a7dfc5d
 cd gitian
 export USE_LXC=1
 make TORSOCKS= prep
@@ -29,10 +29,10 @@ git add browser/app/profile/000-tor-browser.js
 #apply patches to NSS libs
 patch security/nss/lib/softoken/pkcs11c.c < ../../../tlsnotary/data/gitian/pkcs11c.patch
 patch security/nss/lib/ssl/ssl3con.c < ../../../tlsnotary/data/gitian/ssl3con.patch
-git commit -a -m "tlsnotary patch"
 #remove TBB branding and remove preferences overrides
-#FIXME: this breaks mac build: 
+#FIXME: this breaks mac build:
 git revert e31170ec7dd2acf46c2fc636e40ab747621b7357 --no-edit
+git commit -a -m "tlsnotary patch"
 git tag -a tlsnotary_build -m "tlsnotary tag"
 cd ../../../tor-browser-bundle/gitian
 sed -i '4s/VERIFY_TAGS=1/VERIFY_TAGS=0/' versions
