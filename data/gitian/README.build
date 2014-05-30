@@ -29,14 +29,14 @@ git add browser/app/profile/000-tor-browser.js
 #apply patches to NSS libs
 patch security/nss/lib/softoken/pkcs11c.c < ../../../tlsnotary/data/gitian/pkcs11c.patch
 patch security/nss/lib/ssl/ssl3con.c < ../../../tlsnotary/data/gitian/ssl3con.patch
-#remove TBB branding and remove preferences overrides
-#FIXME: this breaks mac build:
-git revert e31170ec7dd2acf46c2fc636e40ab747621b7357 --no-edit
 git commit -a -m "tlsnotary patch"
+#remove TBB branding and remove preferences overrides
+#FIXME: this breaks mac build: 
+git revert e31170ec7dd2acf46c2fc636e40ab747621b7357 --no-edit
 git tag -a tlsnotary_build -m "tlsnotary tag"
 cd ../../../tor-browser-bundle/gitian
-sed -i '4s/VERIFY_TAGS=1/VERIFY_TAGS=0/' versions
-sed -i '8s/tor-browser-${FIREFOX_VERSION}.*/tlsnotary_build/' versions
+sed -i '5s/VERIFY_TAGS=1/VERIFY_TAGS=0/' versions
+sed -i '9s/tor-browser-${FIREFOX_VERSION}.*/tlsnotary_build/' versions
 sed -i '51s/echo "`cd tor-browser/#echo "`cd tor-browser/' record-inputs.sh
 sed -i '56s/echo "`cd $INPUTS_DIR/#echo "`cd $INPUTS_DIR/' record-inputs.sh
 sed -i '57s/echo "`cd $WRAPPER_DIR/#echo "`cd $WRAPPER_DIR/' record-inputs.sh
