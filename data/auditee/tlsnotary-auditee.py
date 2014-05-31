@@ -792,7 +792,7 @@ def new_audited_connection(uid):
     reply = send_and_recv('cr_sr_hmac_n_e:'+b64_cr_sr_hmac_n_e)    
     if reply[0] != 'success': return ('Failed to receive a reply for cr_sr_hmac_n_e:')
     if not reply[1].startswith('rsapms_hmacms_hmacek:'):
-        return 'bad reply. Expected rsapms_hmacms_hmacek_grsapms_ghmac:'
+        return 'bad reply. Expected rsapms_hmacms_hmacek:'
     b64_rsapms_hmacms_hmacek = reply[1][len('rsapms_hmacms_hmacek:'):]
     try: rsapms_hmacms_hmacek = b64decode(b64_rsapms_hmacms_hmacek)    
     except: return ('base64 decode error in rsapms_hmacms_hmacek')
