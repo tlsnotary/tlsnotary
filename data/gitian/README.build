@@ -22,7 +22,7 @@ cd ../../gitian-builder/inputs/tor-browser
 git config user.name "someone"
 git config user.email "someone@someplace.com"
 #checkout commit (tag tor-browser-24.5.0esr-1-build3)
-git checkout e3a8d5fdd5dad12a0bcb6d2290553914457dd91e
+git checkout 5de848c3020ce157c8743af710dea282f22202d4
 #overwrite all tbb's prefs with a single line needed for building
 echo "pref("torbrowser.version", "UNKNOWN");" > browser/app/profile/000-tor-browser.js
 git add browser/app/profile/000-tor-browser.js
@@ -48,7 +48,6 @@ export USE_LXC=1
 #A special workaround for mac
 cd ../../gitian-builder/inputs/tor-browser
 git reset --hard HEAD~1
-git commit -a -m "mac workaround"
 git tag -d tlsnotary_build
 git tag -a tlsnotary_build -m "tlsnotary tag"
 cd ../../../tor-browser-bundle/gitian
