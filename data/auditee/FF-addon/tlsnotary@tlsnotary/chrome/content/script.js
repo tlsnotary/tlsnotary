@@ -318,7 +318,7 @@ function stopRecording(){
 
 function responseStopRecording(iteration){
     if (typeof iteration == "number"){
-        if (iteration > 20){
+        if (iteration > 30){
 			help.value = "ERROR responseStopRecording timed out ";
             return;
         }
