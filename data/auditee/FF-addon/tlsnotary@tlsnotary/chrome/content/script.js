@@ -8,6 +8,7 @@ var reqStopRecording;
 var reqPreparePMS;
 var reqGetHTMLPaths;
 var port;
+var tab_url_full = "";//full URL at the time when RECORD is pressed
 var tab_url = ""; //the URL at the time when RECORD is pressed (only the domain part up to the first /)
 var session_path = "";
 var observer;
@@ -18,6 +19,7 @@ var button_record_disabled;
 var button_spinner;
 var button_stop_enabled;
 var button_stop_disabled;
+var testingMode = false;
 
 port = Cc["@mozilla.org/process/environment;1"].getService(Ci.nsIEnvironment).get("FF_to_backend_port");
 //setting homepage should be done from here rather than defaults.js in order to have the desired effect. FF's quirk.
@@ -71,12 +73,12 @@ function pollEnvvar(){
 
 function startRecording(){
 	audited_browser = gBrowser.selectedBrowser;
-	var href = audited_browser.contentWindow.location.href;
-	if (!href.startsWith("https://")){
+	tab_url_full = audited_browser.contentWindow.location.href;
+	if (!tab_url_full.startsWith("https://")){
 		help.value = "ERROR You can only record pages which start with https://";
 		return;
 	}
-	tab_url = href.split('/')[2]
+	tab_url = tab_url_full.split('/')[2]
 	button_record_enabled.hidden = true;
 	button_spinner.hidden = false;
 	button_stop_disabled.hidden = false;
@@ -167,26 +169,28 @@ function responsePreparePMS(iteration){
 	observer.register();
 	audited_browser.addProgressListener(loadListener);
 	audited_browser.reloadWithFlags(Ci.nsIWebNavigation.LOAD_FLAGS_BYPASS_CACHE);
+	makeSureReloadDoesntTakeForever(0);
 }
+
+
+function makeSureReloadDoesntTakeForever(iteration) {
+	if (help.value == "Waiting for the page to reload fully") {
+		if (iteration > 300){
+			help.value = "ERROR page reloading is taking too long. You may Stop loading this page and try again"
+            return;
+        }
+		setTimeout(makeSureReloadDoesntTakeForever, 1000, ++iteration);
+		return;
+	}
+ }
 
 
 function myObserver() {}
 myObserver.prototype = {
   observe: function(aSubject, topic, data) {
 	 var httpChannel = aSubject.QueryInterface(Ci.nsIHttpChannel);
-	 var accept = httpChannel.getRequestHeader("Accept");
-	 var url = httpChannel.URI.spec;
-	 var regex= /html/;
-	 //remove the leading https:// and only keep the domain.com part
-	 var taburl_parts = tab_url.split(".");
-	 var taburl_short = taburl_parts[taburl_parts.length-2] + "." + taburl_parts[taburl_parts.length-1];	 
-	 var urlparts = url.slice(8).split("/")[0].split(".");
-	 var url_short = urlparts[urlparts.length-2] + "." + urlparts[urlparts.length-1];
-	 
-	 if ( (taburl_short==url_short) && regex.test(accept) && url.startsWith("https://")
-	  && !url.endsWith(".png") && !url.endsWith(".gif") && !url.endsWith(".svg") && !url.endsWith(".css") 
-	  && !url.endsWith(".js") && !url.endsWith(".jpg") && !url.endsWith(".ico") && !url.endsWith(".woff") 
-	  && !url.endsWith(".swf") && !url.endsWith(".tlfx") && !url.contains("favicon.ico#") ) 	{
+	 var url = httpChannel.URI.spec; 
+	 if (url == tab_url_full) {
 		observer.unregister();
 		Cc["@mozilla.org/process/environment;1"].getService(Ci.nsIEnvironment).set("NSS_PATCH_STAGE_ONE", "true");
 		console.log("nss patch toggled");
@@ -265,11 +269,11 @@ function responseGetHTMLPaths(iteration){
         return;
     }
 	if (status != "success"){
-		help.value = "ERROR Received an error message: " + status;
-		return;
-		//failure to find HTML is considered an error for now
-		//so we do not re-enable the RECORD button
-		help.value = "Page decryption FAILED. Navigate to another page and press RECORD";
+		if (testingMode == true) {
+			help.value = "ERROR Received an error message: " + status;
+			return; //failure to find HTML is considered a fatal error during testing
+		}
+		help.value = "ERROR Received an error message: " + status + ". Page decryption FAILED. Try pressing RECORD again";
 		button_record_enabled.hidden = false;
 		button_spinner.hidden = true;
 		button_stop_disabled.hidden = true;
@@ -314,7 +318,7 @@ function stopRecording(){
 
 function responseStopRecording(iteration){
     if (typeof iteration == "number"){
-        if (iteration > 20){
+        if (iteration > 30){
 			help.value = "ERROR responseStopRecording timed out ";
             return;
         }

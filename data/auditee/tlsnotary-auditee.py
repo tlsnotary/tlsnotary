@@ -792,7 +792,7 @@ def new_audited_connection(uid):
     reply = send_and_recv('cr_sr_hmac_n_e:'+b64_cr_sr_hmac_n_e)    
     if reply[0] != 'success': return ('Failed to receive a reply for cr_sr_hmac_n_e:')
     if not reply[1].startswith('rsapms_hmacms_hmacek:'):
-        return 'bad reply. Expected rsapms_hmacms_hmacek_grsapms_ghmac:'
+        return 'bad reply. Expected rsapms_hmacms_hmacek:'
     b64_rsapms_hmacms_hmacek = reply[1][len('rsapms_hmacms_hmacek:'):]
     try: rsapms_hmacms_hmacek = b64decode(b64_rsapms_hmacms_hmacek)    
     except: return ('base64 decode error in rsapms_hmacms_hmacek')
@@ -912,29 +912,35 @@ def new_connection_thread(socket_client, new_address):
     headers = headers_str.split()
     if len(headers) < 2:
         print ('Invalid or empty header received: ' + headers_str)
+        socket_client.shutdown(socket.SHUT_RDWR)
         socket_client.close()
         return
     if headers[0] != 'CONNECT':
         print ('Expected CONNECT in header but got ' + headers[0] + '. Please investigate')
+        socket_client.shutdown(socket.SHUT_RDWR)        
         socket_client.close()
         return
     if headers[1].find(':') == -1:
         print ('Expected colon in the address part of the header but none found. Please investigate')
+        socket_client.shutdown(socket.SHUT_RDWR)        
         socket_client.close()
         return
     split_result = headers[1].split(':')
     if len(split_result) != 2:
         print ('Expected only two values after splitting the header. Please investigate')
+        socket_client.shutdown(socket.SHUT_RDWR)        
         socket_client.close()
         return
     host, port = split_result
     try: int_port = int(port)
     except:
         print ('Port is not a numerical value. Please investigate')
+        socket_client.shutdown(socket.SHUT_RDWR)        
         socket_client.close()
         return
     try: host_ip = socket.gethostbyname(host)
     except: #happens when IP lookup fails for some IP6-only hosts
+        socket_client.shutdown(socket.SHUT_RDWR)        
         socket_client.close()
         return
     socket_target = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -948,17 +954,23 @@ def new_connection_thread(socket_client, new_address):
         rlist, wlist, xlist = select.select((socket_client, socket_target), (), (socket_client, socket_target), 60)
         if len(rlist) == len(wlist) == len(xlist) == 0: #timeout
             print ('Socket 60 second timeout. Terminating connection')
+            socket_client.shutdown(socket.SHUT_RDWR)            
             socket_client.close()
+            socket_target.shutdown(socket.SHUT_RDWR)            
             socket_target.close()
             return
         if len(xlist) > 0:
             print ('Socket exceptional condition. Terminating connection')
+            socket_client.shutdown(socket.SHUT_RDWR)                        
             socket_client.close()
+            socket_target.shutdown(socket.SHUT_RDWR)                        
             socket_target.close()
             return
         if len(rlist) == 0:
             print ('Python internal socket error: rlist should not be empty. Please investigate. Terminating connection')
+            socket_client.shutdown(socket.SHUT_RDWR)                                    
             socket_client.close()
+            socket_target.shutdown(socket.SHUT_RDWR)                                    
             socket_target.close()
             return
         #else rlist contains socket with data
@@ -969,7 +981,9 @@ def new_connection_thread(socket_client, new_address):
                     #XXX Why did select() trigger if there was no data?
                     #this overwhelms CPU big time unless we sleep
                     if int(time.time()) - last_time_data_was_seen > 60: #prevent no-data sockets from looping endlessly
+                        socket_client.shutdown(socket.SHUT_RDWR)
                         socket_client.close()
+                        socket_target.shutdown(socket.SHUT_RDWR)
                         socket_target.close()
                         return
                     #else timeout seconds of datalessness have not elapsed
@@ -984,7 +998,9 @@ def new_connection_thread(socket_client, new_address):
                     continue
             except Exception, e:
                 print (e)
+                socket_client.shutdown(socket.SHUT_RDWR)
                 socket_client.close()
+                socket_target.shutdown(socket.SHUT_RDWR)
                 socket_target.close()
                 return
          
