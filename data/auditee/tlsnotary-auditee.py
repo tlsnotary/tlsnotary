@@ -26,6 +26,9 @@ import time
 import zipfile
 try: import wingdbstub
 except: pass
+import ConfigParser
+
+config = ConfigParser.ConfigParser()
 
 datadir = os.path.dirname(os.path.realpath(__file__))
 installdir = os.path.dirname(os.path.dirname(datadir))
@@ -45,7 +48,6 @@ recvQueue = Queue.Queue() #all messages from the auditor are placed here by rece
 ackQueue = Queue.Queue() #ack numbers are placed here
 auditor_nick = '' #we learn auditor's nick as soon as we get a hello_server signed by the auditor
 my_nick = '' #our nick is randomly generated on connection to IRC
-channel_name = '#tlsnotary'
 myPrvKey = auditorPubKey = None
 google_modulus = 0
 google_exponent = 0
@@ -133,7 +135,7 @@ class HandlerClass(SimpleHTTPServer.SimpleHTTPRequestHandler):
     #HTTP/1.0 instead of HTTP/1.1 is crucial, otherwise the http server just keep hanging
     #https://mail.python.org/pipermail/python-list/2013-April/645128.html
     protocol_version = 'HTTP/1.0'      
-    
+
     def respond(self, headers):
         # we need to adhere to CORS and add extra Access-Control-* headers in server replies                
         keys = [k for k in headers]
@@ -258,7 +260,28 @@ class HandlerClass(SimpleHTTPServer.SimpleHTTPRequestHandler):
             global selftest_pid
             selftest_pid = proc.pid
             self.respond({'response':'selftest', 'status':'success'})
-            return            
+            return
+        #----------------------------------------------------------------------#
+        if self.path.startswith('/get_advanced'):
+            self.respond({'irc_server':config.get('IRC','irc_server'),
+            'channel_name':config.get('IRC','channel_name')})
+            return
+
+        #----------------------------------------------------------------------#
+        if self.path.startswith('/set_advanced'):
+            args = self.path.split('?')[1].split(',')
+            #TODO can make this more generic when there are lots of arguments;
+            if not (args[0].split('=')[0] == 'server_val' and args[1].split('=')[0] == 'channel_val' \
+                and args[0].split('=')[1] and args[0].split('=')[1]):
+                print ('Failed to reset the irc config. Server was:',args[0].split('=')[1], \
+                ' and channel was: ', args[1].split('=')[1])
+                return
+                #to consider: front end is not listening anyway, so no point responding.
+                #raise Exception("Invalid format of advanced update request")
+            config.set('IRC','irc_server',args[0].split('=')[1])
+            config.set('IRC','channel_name',args[1].split('=')[1])
+            with open(os.path.join(installdir,'tlsnotary.ini'),'wb') as f: config.write(f)
+            return
         #----------------------------------------------------------------------#
         else:
             self.respond({'response':'unknown command'})
@@ -627,7 +650,7 @@ def send_and_recv (data):
         for i in range (3):
             bWasMessageAcked = False
             ending = ' EOL ' if chunk_index+1==chunks else ' CRLF ' #EOL for the last chunk, otherwise CRLF
-            irc_msg = 'PRIVMSG ' + channel_name + ' :' + auditor_nick + ' seq:' + str(send_and_recv.my_seq) + ' ' + chunk + ending +'\r\n'
+            irc_msg = 'PRIVMSG ' + config.get('IRC','channel_name') + ' :' + auditor_nick + ' seq:' + str(send_and_recv.my_seq) + ' ' + chunk + ending +'\r\n'
             bytessent = IRCsocket.send(irc_msg)
             print('SENT:' + str(bytessent) + ' ' +  irc_msg)
         
@@ -1087,7 +1110,7 @@ def receivingThread(my_nick, auditor_nick, IRCsocket):
                 IRCsocket.send('PONG %s' % msg[1]) #answer with pong as per RFC 1459
                 continue
             if not len(msg) >= 5: continue
-            if not (msg[1] == 'PRIVMSG' and msg[2] == channel_name and msg[3] == ':'+my_nick ): continue
+            if not (msg[1] == 'PRIVMSG' and msg[2] == '#' + config.get('IRC','channel_name') and msg[3] == ':'+my_nick ): continue
             exclamaitionMarkPosition = msg[0].find('!')
             nick_from_message = msg[0][1:exclamaitionMarkPosition]
             if not auditor_nick == nick_from_message: continue
@@ -1099,7 +1122,7 @@ def receivingThread(my_nick, auditor_nick, IRCsocket):
             his_seq = int(msg[4][len('seq:'):])
             if his_seq <=  receivingThread.last_seq_which_i_acked: 
                 #the other side is out of sync, send an ack again
-                IRCsocket.send('PRIVMSG ' + channel_name + ' :' + auditor_nick + ' ack:' + str(his_seq) + ' \r\n')
+                IRCsocket.send('PRIVMSG ' + '#' + config.get('IRC','channel_name') + ' :' + auditor_nick + ' ack:' + str(his_seq) + ' \r\n')
                 continue
             if not his_seq == receivingThread.last_seq_which_i_acked +1: continue #we did not receive the next seq in order
             #else we got a new seq      
@@ -1107,7 +1130,7 @@ def receivingThread(my_nick, auditor_nick, IRCsocket):
                 'grsapms_ghmac', 'rsapms_hmacms_hmacek', 'verify_hmac:', 'logsig:', 'response:', 'sha1hmac_for_MS')) : continue         
             #'CRLF' is used at the end of the first chunk, 'EOL' is used to show that there are no more chunks
             chunks.append(msg[5])
-            IRCsocket.send('PRIVMSG ' + channel_name + ' :' + auditor_nick + ' ack:' + str(his_seq) + ' \r\n')
+            IRCsocket.send('PRIVMSG ' + '#' + config.get('IRC','channel_name') + ' :' + auditor_nick + ' ack:' + str(his_seq) + ' \r\n')
             receivingThread.last_seq_which_i_acked = his_seq            
             if msg[-1]=='EOL':
                 assembled_message = ''.join(chunks)
@@ -1124,10 +1147,10 @@ def start_irc():
     
     my_nick= 'user' + ''.join(random.choice('0123456789') for x in range(10))  
     IRCsocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    IRCsocket.connect(('chat.freenode.net', 6667))
+    IRCsocket.connect((config.get('IRC','irc_server'), 6667))
     IRCsocket.send('USER %s %s %s %s' % ('these', 'arguments', 'are', 'optional') + '\r\n')
     IRCsocket.send('NICK ' + my_nick + '\r\n')  
-    IRCsocket.send('JOIN %s' % channel_name + '\r\n')  
+    IRCsocket.send('JOIN %s' % ('#'+config.get('IRC','channel_name')) + '\r\n')
     # ----------------------------------BEGIN get the certficate for google.com and extract modulus/exponent
     tlssock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     tlssock.settimeout(10)
@@ -1196,9 +1219,9 @@ def start_irc():
     for attempt in range(6): #try for 6*10 secs to find the auditor
         if bIsAuditorRegistered == True: break #previous iteration successfully regd the auditor
         time_attempt_began = int(time.time())
-        IRCsocket.send('PRIVMSG ' + channel_name + ' :client_hello:'+b64_hello +' \r\n')
+        IRCsocket.send('PRIVMSG ' + '#' + config.get('IRC','channel_name') + ' :client_hello:'+b64_hello +' \r\n')
         time.sleep(1)
-        IRCsocket.send('PRIVMSG ' + channel_name + ' :google_pubkey:'+b64_google_pubkey +' \r\n')
+        IRCsocket.send('PRIVMSG ' + '#' + config.get('IRC','channel_name') + ' :google_pubkey:'+b64_google_pubkey +' \r\n')
         while not bIsAuditorRegistered:
             if int(time.time()) - time_attempt_began > 10: break
             buffer = ''
@@ -1214,7 +1237,7 @@ def start_irc():
                     IRCsocket.send('PONG %s' % msg[1]) #answer with pong as per RFC 1459
                     continue
                 if not len(msg) == 5: continue
-                if not (msg[1]=='PRIVMSG' and msg[2]==channel_name and msg[3]==':'+my_nick and msg[4].startswith('server_hello:')): continue
+                if not (msg[1]=='PRIVMSG' and msg[2]=='#' + config.get('IRC','channel_name') and msg[3]==':'+my_nick and msg[4].startswith('server_hello:')): continue
                 b64_signed_hello = msg[4][len('server_hello:'):]
                 try:
                     signed_hello = b64decode(b64_signed_hello)
@@ -1470,6 +1493,7 @@ def first_run_check():
     
     
 if __name__ == "__main__":
+    config.read('tlsnotary.ini')
     first_run_check()
     sys.path.append(join(datadir, 'python', 'rsa-3.1.4'))
     sys.path.append(join(datadir, 'python', 'pyasn1-0.1.7'))
