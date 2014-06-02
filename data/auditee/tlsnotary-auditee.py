@@ -323,16 +323,13 @@ def get_html_paths(domain):
     #Remove the data from the auditee to the auditor (except handshake) from the copied
     #trace using editcap. (To address the small possibility of data leakage from request urls)
     output = check_output([tshark_exepath,'-r',tracecopy_path,'-Y',
-                                    'ssl.handshake.certificate',
-                                    '-o', 'http.ssl.port:1025-65535',
-                                    '-T','fields',
+                                    'ssl.handshake.certificate','-T','fields',
                                     '-e','tcp.srcport'])
     if not output:
         raise Exception("No certificate found in trace.")
     #gather the trace frames which were sent from the same port as the certificate
     output = check_output([tshark_exepath,'-r',tracecopy_path,'-Y',
                                     'ssl.handshake or tcp.srcport=='+output.strip(),
-                                    '-o', 'http.ssl.port:1025-65535',
                                     '-T','fields','-e','frame.number'])
     if not output:
         raise Exception("Error parsing trace for server frames")
@@ -378,8 +375,15 @@ def get_html_paths(domain):
                                           '-o', 'ssl.ignore_ssl_mac_failed:False',
                                           '-o', 'ssl.debug_file:' + ssldebuglog,
                                           '-x'])
-    except:
-        raise Exception('Failed to launch tshark')
+    except: #maybe this is an old tshark version, change -Y to -R
+        try: output = check_output([tshark_exepath, '-r', tracecopy_path,
+                                              '-R', 'ssl and http.content_type contains html', 
+                                               '-o', 'http.ssl.port:1025-65535', 
+                                               '-o', 'ssl.keylog_file:'+ sslkeylog,
+                                               '-o', 'ssl.ignore_ssl_mac_failed:False',
+                                               '-o', 'ssl.debug_file:' + ssldebuglog,
+                                               '-x'])
+        except: raise Exception('Failed to launch tshark')
     if output == '': return ('failure', 'Failed to find HTML in escrowtrace')
     with open(ssldebuglog, 'rb') as f: debugdata = f.read()
     if debugdata.count('mac failed') > 0: raise Exception('Mac check failed in tracefile')
@@ -1539,15 +1543,7 @@ if __name__ == "__main__":
         else: raise  Exception('Failed to find wireshark in your Applications folder')
         if os.path.isfile(editcap_osx): editcap_exepath = editcap_osx
         else: raise  Exception('Failed to find Wireshark component editcap in your Applications folder')
-
-    #tshark must be 1.10 or higher
-    tsv_info = check_output([tshark_exepath,'-v'])
-    tsv = tsv_info.split('\n')[0].split()[1].split('.')[:2]
-    if int(tsv[0]) != 1:
-        raise Exception('Unrecognized version of tshark')
-    if int(tsv[1]) < 10:
-        raise Exception('Your version of tshark is too old. Please upgrade tshark or Wireshark to version 1.10 or higher')
-
+      
     thread = ThreadWithRetval(target= http_server)
     thread.daemon = True
     thread.start()
