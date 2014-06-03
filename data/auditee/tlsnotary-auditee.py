@@ -264,7 +264,7 @@ class HandlerClass(SimpleHTTPServer.SimpleHTTPRequestHandler):
         #----------------------------------------------------------------------#
         if self.path.startswith('/get_advanced'):
             self.respond({'irc_server':config.get('IRC','irc_server'),
-            'channel_name':config.get('IRC','channel_name')})
+            'channel_name':config.get('IRC','channel_name'),'irc_port':config.get('IRC','irc_port')})
             return
 
         #----------------------------------------------------------------------#
@@ -272,7 +272,8 @@ class HandlerClass(SimpleHTTPServer.SimpleHTTPRequestHandler):
             args = self.path.split('?')[1].split(',')
             #TODO can make this more generic when there are lots of arguments;
             if not (args[0].split('=')[0] == 'server_val' and args[1].split('=')[0] == 'channel_val' \
-                and args[0].split('=')[1] and args[0].split('=')[1]):
+                and args[2].split('=')[0] == 'port_val' and args[0].split('=')[1] and \
+                args[1].split('=')[1] and args[2].split('=')[1]):
                 print ('Failed to reset the irc config. Server was:',args[0].split('=')[1], \
                 ' and channel was: ', args[1].split('=')[1])
                 return
@@ -280,6 +281,7 @@ class HandlerClass(SimpleHTTPServer.SimpleHTTPRequestHandler):
                 #raise Exception("Invalid format of advanced update request")
             config.set('IRC','irc_server',args[0].split('=')[1])
             config.set('IRC','channel_name',args[1].split('=')[1])
+            config.set('IRC','irc_port',args[2].split('=')[1])
             with open(os.path.join(installdir,'tlsnotary.ini'),'wb') as f: config.write(f)
             return
         #----------------------------------------------------------------------#
@@ -1151,7 +1153,7 @@ def start_irc():
     
     my_nick= 'user' + ''.join(random.choice('0123456789') for x in range(10))  
     IRCsocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    IRCsocket.connect((config.get('IRC','irc_server'), 6667))
+    IRCsocket.connect((config.get('IRC','irc_server'), int(config.get('IRC','irc_port'))))
     IRCsocket.send('USER %s %s %s %s' % ('these', 'arguments', 'are', 'optional') + '\r\n')
     IRCsocket.send('NICK ' + my_nick + '\r\n')  
     IRCsocket.send('JOIN %s' % ('#'+config.get('IRC','channel_name')) + '\r\n')

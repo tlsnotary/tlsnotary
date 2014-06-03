@@ -55,6 +55,10 @@
                 <textarea id="textarea_ircserver" cols="40" rows="1" type="text" name="irc_server" style="width:40%;resize:none;" autocomplete="off">chat.freenode.net</textarea>
         </div>
         <div>
+                <p>IRC port</p>
+                <textarea id="textarea_ircport" cols="10" rows="1" type="text" name="irc_port" style="width:40%;resize:none;" autocomplete="off">6667</textarea>
+        </div>
+        <div>
                 <p>IRC channel name (omit '#')</p>
                 <textarea id="textarea_ircchannel" cols="40" rows="1" type="text" name="irc_channel" style="width:40%;resize:none;" autocomplete="off">tlsnotary</textarea>
         </div>
@@ -186,14 +190,10 @@ function inputReceived(){
 function advancedUpdate(){
     var server_val = document.getElementById("textarea_ircserver").value.trim();
     var channel_val = document.getElementById("textarea_ircchannel").value.trim();
-    //TODO: Strip any #
+    var port_val = document.getElementById("textarea_ircport").value.trim();
 
-    if (server_val == ""){
-        alert("You must enter a value for IRC server");
-        return;
-    }
-    if (channel_val == ""){
-        alert("You must enter a value for IRC channel");
+    if (server_val == "" || channel_val == "" || port_val == ""){
+        alert("All settings are mandatory");
         return;
     }
 
@@ -203,12 +203,18 @@ function advancedUpdate(){
         return;
     }
 
+    var intTest = /^-?(\d+|0)$/;
+    if (!(intTest.test(port_val)) || port_val < 0 || port_val > 65535){
+        alert("You must enter a valid port - an integer between 0 and 65535");
+        return;
+    }
+
     reqAdvancedUpdate = new XMLHttpRequest();
     //not setting a response 'onload' because: the backend is not given
     //any choice on how to respond; if it fails to respond other error messages will
     //pick that up anyway.
 
-    reqAdvancedUpdate.open("HEAD", "http://127.0.0.1:"+port+"/set_advanced?server_val="+server_val+",channel_val="+channel_val, true);
+    reqAdvancedUpdate.open("HEAD", "http://127.0.0.1:"+port+"/set_advanced?server_val="+server_val+",channel_val="+channel_val+",port_val="+port_val, true);
     reqAdvancedUpdate.send();
 }
 
@@ -236,6 +242,7 @@ function responseGetAdvanced(iteration){
     bGetAdvancedResponded = true;
     document.getElementById("textarea_ircserver").value = reqGetAdvanced.getResponseHeader("irc_server");
     document.getElementById("textarea_ircchannel").value = reqGetAdvanced.getResponseHeader("channel_name");
+    document.getElementById("textarea_ircport").value = reqGetAdvanced.getResponseHeader("irc_port");
 }
 
 function responseGetRecentKeys(iteration){

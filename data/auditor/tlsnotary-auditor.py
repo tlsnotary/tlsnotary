@@ -698,7 +698,7 @@ def start_irc():
 
     #whether normal mode or selftest mode, we should take the IRC settings from the config file
     config.read(os.path.join(installdir,'tlsnotary.ini'))
-    IRCsocket.connect((config.get('IRC','irc_server'), 6667))
+    IRCsocket.connect((config.get('IRC','irc_server'), int(config.get('IRC','irc_port'))))
     IRCsocket.send("USER %s %s %s %s" % ('one1', 'two2', 'three3', 'four4') + '\r\n')
     IRCsocket.send("NICK " + my_nick + '\r\n')  
     IRCsocket.send("JOIN %s" % ('#' + config.get('IRC','channel_name')) + '\r\n')
