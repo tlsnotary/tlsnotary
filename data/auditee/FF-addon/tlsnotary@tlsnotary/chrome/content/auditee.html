@@ -188,12 +188,18 @@ function advancedUpdate(){
     var channel_val = document.getElementById("textarea_ircchannel").value.trim();
     //TODO: Strip any #
 
-    if (server_val == null){
+    if (server_val == ""){
         alert("You must enter a value for IRC server");
         return;
     }
-    if (channel_val == null){
+    if (channel_val == ""){
         alert("You must enter a value for IRC channel");
+        return;
+    }
+
+    if (channel_val.startsWith("#")){
+        alert("Omit # from channel name");
+        document.getElementById("textarea_ircchannel").value = channel_val.substr(1);
         return;
     }
 

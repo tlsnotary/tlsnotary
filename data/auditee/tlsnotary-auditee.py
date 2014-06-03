@@ -654,7 +654,7 @@ def send_and_recv (data):
         for i in range (3):
             bWasMessageAcked = False
             ending = ' EOL ' if chunk_index+1==chunks else ' CRLF ' #EOL for the last chunk, otherwise CRLF
-            irc_msg = 'PRIVMSG ' + config.get('IRC','channel_name') + ' :' + auditor_nick + ' seq:' + str(send_and_recv.my_seq) + ' ' + chunk + ending +'\r\n'
+            irc_msg = 'PRIVMSG ' + '#' + config.get('IRC','channel_name') + ' :' + auditor_nick + ' seq:' + str(send_and_recv.my_seq) + ' ' + chunk + ending +'\r\n'
             bytessent = IRCsocket.send(irc_msg)
             print('SENT:' + str(bytessent) + ' ' +  irc_msg)
         
