@@ -27,6 +27,9 @@ try: import wingdbstub
 except: pass
 
 datadir = os.path.dirname(os.path.realpath(__file__))
+sys.path.append(os.path.dirname(datadir))
+import shared
+installdir = os.path.dirname(os.path.dirname(datadir))
 sessionsdir = os.path.join(datadir, 'sessions')
 time_str = time.strftime("%d-%b-%Y-%H-%M-%S", time.gmtime())
 current_sessiondir = os.path.join(sessionsdir, time_str)
@@ -40,7 +43,7 @@ elif platform == 'Darwin': OS = 'macos'
 IRCsocket = None
 my_nick = ''
 auditee_nick = ''
-channel_name = '#tlsnotary'
+
 myPrivateKey = auditeePublicKey = None
 recvQueue = Queue.Queue() #all IRC messages destined for me
 ackQueue = Queue.Queue() #auditee ACKs
@@ -161,7 +164,7 @@ def receivingThread():
                 continue
             #check if the message is correctly formatted
             if not len(msg) >= 5: continue
-            if not (msg[1]=='PRIVMSG' and msg[2]==channel_name and msg[3]==':'+my_nick ): continue
+            if not (msg[1]=='PRIVMSG' and msg[2]=='#' + shared.config.get('IRC','channel_name') and msg[3]==':'+my_nick ): continue
             exclamaitionMarkPosition = msg[0].find('!')
             nick_from_message = msg[0][1:exclamaitionMarkPosition]
             if not auditee_nick == nick_from_message: continue
@@ -173,7 +176,7 @@ def receivingThread():
             his_seq = int(msg[4][len('seq:'):])
             if his_seq <= receivingThread.last_seq_which_i_acked: 
                 #the other side is out of sync, send an ack again
-                IRCsocket.send('PRIVMSG ' + channel_name + ' :' + auditee_nick + ' ack:' + str(his_seq) + ' \r\n')
+                IRCsocket.send('PRIVMSG ' + '#' + shared.config.get('IRC','channel_name') + ' :' + auditee_nick + ' ack:' + str(his_seq) + ' \r\n')
                 continue
             if not his_seq == receivingThread.last_seq_which_i_acked+1: continue #we did not receive the next seq in order
             #else we got a new seq      
@@ -181,7 +184,7 @@ def receivingThread():
                 'gcr_gsr', 'verify_md5sha:', 'zipsig:', 'link:', 'commit_hash:') ) : continue         
             #'CRLF' is used at the end of the first chunk, 'EOL' is used to show that there are no more chunks
             chunks.append(msg[5])
-            IRCsocket.send('PRIVMSG ' + channel_name + ' :' + auditee_nick + ' ack:' + str(his_seq) + ' \r\n')
+            IRCsocket.send('PRIVMSG ' + '#' + shared.config.get('IRC','channel_name') + ' :' + auditee_nick + ' ack:' + str(his_seq) + ' \r\n')
             receivingThread.last_seq_which_i_acked = his_seq            
             if msg[-1]=='EOL':
                 assembled_message = ''.join(chunks)
@@ -208,7 +211,7 @@ def send_message(data):
         for i in range (3):
             bWasMessageAcked = False
             ending = ' EOL ' if chunk_index+1==chunks else ' CRLF ' #EOL for the last chunk, otherwise CRLF
-            irc_msg = 'PRIVMSG ' + channel_name + ' :' + auditee_nick + ' seq:' + str(send_message.my_seq) + ' ' + chunk + ending +' \r\n'
+            irc_msg = 'PRIVMSG ' + '#' + shared.config.get('IRC','channel_name') + ' :' + auditee_nick + ' seq:' + str(send_message.my_seq) + ' ' + chunk + ending +' \r\n'
             #empty the ack queue. Not using while True: because sometimes an endless loop would happen TODO: find out why
             for j in range(5):
                 try: ackQueue.get_nowait()
@@ -636,7 +639,7 @@ def registerAuditeeThread():
                 IRCsocket.send("PONG %s" % msg[1]) #answer with pong as per RFC 1459
                 continue
             if not len(msg) == 4: continue
-            if not (msg[1]=='PRIVMSG' and msg[2]==channel_name and msg[3].startswith((':google_pubkey:', ':client_hello:'))): continue
+            if not (msg[1]=='PRIVMSG' and msg[2]=='#' + shared.config.get('IRC','channel_name') and msg[3].startswith((':google_pubkey:', ':client_hello:'))): continue
             if msg[3].startswith(':google_pubkey:') and auditee_nick != '': #we already got the first client_hello part
                 try:
                     b64_google_pubkey = msg[3][len(':client_hello:'):]
@@ -671,9 +674,9 @@ def registerAuditeeThread():
     #else send back a hello message
     signed_hello = rsa.sign('server_hello', myPrivateKey, 'SHA-1')
     b64_signed_hello = base64.b64encode(signed_hello)
-    IRCsocket.send('PRIVMSG ' + channel_name + ' :' + auditee_nick + ' server_hello:'+b64_signed_hello + ' \r\n')
+    IRCsocket.send('PRIVMSG ' + '#' + shared.config.get('IRC','channel_name') + ' :' + auditee_nick + ' server_hello:'+b64_signed_hello + ' \r\n')
     time.sleep(2) #send twice because it was observed that the msg would not appear on the chan
-    IRCsocket.send('PRIVMSG ' + channel_name + ' :' + auditee_nick + ' server_hello:'+b64_signed_hello + ' \r\n')  
+    IRCsocket.send('PRIVMSG ' + '#' + shared.config.get('IRC','channel_name') + ' :' + auditee_nick + ' server_hello:'+b64_signed_hello + ' \r\n')
     progressQueue.put(time.strftime('%H:%M:%S', time.localtime()) + ': Auditee has been authorized. Awaiting data...')
     thread = threading.Thread(target= receivingThread)
     thread.daemon = True
@@ -686,14 +689,18 @@ def registerAuditeeThread():
 def start_irc():
     global my_nick
     global IRCsocket
+    global installdir
     progressQueue.put(time.strftime('%H:%M:%S', time.localtime()) +': Connecting to irc.freenode.org and joining #tlsnotary')
     
     my_nick= 'user' + ''.join(random.choice('0123456789') for x in range(10))    
     IRCsocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    IRCsocket.connect(('chat.freenode.net', 6667))
+
+    #whether normal mode or selftest mode, we should take the IRC settings from the config file
+    shared.config.read(os.path.join(installdir,'tlsnotary.ini'))
+    IRCsocket.connect((shared.config.get('IRC','irc_server'), int(shared.config.get('IRC','irc_port'))))
     IRCsocket.send("USER %s %s %s %s" % ('one1', 'two2', 'three3', 'four4') + '\r\n')
     IRCsocket.send("NICK " + my_nick + '\r\n')  
-    IRCsocket.send("JOIN %s" % channel_name + '\r\n')
+    IRCsocket.send("JOIN %s" % ('#' + shared.config.get('IRC','channel_name')) + '\r\n')
     progressQueue.put(time.strftime('%H:%M:%S', time.localtime()) + ': Connected to IRC successfully. Waiting for the auditee to join the channel...')
 
     thread = threading.Thread(target= registerAuditeeThread)
@@ -764,6 +771,7 @@ def first_run_check():
   
 
 if __name__ == "__main__": 
+    shared.load_program_config()
     first_run_check()
     #both on first and subsequent runs
     sys.path.append(os.path.join(datadir, 'python', 'rsa-3.1.4'))

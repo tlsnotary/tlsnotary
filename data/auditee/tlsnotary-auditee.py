@@ -26,8 +26,9 @@ import time
 import zipfile
 try: import wingdbstub
 except: pass
-
 datadir = os.path.dirname(os.path.realpath(__file__))
+sys.path.append(os.path.dirname(datadir))
+import shared
 installdir = os.path.dirname(os.path.dirname(datadir))
 sessionsdir = join(datadir, 'sessions')
 time_str = time.strftime('%d-%b-%Y-%H-%M-%S', time.gmtime())
@@ -45,7 +46,6 @@ recvQueue = Queue.Queue() #all messages from the auditor are placed here by rece
 ackQueue = Queue.Queue() #ack numbers are placed here
 auditor_nick = '' #we learn auditor's nick as soon as we get a hello_server signed by the auditor
 my_nick = '' #our nick is randomly generated on connection to IRC
-channel_name = '#tlsnotary'
 myPrvKey = auditorPubKey = None
 google_modulus = 0
 google_exponent = 0
@@ -133,7 +133,7 @@ class HandlerClass(SimpleHTTPServer.SimpleHTTPRequestHandler):
     #HTTP/1.0 instead of HTTP/1.1 is crucial, otherwise the http server just keep hanging
     #https://mail.python.org/pipermail/python-list/2013-April/645128.html
     protocol_version = 'HTTP/1.0'      
-    
+
     def respond(self, headers):
         # we need to adhere to CORS and add extra Access-Control-* headers in server replies                
         keys = [k for k in headers]
@@ -258,7 +258,30 @@ class HandlerClass(SimpleHTTPServer.SimpleHTTPRequestHandler):
             global selftest_pid
             selftest_pid = proc.pid
             self.respond({'response':'selftest', 'status':'success'})
-            return            
+            return
+        #----------------------------------------------------------------------#
+        if self.path.startswith('/get_advanced'):
+            self.respond({'irc_server':shared.config.get('IRC','irc_server'),
+            'channel_name':shared.config.get('IRC','channel_name'),'irc_port':shared.config.get('IRC','irc_port')})
+            return
+
+        #----------------------------------------------------------------------#
+        if self.path.startswith('/set_advanced'):
+            args = self.path.split('?')[1].split(',')
+            #TODO can make this more generic when there are lots of arguments;
+            if not (args[0].split('=')[0] == 'server_val' and args[1].split('=')[0] == 'channel_val' \
+                and args[2].split('=')[0] == 'port_val' and args[0].split('=')[1] and \
+                args[1].split('=')[1] and args[2].split('=')[1]):
+                print ('Failed to reset the irc config. Server was:',args[0].split('=')[1], \
+                ' and channel was: ', args[1].split('=')[1])
+                return
+                #to consider: front end is not listening anyway, so no point responding.
+                #raise Exception("Invalid format of advanced update request")
+            shared.config.set('IRC','irc_server',args[0].split('=')[1])
+            shared.config.set('IRC','channel_name',args[1].split('=')[1])
+            shared.config.set('IRC','irc_port',args[2].split('=')[1])
+            with open(os.path.join(shared.config_location),'wb') as f: shared.config.write(f)
+            return
         #----------------------------------------------------------------------#
         else:
             self.respond({'response':'unknown command'})
@@ -300,16 +323,13 @@ def get_html_paths(domain):
     #Remove the data from the auditee to the auditor (except handshake) from the copied
     #trace using editcap. (To address the small possibility of data leakage from request urls)
     output = check_output([tshark_exepath,'-r',tracecopy_path,'-Y',
-                                    'ssl.handshake.certificate',
-                                    '-o', 'http.ssl.port:1025-65535',
-                                    '-T','fields',
+                                    'ssl.handshake.certificate','-T','fields',
                                     '-e','tcp.srcport'])
     if not output:
         raise Exception("No certificate found in trace.")
     #gather the trace frames which were sent from the same port as the certificate
     output = check_output([tshark_exepath,'-r',tracecopy_path,'-Y',
                                     'ssl.handshake or tcp.srcport=='+output.strip(),
-                                    '-o', 'http.ssl.port:1025-65535',
                                     '-T','fields','-e','frame.number'])
     if not output:
         raise Exception("Error parsing trace for server frames")
@@ -355,8 +375,15 @@ def get_html_paths(domain):
                                           '-o', 'ssl.ignore_ssl_mac_failed:False',
                                           '-o', 'ssl.debug_file:' + ssldebuglog,
                                           '-x'])
-    except:
-        raise Exception('Failed to launch tshark')
+    except: #maybe this is an old tshark version, change -Y to -R
+        try: output = check_output([tshark_exepath, '-r', tracecopy_path,
+                                              '-R', 'ssl and http.content_type contains html', 
+                                               '-o', 'http.ssl.port:1025-65535', 
+                                               '-o', 'ssl.keylog_file:'+ sslkeylog,
+                                               '-o', 'ssl.ignore_ssl_mac_failed:False',
+                                               '-o', 'ssl.debug_file:' + ssldebuglog,
+                                               '-x'])
+        except: raise Exception('Failed to launch tshark')
     if output == '': return ('failure', 'Failed to find HTML in escrowtrace')
     with open(ssldebuglog, 'rb') as f: debugdata = f.read()
     if debugdata.count('mac failed') > 0: raise Exception('Mac check failed in tracefile')
@@ -627,7 +654,7 @@ def send_and_recv (data):
         for i in range (3):
             bWasMessageAcked = False
             ending = ' EOL ' if chunk_index+1==chunks else ' CRLF ' #EOL for the last chunk, otherwise CRLF
-            irc_msg = 'PRIVMSG ' + channel_name + ' :' + auditor_nick + ' seq:' + str(send_and_recv.my_seq) + ' ' + chunk + ending +'\r\n'
+            irc_msg = 'PRIVMSG ' + '#' + shared.config.get('IRC','channel_name') + ' :' + auditor_nick + ' seq:' + str(send_and_recv.my_seq) + ' ' + chunk + ending +'\r\n'
             bytessent = IRCsocket.send(irc_msg)
             print('SENT:' + str(bytessent) + ' ' +  irc_msg)
         
@@ -1087,7 +1114,7 @@ def receivingThread(my_nick, auditor_nick, IRCsocket):
                 IRCsocket.send('PONG %s' % msg[1]) #answer with pong as per RFC 1459
                 continue
             if not len(msg) >= 5: continue
-            if not (msg[1] == 'PRIVMSG' and msg[2] == channel_name and msg[3] == ':'+my_nick ): continue
+            if not (msg[1] == 'PRIVMSG' and msg[2] == '#' + shared.config.get('IRC','channel_name') and msg[3] == ':'+my_nick ): continue
             exclamaitionMarkPosition = msg[0].find('!')
             nick_from_message = msg[0][1:exclamaitionMarkPosition]
             if not auditor_nick == nick_from_message: continue
@@ -1099,7 +1126,7 @@ def receivingThread(my_nick, auditor_nick, IRCsocket):
             his_seq = int(msg[4][len('seq:'):])
             if his_seq <=  receivingThread.last_seq_which_i_acked: 
                 #the other side is out of sync, send an ack again
-                IRCsocket.send('PRIVMSG ' + channel_name + ' :' + auditor_nick + ' ack:' + str(his_seq) + ' \r\n')
+                IRCsocket.send('PRIVMSG ' + '#' + shared.config.get('IRC','channel_name') + ' :' + auditor_nick + ' ack:' + str(his_seq) + ' \r\n')
                 continue
             if not his_seq == receivingThread.last_seq_which_i_acked +1: continue #we did not receive the next seq in order
             #else we got a new seq      
@@ -1107,7 +1134,7 @@ def receivingThread(my_nick, auditor_nick, IRCsocket):
                 'grsapms_ghmac', 'rsapms_hmacms_hmacek', 'verify_hmac:', 'logsig:', 'response:', 'sha1hmac_for_MS')) : continue         
             #'CRLF' is used at the end of the first chunk, 'EOL' is used to show that there are no more chunks
             chunks.append(msg[5])
-            IRCsocket.send('PRIVMSG ' + channel_name + ' :' + auditor_nick + ' ack:' + str(his_seq) + ' \r\n')
+            IRCsocket.send('PRIVMSG ' + '#' + shared.config.get('IRC','channel_name') + ' :' + auditor_nick + ' ack:' + str(his_seq) + ' \r\n')
             receivingThread.last_seq_which_i_acked = his_seq            
             if msg[-1]=='EOL':
                 assembled_message = ''.join(chunks)
@@ -1124,10 +1151,10 @@ def start_irc():
     
     my_nick= 'user' + ''.join(random.choice('0123456789') for x in range(10))  
     IRCsocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    IRCsocket.connect(('chat.freenode.net', 6667))
+    IRCsocket.connect((shared.config.get('IRC','irc_server'), int(shared.config.get('IRC','irc_port'))))
     IRCsocket.send('USER %s %s %s %s' % ('these', 'arguments', 'are', 'optional') + '\r\n')
     IRCsocket.send('NICK ' + my_nick + '\r\n')  
-    IRCsocket.send('JOIN %s' % channel_name + '\r\n')  
+    IRCsocket.send('JOIN %s' % ('#'+shared.config.get('IRC','channel_name')) + '\r\n')
     # ----------------------------------BEGIN get the certficate for google.com and extract modulus/exponent
     tlssock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     tlssock.settimeout(10)
@@ -1196,9 +1223,9 @@ def start_irc():
     for attempt in range(6): #try for 6*10 secs to find the auditor
         if bIsAuditorRegistered == True: break #previous iteration successfully regd the auditor
         time_attempt_began = int(time.time())
-        IRCsocket.send('PRIVMSG ' + channel_name + ' :client_hello:'+b64_hello +' \r\n')
+        IRCsocket.send('PRIVMSG ' + '#' + shared.config.get('IRC','channel_name') + ' :client_hello:'+b64_hello +' \r\n')
         time.sleep(1)
-        IRCsocket.send('PRIVMSG ' + channel_name + ' :google_pubkey:'+b64_google_pubkey +' \r\n')
+        IRCsocket.send('PRIVMSG ' + '#' + shared.config.get('IRC','channel_name') + ' :google_pubkey:'+b64_google_pubkey +' \r\n')
         while not bIsAuditorRegistered:
             if int(time.time()) - time_attempt_began > 10: break
             buffer = ''
@@ -1214,7 +1241,7 @@ def start_irc():
                     IRCsocket.send('PONG %s' % msg[1]) #answer with pong as per RFC 1459
                     continue
                 if not len(msg) == 5: continue
-                if not (msg[1]=='PRIVMSG' and msg[2]==channel_name and msg[3]==':'+my_nick and msg[4].startswith('server_hello:')): continue
+                if not (msg[1]=='PRIVMSG' and msg[2]=='#' + shared.config.get('IRC','channel_name') and msg[3]==':'+my_nick and msg[4].startswith('server_hello:')): continue
                 b64_signed_hello = msg[4][len('server_hello:'):]
                 try:
                     signed_hello = b64decode(b64_signed_hello)
@@ -1467,9 +1494,8 @@ def first_run_check():
             shutil.copytree(source_dir, join(datadir, 'firefoxcopy'))
             shutil.rmtree(join(datadir, 'tmpextract'))    
     
-    
-    
 if __name__ == "__main__":
+    shared.load_program_config()
     first_run_check()
     sys.path.append(join(datadir, 'python', 'rsa-3.1.4'))
     sys.path.append(join(datadir, 'python', 'pyasn1-0.1.7'))
@@ -1515,15 +1541,7 @@ if __name__ == "__main__":
         else: raise  Exception('Failed to find wireshark in your Applications folder')
         if os.path.isfile(editcap_osx): editcap_exepath = editcap_osx
         else: raise  Exception('Failed to find Wireshark component editcap in your Applications folder')
-
-    #tshark must be 1.10 or higher
-    tsv_info = check_output([tshark_exepath,'-v'])
-    tsv = tsv_info.split('\n')[0].split()[1].split('.')[:2]
-    if int(tsv[0]) != 1:
-        raise Exception('Unrecognized version of tshark')
-    if int(tsv[1]) < 10:
-        raise Exception('Your version of tshark is too old. Please upgrade tshark or Wireshark to version 1.10 or higher')
-
+      
     thread = ThreadWithRetval(target= http_server)
     thread.daemon = True
     thread.start()

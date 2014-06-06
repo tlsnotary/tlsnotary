@@ -17,6 +17,9 @@
   <label class="btn btn-primary">
     <input type="radio" name="options" id="option2" onclick="selftestMode()" checked="checked">Selftest mode
   </label>
+  <label class="btn btn-primary">
+    <input type="radio" name="options" id="option3" onclick="advancedMode()">Advanced
+  </label>
 	</div>
 
 </div>
@@ -42,6 +45,31 @@
 	</table>
 </div>
 
+
+<div id="advanced_screen" class="hero-unit">
+
+        <p>Only change these settings by negotiation with your auditor.</p>
+        <p>If you are unsure, don't change anything and return to 'self-test' or 'normal'.</p>
+        <div>
+                <p>IRC server</p>
+                <textarea id="textarea_ircserver" cols="40" rows="1" type="text" name="irc_server" style="width:40%;resize:none;" autocomplete="off">chat.freenode.net</textarea>
+        </div>
+        <div>
+                <p>IRC port</p>
+                <textarea id="textarea_ircport" cols="10" rows="1" type="text" name="irc_port" style="width:40%;resize:none;" autocomplete="off">6667</textarea>
+        </div>
+        <div>
+                <p>IRC channel name (omit '#')</p>
+                <textarea id="textarea_ircchannel" cols="40" rows="1" type="text" name="irc_channel" style="width:40%;resize:none;" autocomplete="off">tlsnotary</textarea>
+        </div>
+        <table>
+        <tr>
+        <td>
+        <button id="update_advanced" autofocus="autofocus" class="btn btn-primary btn-lg" style="width:100%;" onclick="advancedUpdate()">Update</button>
+        </td>
+        </tr>
+        </table>
+</div>
 
 <div id="normal_screen" class="hero-unit" style="margin-top:0;margin-bottom:0";>
 	<p  style="margin-left:0;margin-bottom:0;margin-top:-3%;">In order to be audited please do the following.
@@ -102,6 +130,7 @@ const Ci = Components.interfaces;
 const Cc = Components.classes;
 var port = Cc["@mozilla.org/process/environment;1"].getService(Ci.nsIEnvironment).get("FF_to_backend_port");
 var bGetRecentKeysResponded = false;
+var bGetAdvancedResponded = false;
 var bImportAuditorPubkeyResponded = false;
 var bStartIRCResponded = false;
 var bNewKeypairResponded = false;
@@ -114,17 +143,26 @@ var mode = 0; //0 - test mode, 1 - normal mode
 
 function selftestMode(){
 	mode = 0;
-	document.getElementById("normal_screen").style.display="none";
-	document.getElementById("selftest_screen").style.display="";
-	document.getElementById("generating_cell").style.display = "none";
+        toggleDisplay("selftest_screen");
 }
 
 function normalMode(){
 	mode = 1;
-	var selftest_screen = document.getElementById("selftest_screen");
-	selftest_screen.style.display="none";	
-	var normal_screen = document.getElementById("normal_screen");
-	normal_screen.style.display="";
+        toggleDisplay("normal_screen");
+        document.getElementById("generating_cell").style.display = "";
+
+}
+
+function advancedMode(){
+        toggleDisplay("advanced_screen");
+}
+
+function toggleDisplay(tabChoice){
+    document.getElementById("normal_screen").style.display="none";
+    document.getElementById("selftest_screen").style.display="none";
+    document.getElementById("generating_cell").style.display = "none";
+    document.getElementById("advanced_screen").style.display = "none";
+    document.getElementById(tabChoice).style.display = "";
 }
 
 function setError(errortext){
@@ -149,14 +187,62 @@ function inputReceived(){
     start_button.removeAttribute("disabled");
 }
 
+function advancedUpdate(){
+    var server_val = document.getElementById("textarea_ircserver").value.trim();
+    var channel_val = document.getElementById("textarea_ircchannel").value.trim();
+    var port_val = document.getElementById("textarea_ircport").value.trim();
+
+    if (server_val == "" || channel_val == "" || port_val == ""){
+        alert("All settings are mandatory");
+        return;
+    }
+
+    if (channel_val.startsWith("#")){
+        alert("Omit # from channel name");
+        document.getElementById("textarea_ircchannel").value = channel_val.substr(1);
+        return;
+    }
+
+    var intTest = /^-?(\d+|0)$/;
+    if (!(intTest.test(port_val)) || port_val < 0 || port_val > 65535){
+        alert("You must enter a valid port - an integer between 0 and 65535");
+        return;
+    }
+
+    reqAdvancedUpdate = new XMLHttpRequest();
+    //not setting a response 'onload' because: the backend is not given
+    //any choice on how to respond; if it fails to respond other error messages will
+    //pick that up anyway.
+
+    reqAdvancedUpdate.open("HEAD", "http://127.0.0.1:"+port+"/set_advanced?server_val="+server_val+",channel_val="+channel_val+",port_val="+port_val, true);
+    reqAdvancedUpdate.send();
+}
 
 function homepageLoaded () {
-	selftestMode();
-	reqGetRecentKeys = new XMLHttpRequest();
+    selftestMode();
+    reqGetAdvanced = new XMLHttpRequest();
+    reqGetAdvanced.onload = responseGetAdvanced;
+    reqGetAdvanced.open("HEAD","http://127.0.0.1:"+port+"/get_advanced",true);
+    reqGetAdvanced.send();
+    responseGetAdvanced(0);
+
+    reqGetRecentKeys = new XMLHttpRequest();
     reqGetRecentKeys.onload = responseGetRecentKeys;
     reqGetRecentKeys.open("HEAD", "http://127.0.0.1:"+port+"/get_recent_keys", true);
     reqGetRecentKeys.send();
     responseGetRecentKeys(0);
+}
+
+function responseGetAdvanced(iteration){
+    if (typeof iteration == "number"){
+        if (iteration > 5){setError("ERROR responseGetAdvanced timed out");return;}
+        if (!bGetAdvancedResponded){ setTimeout(responseGetAdvanced, 1000, ++iteration); }
+        return;
+    }
+    bGetAdvancedResponded = true;
+    document.getElementById("textarea_ircserver").value = reqGetAdvanced.getResponseHeader("irc_server");
+    document.getElementById("textarea_ircchannel").value = reqGetAdvanced.getResponseHeader("channel_name");
+    document.getElementById("textarea_ircport").value = reqGetAdvanced.getResponseHeader("irc_port");
 }
 
 function responseGetRecentKeys(iteration){
