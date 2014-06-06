@@ -8,8 +8,8 @@ var reqStopRecording;
 var reqPreparePMS;
 var reqGetHTMLPaths;
 var port;
-var tab_url_full = "";//full URL at the time when RECORD is pressed
-var tab_url = ""; //the URL at the time when RECORD is pressed (only the domain part up to the first /)
+var tab_url_full = "";//full URL at the time when AUDIT* is pressed
+var tab_url = ""; //the URL at the time when AUDIT* is pressed (only the domain part up to the first /)
 var session_path = "";
 var observer;
 var audited_browser; //the FF's internal browser which contains the audited HTML
@@ -64,7 +64,7 @@ function pollEnvvar(){
 	button_stop_enabled = document.getElementById("button_stop_enabled");
 	button_stop_disabled = document.getElementById("button_stop_disabled");
 	observer = new myObserver();
-	help.value = "Navigate to a webpage and press RECORD. The page will reload automatically.";
+	help.value = "Go to a page and press AUDIT THIS PAGE. Then wait for the page to reload automatically.";
 	button_record_disabled.hidden = true;
 	button_record_enabled.hidden = false;
 	popupShow("The connection to the auditor has been established. You may now open a new tab and go to a webpage. Please follow the instructions on the status bar below.")
@@ -75,7 +75,7 @@ function startRecording(){
 	audited_browser = gBrowser.selectedBrowser;
 	tab_url_full = audited_browser.contentWindow.location.href;
 	if (!tab_url_full.startsWith("https://")){
-		help.value = "ERROR You can only record pages which start with https://";
+		help.value = "ERROR You can only audit pages which start with https://";
 		return;
 	}
 	tab_url = tab_url_full.split('/')[2]
@@ -273,7 +273,7 @@ function responseGetHTMLPaths(iteration){
 			help.value = "ERROR Received an error message: " + status;
 			return; //failure to find HTML is considered a fatal error during testing
 		}
-		help.value = "ERROR Received an error message: " + status + ". Page decryption FAILED. Try pressing RECORD again";
+		help.value = "ERROR Received an error message: " + status + ". Page decryption FAILED. Try pressing AUDIT THIS PAGE again";
 		button_record_enabled.hidden = false;
 		button_spinner.hidden = true;
 		button_stop_disabled.hidden = true;
@@ -291,7 +291,7 @@ function responseGetHTMLPaths(iteration){
 	}
 	//FIXME: we should install a pageload listener here rather than relying on timeout
 	setTimeout(toggleOffline, 1000);
-	help.value = "Page decryption successful. Navigate to another page and press RECORD or press STOP to end";
+	help.value = "Page decryption successful. Go to another page and press AUDIT THIS PAGE or press FINISH";
 	button_record_enabled.hidden = false;
 	button_spinner.hidden = true;
 	button_stop_disabled.hidden = true;
