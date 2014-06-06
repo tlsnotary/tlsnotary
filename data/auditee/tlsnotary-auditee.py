@@ -1020,7 +1020,7 @@ def new_connection_thread(socket_client, new_address):
                     socket_client.send(data)
                     continue
             except Exception, e:
-                print (e)
+                print ('Caught exception', e)
                 socket_client.shutdown(socket.SHUT_RDWR)
                 socket_client.close()
                 socket_target.shutdown(socket.SHUT_RDWR)
@@ -1253,8 +1253,7 @@ def start_irc():
                     print ('Auditor successfully verified')
                     break
                 except:
-                    print ('hello verification failed. Are you sure you have the correct auditor\'s pubkey?')
-                    continue
+                    return ('Failed to verify the auditor. Are you sure you have the correct auditor\'s pubkey?')
     if not bIsAuditorRegistered:
         print ('Failed to register auditor within 60 seconds')
         return 'failure'
