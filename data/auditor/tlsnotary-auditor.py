@@ -690,13 +690,14 @@ def start_irc():
     global my_nick
     global IRCsocket
     global installdir
-    progressQueue.put(time.strftime('%H:%M:%S', time.localtime()) +': Connecting to irc.freenode.org and joining #tlsnotary')
+    #whether normal mode or selftest mode, we should take the IRC settings from the config file
+    #immediately before connecting
+    shared.config.read(shared.config_location)
+
+    progressQueue.put(time.strftime('%H:%M:%S', time.localtime()) +': Connecting to '+shared.config.get('IRC','irc_server')+' and joining #'+shared.config.get('IRC','channel_name'))
     
     my_nick= 'user' + ''.join(random.choice('0123456789') for x in range(10))    
     IRCsocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-
-    #whether normal mode or selftest mode, we should take the IRC settings from the config file
-    shared.config.read(os.path.join(installdir,'tlsnotary.ini'))
     IRCsocket.connect((shared.config.get('IRC','irc_server'), int(shared.config.get('IRC','irc_port'))))
     IRCsocket.send("USER %s %s %s %s" % ('one1', 'two2', 'three3', 'four4') + '\r\n')
     IRCsocket.send("NICK " + my_nick + '\r\n')  
