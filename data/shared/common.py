@@ -2,7 +2,7 @@ from ConfigParser import SafeConfigParser
 import os
 config = SafeConfigParser()
 
-config_location = os.path.join('data','shared','tlsnotary.ini')
+config_location = os.path.join(os.path.dirname(os.path.realpath(__file__)),'tlsnotary.ini')
 
 required_options = {'IRC':['irc_server','irc_port','channel_name']}
 

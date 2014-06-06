@@ -280,7 +280,7 @@ class HandlerClass(SimpleHTTPServer.SimpleHTTPRequestHandler):
             shared.config.set('IRC','irc_server',args[0].split('=')[1])
             shared.config.set('IRC','channel_name',args[1].split('=')[1])
             shared.config.set('IRC','irc_port',args[2].split('=')[1])
-            with open(os.path.join(shared.config_location),'wb') as f: shared.config.write(f)
+            with open(shared.config_location,'wb') as f: shared.config.write(f)
             return
         #----------------------------------------------------------------------#
         else:
