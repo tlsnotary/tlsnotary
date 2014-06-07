@@ -1,19 +1,14 @@
 
-Instructions on how to build Tor Browser Bundle deterministically with the NSS patch applied.
-This will also build stcppipe deterministically.
-NB: you must always be online during this process, because the VM pulls in dependencies 
-NB: This will consume at least 85 GB of disk space
+Instructions on how to build FirefoxESR and stcppipe deterministically.
+NB: you must always be online because the VM pulls in dependencies (85GB disk space required)
 
-You can select all and copy-paste the commands below into bash (including the #comments)
-
-#--------------------------BASH BEGIN--------------------------------
 sudo apt-get install torsocks tor ruby apache2 git apt-cacher-ng python-vm-builder virt-what lxc lxctl fakeroot faketime zip unzip subversion
+#--------------------------BASH BEGIN--------------------------------
 git clone https://github.com/themighty1/tlsnotary.git
 git clone https://git.torproject.org/builders/tor-browser-bundle.git
 git clone -b tor-browser-builder-3 https://git.torproject.org/builders/gitian-builder.git
 cd tor-browser-bundle
-#checkout a specific commit (tag tbb-3.6-build4)
-git checkout a9233e60ea2f8b80c42998800cc9e7324a7dfc5d
+git checkout tbb-3.6-build4
 cd gitian
 export USE_LXC=1
 make TORSOCKS= prep
@@ -21,8 +16,7 @@ make TORSOCKS= prep
 cd ../../gitian-builder/inputs/tor-browser
 git config user.name "someone"
 git config user.email "someone@someplace.com"
-#checkout commit (tag tor-browser-24.5.0esr-1-build3)
-git checkout 5de848c3020ce157c8743af710dea282f22202d4
+git checkout tor-browser-24.5.0esr-1
 #overwrite all tbb's prefs with a single line needed for building
 echo "pref("torbrowser.version", "UNKNOWN");" > browser/app/profile/000-tor-browser.js
 git add browser/app/profile/000-tor-browser.js
@@ -53,8 +47,7 @@ git tag -a tlsnotary_build -m "tlsnotary tag"
 cd ../../../tor-browser-bundle/gitian
 ./mkbundle-mac.sh
 
-
-#build stcppipe reusing TBB's tools
+#build stcppipe
 cd ../..
 cp tlsnotary/data/gitian/stcppipe.zip gitian-builder/inputs
 cd gitian-builder/
