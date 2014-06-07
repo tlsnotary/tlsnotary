@@ -642,7 +642,7 @@ def registerAuditeeThread():
             if not (msg[1]=='PRIVMSG' and msg[2]=='#' + shared.config.get('IRC','channel_name') and msg[3].startswith((':google_pubkey:', ':client_hello:'))): continue
             if msg[3].startswith(':google_pubkey:') and auditee_nick != '': #we already got the first client_hello part
                 try:
-                    b64_google_pubkey = msg[3][len(':client_hello:'):]
+                    b64_google_pubkey = msg[3][len(':google_pubkey:'):]
                     google_pubkey =  base64.b64decode(b64_google_pubkey)
                     google_modulus_byte = google_pubkey[:256]
                     google_exponent_byte = google_pubkey[256:]
