@@ -40,19 +40,17 @@ m_platform = platform.system()
 if m_platform == 'Windows': OS = 'mswin'
 elif m_platform == 'Linux': OS = 'linux'
 elif m_platform == 'Darwin': OS = 'macos'
- 
-IRCsocket = None
+
 recvQueue = Queue.Queue() #all messages from the auditor are placed here by receivingThread
 ackQueue = Queue.Queue() #ack numbers are placed here
 auditor_nick = '' #we learn auditor's nick as soon as we get a hello_server signed by the auditor
-my_nick = '' #our nick is randomly generated on connection to IRC
+my_nick = '' #our nick is randomly generated on connection
 myPrvKey = auditorPubKey = None
 google_modulus = 0
 google_exponent = 0
 
 stcppipe_proc = None
 tshark_exepath = editcap_exepath= ''
-bReceivingThreadStopFlagIsSet = False
 secretbytes_amount=13
 firefox_pid = stcppipe_pid = selftest_pid = 0
 
@@ -61,43 +59,13 @@ md5hmac = '' #used in get_html_paths to construct the full MS after committing t
 bIsStcppipeStarted = False
 cr_list = [] #a list of all client_randoms for recorded pages used by tshark to search for html only in audited tracefiles.
 
-def bigint_to_bytearray(bigint):
-    m_bytes = []
-    while bigint != 0:
-        b = bigint%256
-        m_bytes.insert( 0, b )
-        bigint //= 256
-    return bytearray(m_bytes)
-
-def bigint_to_list(bigint):
-    m_bytes = []
-    while bigint != 0:
-        b = bigint%256
-        m_bytes.insert( 0, b )
-        bigint //= 256
-    return m_bytes
-
-
-def xor(a,b):
-    return bytearray([ord(a) ^ ord(b) for a,b in zip(a,b)])
-
-#convert bytearray into int
-def ba2int(byte_array):
-    return int(str(byte_array).encode('hex'), 16)
-
-#a thread which returns a value. This is achieved by passing self as the first argument to a target function
-#the target_function(parentthread, arg1, arg2) can then set, e.g parentthread.retval
-class ThreadWithRetval(threading.Thread):
-    def __init__(self, target, args=()):
-        super(ThreadWithRetval, self).__init__(target=target, args = (self,)+args )
-    retval = ''
 
 
 def import_auditor_pubkey(auditor_pubkey_b64modulus):
     global auditorPubKey                      
     try:
         auditor_pubkey_modulus = b64decode(auditor_pubkey_b64modulus)
-        auditor_pubkey_modulus_int =  ba2int(auditor_pubkey_modulus)
+        auditor_pubkey_modulus_int =  shared.ba2int(auditor_pubkey_modulus)
         auditorPubKey = rsa.PublicKey(auditor_pubkey_modulus_int, 65537)
         auditor_pubkey_pem = auditorPubKey.save_pkcs1()
         with open(join(current_sessiondir, 'auditorpubkey'), 'wb') as f: f.write(auditor_pubkey_pem)
@@ -124,7 +92,7 @@ def newkeys():
     if not os.path.exists(join(datadir, 'recentkeys')): os.makedirs(join(datadir, 'recentkeys'))
     with open(join(datadir, 'recentkeys', 'myprivkey'), 'wb') as f: f.write(my_pem_privkey)
     with open(join(datadir, 'recentkeys', 'mypubkey'), 'wb') as f: f.write(my_pem_pubkey)
-    pubkey_export = b64encode(bigint_to_bytearray(pubkey.n))
+    pubkey_export = b64encode(shared.bigint_to_bytearray(pubkey.n))
     return pubkey_export
 
 
@@ -166,9 +134,9 @@ class HandlerClass(SimpleHTTPServer.SimpleHTTPRequestHandler):
                     global auditorPubKey                    
                     auditorPubKey = rsa.PublicKey.load_pkcs1(auditor_pubkey_pem)
                 my_pubkey = rsa.PublicKey.load_pkcs1(my_pubkey_pem)
-                my_pubkey_export = b64encode(bigint_to_bytearray(my_pubkey.n))
+                my_pubkey_export = b64encode(shared.bigint_to_bytearray(my_pubkey.n))
                 if auditor_pubkey_pem == '': auditor_pubkey_export = ''
-                else: auditor_pubkey_export = b64encode(bigint_to_bytearray(auditorPubKey.n))
+                else: auditor_pubkey_export = b64encode(shared.bigint_to_bytearray(auditorPubKey.n))
                 self.respond({'response':'get_recent_keys', 'mypubkey':my_pubkey_export,
                          'auditorpubkey':auditor_pubkey_export})
             else:
@@ -192,9 +160,10 @@ class HandlerClass(SimpleHTTPServer.SimpleHTTPRequestHandler):
             self.respond({'response':'import_auditor_pubkey', 'status':status})
             return        
         #----------------------------------------------------------------------#
-        if self.path.startswith('/start_irc'):
-            rv = start_irc()
-            self.respond({'response':'start_irc', 'status':rv})
+        if self.path.startswith('/start_peer_connection'):
+            rv = start_peer_messaging()
+            rv2 = peer_handshake()
+            self.respond({'response':'start_peer_connection', 'status':rv,'pms_status':rv2})
             return       
         #----------------------------------------------------------------------#
         if self.path.startswith('/start_recording'):
@@ -359,7 +328,7 @@ def get_html_paths(domain):
     try: sha1hmac_for_MS = b64decode(b64_sha1hmac_for_MS)
     except:  raise Exception ('base64 decode error in sha1hmac_for_MS')
     #construct MS
-    ms = xor(md5hmac, sha1hmac_for_MS)[:48]
+    ms = shared.xor(md5hmac, sha1hmac_for_MS)[:48]
     sslkeylog = join(commit_dir, 'sslkeylog' + str(len(cr_list)))
     ssldebuglog = join(commit_dir, 'ssldebuglog' + str(len(cr_list)))    
     cr_hexl = binascii.hexlify(cr)
@@ -393,82 +362,14 @@ def get_html_paths(domain):
     frames = re.split(separator, output)[1:]    
     html_paths = ''
     for index,oneframe in enumerate(frames):
-        html = get_html_from_asciidump(oneframe)
+        html = shared.get_html_from_asciidump(oneframe)
         path = join(commit_dir, 'html-' + str(len(cr_list)) + '-' + str(index))
         with open(path, 'wb') as f: f.write(html)
         html_paths += path + '&'    
     return ('success', html_paths)
     
     
-#look at tshark's ascii dump (option '-x') to better understand the parsing taking place
-def get_html_from_asciidump(ascii_dump):
-    hexdigits = set('0123456789abcdefABCDEF')
-    binary_html = bytearray()
 
-    if ascii_dump == '':
-        print ('empty frame dump',end='\r\n')
-        return -1
-
-    #We are interested in
-    # "Uncompressed entity body" for compressed HTML (both chunked and not chunked). If not present, then
-    # "De-chunked entity body" for no-compression, chunked HTML. If not present, then
-    # "Reassembled SSL" for no-compression no-chunks HTML in multiple SSL segments, If not present, then
-    # "Decrypted SSL data" for no-compression no-chunks HTML in a single SSL segment.
-    
-    uncompr_pos = ascii_dump.rfind('Uncompressed entity body')
-    if uncompr_pos != -1:
-        for line in ascii_dump[uncompr_pos:].split('\n')[1:]:
-            #convert ascii representation of hex into binary so long as first 4 chars are hexdigits
-            if all(c in hexdigits for c in line [:4]):
-                try: m_array = bytearray.fromhex(line[6:54])
-                except: break
-                binary_html += m_array
-            else:
-                #if first 4 chars are not hexdigits, we reached the end of the section
-                break
-        return binary_html
-    
-    #else      
-    dechunked_pos = ascii_dump.rfind('De-chunked entity body')
-    if dechunked_pos != -1:
-        for line in ascii_dump[dechunked_pos:].split('\n')[1:]:
-            if all(c in hexdigits for c in line [:4]):
-                try: m_array = bytearray.fromhex(line[6:54])
-                except: break
-                binary_html += m_array
-            else:
-                break
-        return binary_html
-            
-    #else
-    reassembled_pos = ascii_dump.rfind('Reassembled SSL')
-    if reassembled_pos != -1:
-        for line in ascii_dump[reassembled_pos:].split('\n')[1:]:
-            if all(c in hexdigits for c in line [:4]):
-                try: m_array = bytearray.fromhex(line[6:54])
-                except: break
-                binary_html += m_array
-            else:
-                #http HEADER is delimited from HTTP body with '\r\n\r\n'
-                if binary_html.find('\r\n\r\n') == -1:
-                    return -1
-                break
-        return binary_html.split('\r\n\r\n', 1)[1]
-
-    #else
-    decrypted_pos = ascii_dump.rfind('Decrypted SSL data')
-    if decrypted_pos != -1:       
-        for line in ascii_dump[decrypted_pos:].split('\n')[1:]:
-            if all(c in hexdigits for c in line [:4]):
-                try: m_array = bytearray.fromhex(line[6:54])
-                except: break
-                binary_html += m_array
-            else:
-                #http HEADER is delimited from HTTP body with '\r\n\r\n'
-                if binary_html.find('\r\n\r\n') == -1:
-                    return -1
-                break
-        return binary_html.split('\r\n\r\n', 1)[1]    
     
 
 def send_link(filelink):
@@ -486,7 +387,7 @@ def send_link(filelink):
 def prepare_pms():    
     for i in range(5): #try 5 times until google check succeeds
         #first 4 bytes of client random are unix time
-        cr_time = bigint_to_bytearray(int(time.time()))
+        cr_time = shared.bigint_to_bytearray(int(time.time()))
         cr = cr_time + os.urandom(28)
         client_hello = '\x16\x03\x01\x00\x2d\x01\x00\x00\x29\x03\x01' + cr + '\x00\x00\x02\x00\x35\x01\x00'
         tlssock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -536,7 +437,7 @@ def prepare_pms():
         md5hmac2 = hmac.new(pms1, md5A2 + label + seed, md5).digest()
         md5hmac3 = hmac.new(pms1, md5A3 + label + seed, md5).digest()
         md5hmac = md5hmac1+md5hmac2+md5hmac3
-        ms = xor(md5hmac, shahmac)[:48]
+        ms = shared.xor(md5hmac, shahmac)[:48]
         #derive expanded keys for AES256
         #this is not optimized in a loop on purpose. I want people to see exactly what is going on        
         ms_first_half = ms[:24]
@@ -580,15 +481,15 @@ def prepare_pms():
         sha1hmac6 = hmac.new(ms_second_half, sha1A6 + label + seed, sha1).digest()
         sha1hmac7 = hmac.new(ms_second_half, sha1A7 + label + seed, sha1).digest()        
         sha1hmac = sha1hmac1+sha1hmac2+sha1hmac3+sha1hmac4+sha1hmac5+sha1hmac6+sha1hmac7        
-        gexpanded_keys = xor(md5hmac, sha1hmac)
+        gexpanded_keys = shared.xor(md5hmac, sha1hmac)
         client_mac_key = gexpanded_keys[:20]
         client_encryption_key = gexpanded_keys[40:72]
         client_iv = gexpanded_keys[104:120]
         #RSA-encrypt my half of PMS with google's pubkey
-        RSA_PMS1_int = pow( ba2int('\x02'+('\x01'*156)+'\x00'+pms1+('\x00'*24)) + 1, google_exponent, google_modulus)
-        RSA_PMS2_int = ba2int(rsapms2)
+        RSA_PMS1_int = pow( shared.ba2int('\x02'+('\x01'*156)+'\x00'+pms1+('\x00'*24)) + 1, google_exponent, google_modulus)
+        RSA_PMS2_int = shared.ba2int(rsapms2)
         enc_pms_int = (RSA_PMS1_int*RSA_PMS2_int) % google_modulus 
-        encpms = bigint_to_bytearray(enc_pms_int)    
+        encpms = shared.bigint_to_bytearray(enc_pms_int)
         #calculate verify_data for Finished message
         #see RFC2246 7.4.9. Finished & 5. HMAC and the pseudorandom function
         client_key_exchange = '\x16\x03\x01\x01\x06\x10\x00\x01\x02\x01\00' + encpms        
@@ -603,14 +504,14 @@ def prepare_pms():
         md5hmac1 = hmac.new(ms_first_half, md5A1 + label + seed, md5).digest()        
         sha1A1 = hmac.new(ms_second_half, label+seed, sha1).digest()
         sha1hmac1 = hmac.new(ms_second_half, sha1A1 + label + seed, sha1).digest()
-        verify_data = xor(md5hmac1, sha1hmac1)[:12]
+        verify_data = shared.xor(md5hmac1, sha1hmac1)[:12]
         #HMAC and AES-encrypt the verify_data      
         hmac_for_verify_data = hmac.new(client_mac_key, '\x00\x00\x00\x00\x00\x00\x00\x00' + '\x16' + '\x03\x01' + '\x00\x10' + '\x14\x00\x00\x0c' + verify_data, sha1).digest()
         moo = AESModeOfOperation()
         cleartext = '\x14\x00\x00\x0c' + verify_data + hmac_for_verify_data     
-        cleartext_list = bigint_to_list(ba2int(cleartext))
-        client_encryption_key_list =  bigint_to_list(ba2int(client_encryption_key))
-        client_iv_list =  bigint_to_list(ba2int(client_iv))
+        cleartext_list = shared.bigint_to_list(shared.ba2int(cleartext))
+        client_encryption_key_list =  shared.bigint_to_list(shared.ba2int(client_encryption_key))
+        client_iv_list =  shared.bigint_to_list(shared.ba2int(client_iv))
         padded_cleartext = cleartext + ('\x0b' * 12) #this is TLS CBC padding, NOT PKCS7
         try:
             mode, orig_len, encrypted_verify_data_and_hmac_for_verify_data = moo.encrypt( str(padded_cleartext), moo.modeOfOperation['CBC'], client_encryption_key_list, moo.aes.keySize['SIZE_256'], client_iv_list)
@@ -637,37 +538,10 @@ def prepare_pms():
     
 #send a message and return the response received
 def send_and_recv (data):
-    if not hasattr(send_and_recv, 'my_seq'):
-        send_and_recv.my_seq = 0 #static variable. Initialized only on first function's run
-  
-    #empty queue from possible leftovers
-    #try: ackQueue.get_nowait()
-    #except: pass    #split up data longer than chunk_size bytes (IRC message limit is 512 bytes including the header data)
-    #'\r\n' must go to the end of each message
-    chunk_size=350
-    chunks = len(data)/chunk_size + 1
-    if len(data)%chunk_size == 0: chunks -= 1 #avoid creating an empty chunk if data length is a multiple of chunk_size
-    for chunk_index in range(chunks) :
-        send_and_recv.my_seq += 1
-        chunk = data[chunk_size*chunk_index:chunk_size*(chunk_index+1)]
-        
-        for i in range (3):
-            bWasMessageAcked = False
-            ending = ' EOL ' if chunk_index+1==chunks else ' CRLF ' #EOL for the last chunk, otherwise CRLF
-            irc_msg = 'PRIVMSG ' + '#' + shared.config.get('IRC','channel_name') + ' :' + auditor_nick + ' seq:' + str(send_and_recv.my_seq) + ' ' + chunk + ending +'\r\n'
-            bytessent = IRCsocket.send(irc_msg)
-            print('SENT:' + str(bytessent) + ' ' +  irc_msg)
-        
-            try: oneAck = ackQueue.get(block=True, timeout=5)
-            except:  continue #send again because ack was not received
-            if not str(send_and_recv.my_seq) == oneAck: continue
-            #else: correct ack received
-            bWasMessageAcked = True
-            break
-        if not bWasMessageAcked:
-            return ('failure', '')
-    
-    #receive a response
+    if not ('success' == shared.send_msg(data,ackQueue,auditor_nick,seq_init=None)):
+        return ('failure','')
+
+    #receive a response (these are collected into the recvQueue by the receiving thread)
     for i in range(3):
         try: onemsg = recvQueue.get(block=True, timeout=5)
         except:  continue #try to receive again
@@ -726,7 +600,6 @@ def pipebytes_getlink(mfile):
 
 
 def stop_recording():
-    global bReceivingThreadStopFlagIsSet
     os.kill(stcppipe_proc.pid, signal.SIGTERM)
     #TODO stop https proxy. 
 
@@ -762,7 +635,7 @@ def new_audited_connection(uid):
     with open(join(nss_patch_dir, 'cipher_suite'+uid), 'rb') as fd: cs = fd.read()
     #cipher suite 2 bytes long in network byte order, we need only the first byte
     cipher_suite_first_byte = cs[:1]
-    cipher_suite_int = ba2int(cipher_suite_first_byte)
+    cipher_suite_int = shared.ba2int(cipher_suite_first_byte)
     if cipher_suite_int == 4: cipher_suite = 'RC4MD5'
     elif cipher_suite_int == 5: cipher_suite = 'RC4SHA'
     elif cipher_suite_int == 47: cipher_suite = 'AES128'
@@ -791,11 +664,11 @@ def new_audited_connection(uid):
         modulus = rv[0].getComponentByPosition(0)
         modulus_int = int(modulus)
         exponent_int = int(exponent)
-        n = bigint_to_bytearray(modulus_int)
-        e = bigint_to_bytearray(exponent_int)
+        n = shared.bigint_to_bytearray(modulus_int)
+        e = shared.bigint_to_bytearray(exponent_int)
     except: return 'Error decoding der pubkey'
     modulus_len_int = len(n)       
-    modulus_len = bigint_to_bytearray(modulus_len_int)
+    modulus_len = shared.bigint_to_bytearray(modulus_len_int)
     if len(modulus_len) == 1: modulus_len.insert(0,0)  #zero-pad to 2 bytes    
     #get my md5hmac half which auditor uses to get his half of MS
     label = 'master secret'
@@ -821,7 +694,7 @@ def new_audited_connection(uid):
     except: return ('base64 decode error in rsapms_hmacms_hmacek')
   
     RSA_PMS2 = rsapms_hmacms_hmacek[:modulus_len_int]
-    RSA_PMS2_int = ba2int(RSA_PMS2)
+    RSA_PMS2_int = shared.ba2int(RSA_PMS2)
     shahmac2_for_MS = rsapms_hmacms_hmacek[modulus_len_int:modulus_len_int+24]
     if cipher_suite == 'AES256': 
         md5hmac_for_ek = rsapms_hmacms_hmacek[modulus_len_int+24:modulus_len_int+24+136]
@@ -832,14 +705,14 @@ def new_audited_connection(uid):
     elif cipher_suite == 'RC4MD5': 
         md5hmac_for_ek = rsapms_hmacms_hmacek[modulus_len_int+24:modulus_len_int+24+64]       
     #RSA encryption without padding: ciphertext = plaintext^e mod n
-    RSA_PMS1_int = pow(ba2int(('\x02'+('\x01'*(modulus_len_int - 100))+'\x00'+
+    RSA_PMS1_int = pow(shared.ba2int(('\x02'+('\x01'*(modulus_len_int - 100))+'\x00'+
                                 PMS1+('\x00'*24))) + 1, exponent_int, modulus_int)
     enc_pms_int = (RSA_PMS2_int*RSA_PMS1_int) % modulus_int 
-    enc_pms = bigint_to_bytearray(enc_pms_int)
+    enc_pms = shared.bigint_to_bytearray(enc_pms_int)
     with open(join(nss_patch_dir, 'encpms'+uid), 'wb') as f: f.write(enc_pms)
     with open(join(nss_patch_dir, 'encpms'+uid+'ready' ), 'wb') as f: f.close()   
     #master secret key expansion
-    MS2 = xor(md5hmac2_for_MS, shahmac2_for_MS)        
+    MS2 = shared.xor(md5hmac2_for_MS, shahmac2_for_MS)
     #see RFC2246 6.3. Key calculation & 5. HMAC and the pseudorandom function
     #The amount of key material for each ciphersuite:
     #AES256-CBC-SHA: mac key 20*2, encryption key 32*2, IV 16*2 == 136bytes
@@ -870,7 +743,7 @@ def new_audited_connection(uid):
     elif cipher_suite == 'AES128': sha1hmac_for_ek = sha1hmac140bytes[:104]
     elif cipher_suite == 'RC4SHA': sha1hmac_for_ek = sha1hmac140bytes[:72]
     elif cipher_suite == 'RC4MD5': sha1hmac_for_ek = sha1hmac140bytes[:64]     
-    expanded_keys =  xor(sha1hmac_for_ek, md5hmac_for_ek)     
+    expanded_keys =  shared.xor(sha1hmac_for_ek, md5hmac_for_ek)
     #server mac key == expanded_keys[20:40]( or [16:32] for RC4MD5) contains random garbage from auditor
     with open(join(nss_patch_dir, 'expanded_keys'+uid), 'wb') as f: f.write(expanded_keys)
     with open(join(nss_patch_dir, 'expanded_keys'+uid+'ready'), 'wb') as f: f.close()     
@@ -897,7 +770,7 @@ def new_audited_connection(uid):
     seed = md5_digest + sha_digest
     sha1A1 = hmac.new(MS2, label+seed, sha1).digest()
     sha1hmac1 = hmac.new(MS2, sha1A1 + label + seed, sha1).digest()
-    verify_data = xor(verify_hmac, sha1hmac1)[:12]   
+    verify_data = shared.xor(verify_hmac, sha1hmac1)[:12]
     with open(join(nss_patch_dir, 'verify_data'+uid), 'wb') as f: f.write(bytearray(verify_data))
     with open(join(nss_patch_dir, 'verify_data'+uid+'ready'), 'wb') as f: f.close()
     return 'success'
@@ -1055,7 +928,7 @@ def start_recording():
     bWasStarted = False
     for i in range(3):
         HTTPS_proxy_port =  random.randint(1025,65535)
-        thread = ThreadWithRetval(target= https_proxy_thread, args=(HTTPS_proxy_port, ))
+        thread = shared.ThreadWithRetval(target= https_proxy_thread, args=(HTTPS_proxy_port, ))
         thread.daemon = True
         thread.start()
         time.sleep(1)
@@ -1096,70 +969,25 @@ def start_recording():
 
 
 #respond to PING messages and put all the other messages onto the recvQueue
-def receivingThread(my_nick, auditor_nick, IRCsocket):
-    if not hasattr(receivingThread, 'last_seq_which_i_acked'):
-        receivingThread.last_seq_which_i_acked = 100000 #static variable. Initialized only on first function's run
-    chunks = []
-    while not bReceivingThreadStopFlagIsSet:
-        buffer = ''
-        try: buffer = IRCsocket.recv(1024)
-        except: continue #1 sec timeout
-        if not buffer: continue
-        #sometimes the IRC server may pack multiple PRIVMSGs into one message separated with /r/n/
-        messages = buffer.split('\r\n')
-        for onemsg in messages:
-            msg = onemsg.split()
-            if len(msg) == 0: continue  #stray newline
-            if msg[0] == 'PING': #check if server have sent ping command
-                IRCsocket.send('PONG %s' % msg[1]) #answer with pong as per RFC 1459
-                continue
-            if not len(msg) >= 5: continue
-            if not (msg[1] == 'PRIVMSG' and msg[2] == '#' + shared.config.get('IRC','channel_name') and msg[3] == ':'+my_nick ): continue
-            exclamaitionMarkPosition = msg[0].find('!')
-            nick_from_message = msg[0][1:exclamaitionMarkPosition]
-            if not auditor_nick == nick_from_message: continue
-            print ('RECEIVED:' + buffer)
-            if len(msg)==5 and msg[4].startswith('ack:'):
-                ackQueue.put(msg[4][len('ack:'):])
-                continue
-            if not (len(msg)==7 and msg[4].startswith('seq:')): continue
-            his_seq = int(msg[4][len('seq:'):])
-            if his_seq <=  receivingThread.last_seq_which_i_acked: 
-                #the other side is out of sync, send an ack again
-                IRCsocket.send('PRIVMSG ' + '#' + shared.config.get('IRC','channel_name') + ' :' + auditor_nick + ' ack:' + str(his_seq) + ' \r\n')
-                continue
-            if not his_seq == receivingThread.last_seq_which_i_acked +1: continue #we did not receive the next seq in order
-            #else we got a new seq      
-            if len(chunks)==0 and not msg[5].startswith((
-                'grsapms_ghmac', 'rsapms_hmacms_hmacek', 'verify_hmac:', 'logsig:', 'response:', 'sha1hmac_for_MS')) : continue         
-            #'CRLF' is used at the end of the first chunk, 'EOL' is used to show that there are no more chunks
-            chunks.append(msg[5])
-            IRCsocket.send('PRIVMSG ' + '#' + shared.config.get('IRC','channel_name') + ' :' + auditor_nick + ' ack:' + str(his_seq) + ' \r\n')
-            receivingThread.last_seq_which_i_acked = his_seq            
-            if msg[-1]=='EOL':
-                assembled_message = ''.join(chunks)
-                recvQueue.put(assembled_message)              
-                chunks = []
+def receivingThread(my_nick, auditor_nick):
+    shared.msg_receiver(my_nick,auditor_nick,ackQueue,recvQueue,shared.message_types_from_auditor)
                
-
-def start_irc():
+def start_peer_messaging():
     global my_nick
-    global auditor_nick
-    global IRCsocket
+    my_nick= 'user' + ''.join(random.choice('0123456789') for x in range(10))
+    shared.start_connection(my_nick)
+    #if we got here, no exceptions were thrown, which counts as success.
+    return 'success'
+
+def get_reliable_site_certificate():
+    #TODO this is currently only valid for google.com
+    #Intention is to make it more flexible and robust.
     global google_modulus
     global google_exponent
-    
-    my_nick= 'user' + ''.join(random.choice('0123456789') for x in range(10))  
-    IRCsocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    IRCsocket.connect((shared.config.get('IRC','irc_server'), int(shared.config.get('IRC','irc_port'))))
-    IRCsocket.send('USER %s %s %s %s' % ('these', 'arguments', 'are', 'optional') + '\r\n')
-    IRCsocket.send('NICK ' + my_nick + '\r\n')  
-    IRCsocket.send('JOIN %s' % ('#'+shared.config.get('IRC','channel_name')) + '\r\n')
-    # ----------------------------------BEGIN get the certficate for google.com and extract modulus/exponent
     tlssock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     tlssock.settimeout(10)
     tlssock.connect(('google.com', 443))
-    cr_time = bigint_to_bytearray(int(time.time()))
+    cr_time = shared.bigint_to_bytearray(int(time.time()))
     cr_google = cr_time + os.urandom(28)
     client_hello = '\x16\x03\x01\x00\x2d\x01\x00\x00\x29\x03\x01' + cr_google + '\x00\x00\x02\x00\x35\x01\x00'
     tlssock.send(client_hello)
@@ -1168,7 +996,7 @@ def start_irc():
     #server hello starts with 16 03 01 * * 02
     #certificate starts with 16 03 01 * * 0b
     serverhellodone = '\x16\x03\x01\x00\x04\x0e\x00\x00\x00'
-    
+
     if not re.match(re.compile(b'\x16\x03\x01..\x02'), serverhello_certificate_serverhellodone):
         print ('Invalid server hello from google')
         return 'failure'
@@ -1183,9 +1011,9 @@ def start_irc():
     cert_start_position = cert_match.start()
     certificate = serverhello_certificate_serverhellodone[cert_start_position : -len(serverhellodone)]
     #extract modulus and exponent from the certificate
-    cert_len = ba2int(certificate[12:15])
+    cert_len = shared.ba2int(certificate[12:15])
     google_cert = certificate[15:15+cert_len]
-    try:       
+    try:
         rv  = decoder.decode(google_cert, asn1Spec=univ.Sequence())
         bitstring = rv[0].getComponentByPosition(0).getComponentByPosition(6).getComponentByPosition(1)
         #bitstring is a list of ints, like [01110001010101000...]
@@ -1193,72 +1021,67 @@ def start_irc():
         stringOfBits = ''
         for bit in bitstring:
             bit_as_str = str(bit)
-            stringOfBits += bit_as_str    
+            stringOfBits += bit_as_str
         #treat every 8 chars as an int and pack the ints into a bytearray
         ba = bytearray()
         for i in range(0, len(stringOfBits)/8):
             onebyte = stringOfBits[i*8 : (i+1)*8]
             oneint = int(onebyte, base=2)
-            ba.append(oneint)       
+            ba.append(oneint)
         #decoding the nested sequence
         rv  = decoder.decode(str(ba), asn1Spec=univ.Sequence())
         exponent = rv[0].getComponentByPosition(1)
         modulus = rv[0].getComponentByPosition(0)
         google_modulus = int(modulus)
         google_exponent = int(exponent)
-        google_n = bigint_to_bytearray(google_modulus)
-        google_e = bigint_to_bytearray(google_exponent)
     except:
         print ('Error decoding der pubkey from google')
         return 'failure'
-    # ----------------------------------END get the certficate for google.com and extract modulus/exponent
-    modulus = bigint_to_bytearray(auditorPubKey.n)[:10]
+
+def peer_handshake():
+    global my_nick
+    global auditor_nick
+    global auditorPubKey
+    get_reliable_site_certificate()
+
+    #hello contains the first 10 bytes of modulus of the auditor's pubkey
+    #this is how the auditor knows that we are addressing him.
+    modulus = shared.bigint_to_bytearray(auditorPubKey.n)[:10]
     signed_hello = rsa.sign('client_hello', myPrvKey, 'SHA-1')
     b64_hello = b64encode(modulus+signed_hello)
+
+    #format the 'reliable site' pubkey
+    google_n = shared.bigint_to_bytearray(google_modulus)
+    google_e = shared.bigint_to_bytearray(google_exponent)
     b64_google_pubkey = b64encode(google_n+google_e)
-    #hello contains the first 10 bytes of modulus of the auditor's pubkey
-    #this is how the auditor knows on IRC that we are addressing him.
-    IRCsocket.settimeout(1)
+
     bIsAuditorRegistered = False
     for attempt in range(6): #try for 6*10 secs to find the auditor
         if bIsAuditorRegistered == True: break #previous iteration successfully regd the auditor
         time_attempt_began = int(time.time())
-        IRCsocket.send('PRIVMSG ' + '#' + shared.config.get('IRC','channel_name') + ' :client_hello:'+b64_hello +' \r\n')
+        shared.send_raw(' :client_hello:'+b64_hello)
         time.sleep(1)
-        IRCsocket.send('PRIVMSG ' + '#' + shared.config.get('IRC','channel_name') + ' :google_pubkey:'+b64_google_pubkey +' \r\n')
+        shared.send_raw(' :google_pubkey:'+b64_google_pubkey)
         while not bIsAuditorRegistered:
             if int(time.time()) - time_attempt_began > 10: break
-            buffer = ''
-            try: buffer = IRCsocket.recv(1024)
-            except: continue #1 sec timeout
-            if not buffer: continue
-            print (buffer)
-            messages = buffer.split('\r\n')  #sometimes the IRC server may pack multiple PRIVMSGs into one message separated with /r/n/
-            for onemsg in messages:
-                msg = onemsg.split()
-                if len(msg)==0 : continue  #stray newline
-                if msg[0] == 'PING':
-                    IRCsocket.send('PONG %s' % msg[1]) #answer with pong as per RFC 1459
-                    continue
-                if not len(msg) == 5: continue
-                if not (msg[1]=='PRIVMSG' and msg[2]=='#' + shared.config.get('IRC','channel_name') and msg[3]==':'+my_nick and msg[4].startswith('server_hello:')): continue
-                b64_signed_hello = msg[4][len('server_hello:'):]
-                try:
-                    signed_hello = b64decode(b64_signed_hello)
-                    rsa.verify('server_hello', signed_hello, auditorPubKey)
-                    #if no exception:
-                    exclamaitionMarkPosition = msg[0].find('!')
-                    auditor_nick = msg[0][1:exclamaitionMarkPosition]
-                    bIsAuditorRegistered = True
-                    print ('Auditor successfully verified')
-                    break
-                except:
+            x = shared.receive_single_msg('server_hello:',my_nick)
+            if not x: continue
+            b64_signed_hello_header,returned_auditor_nick = x
+            b64_signed_hello = b64_signed_hello_header[len('server_hello:'):]
+            signed_hello = b64decode(b64_signed_hello)
+            try:
+                rsa.verify('server_hello', signed_hello, auditorPubKey)
+                auditor_nick = returned_auditor_nick
+                bIsAuditorRegistered = True
+                print ('Auditor successfully verified')
+            except:
                     return ('Failed to verify the auditor. Are you sure you have the correct auditor\'s pubkey?')
+
     if not bIsAuditorRegistered:
         print ('Failed to register auditor within 60 seconds')
         return 'failure'
-    
-    thread = threading.Thread(target= receivingThread, args=(my_nick, auditor_nick, IRCsocket))
+
+    thread = threading.Thread(target= receivingThread, args=(my_nick, auditor_nick))
     thread.daemon = True
     thread.start()
     return 'success'
@@ -1540,8 +1363,8 @@ if __name__ == "__main__":
         else: raise  Exception('Failed to find wireshark in your Applications folder')
         if os.path.isfile(editcap_osx): editcap_exepath = editcap_osx
         else: raise  Exception('Failed to find Wireshark component editcap in your Applications folder')
-      
-    thread = ThreadWithRetval(target= http_server)
+
+    thread = shared.ThreadWithRetval(target= http_server)
     thread.daemon = True
     thread.start()
     #wait for minihttpd thread to indicate its status and FF_to_backend_port  
