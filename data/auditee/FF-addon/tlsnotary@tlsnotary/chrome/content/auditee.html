@@ -132,11 +132,11 @@ var port = Cc["@mozilla.org/process/environment;1"].getService(Ci.nsIEnvironment
 var bGetRecentKeysResponded = false;
 var bGetAdvancedResponded = false;
 var bImportAuditorPubkeyResponded = false;
-var bStartIRCResponded = false;
+var bStartPCResponded = false;
 var bNewKeypairResponded = false;
 var reqGetRecentKeys;
 var reqImportAuditorPubkey;
-var reqStartIRC;
+var reqStartPC;
 var reqNewKeypair;
 var mode = 0; //0 - test mode, 1 - normal mode
 
@@ -282,7 +282,7 @@ function startPressed(){
     reqImportAuditorPubkey.open("HEAD", "http://127.0.0.1:"+port+"/import_auditor_pubkey?pubkey="+auditorpubkey, true);
     reqImportAuditorPubkey.send();
     responseImportAuditorPubkey(0);
-	//the response function will also call startIRC()
+        //the response function will also call startPC()
 }
 
 function responseImportAuditorPubkey(iteration){
@@ -298,7 +298,7 @@ function responseImportAuditorPubkey(iteration){
     if (query != "import_auditor_pubkey"){setError("ERROR Internal error. Wrong response header");return;}
 	if (status != "success"){setError("ERROR Received an error message");return;}
 	//else successful response
-	startIRC();
+        startPC();
 }
 
 function progressBar(){
@@ -347,10 +347,10 @@ function responseSelfTest(iteration){
 	if (status != "success"){setError("ERROR Received an error message");return;}
 	//else successful response
 	Cc["@mozilla.org/process/environment;1"].getService(Ci.nsIEnvironment).set("TLSNOTARY_MSG", "Please wait. Connecting auditee (2/2)");
-	startIRC();
+        startPC();
 }
 
-function startIRC(){
+function startPC(){
 	if (mode == 1) {
 		setTimeout(progressBar, 1);
 		var button_start_button = document.getElementById("start_button");
@@ -362,25 +362,27 @@ function startIRC(){
 		progress_bar.setAttribute("disabled", "true");
 	}
 
-	reqStartIRC = new XMLHttpRequest();
-    reqStartIRC.onload = responseStartIRC;
-    reqStartIRC.open("HEAD", "http://127.0.0.1:"+port+"/start_irc", true);
-    reqStartIRC.send();
-    responseStartIRC(0);
+        reqStartPC = new XMLHttpRequest();
+    reqStartPC.onload = responseStartPC;
+    reqStartPC.open("HEAD", "http://127.0.0.1:"+port+"/start_peer_connection", true);
+    reqStartPC.send();
+    responseStartPC(0);
 }
 
-function responseStartIRC(iteration){
+function responseStartPC(iteration){
     if (typeof iteration == "number"){
-        if (iteration > 40){setError("ERROR responseStartIRC timed out");return;}
-        if (!bStartIRCResponded) setTimeout(responseStartIRC, 1000, ++iteration)
+        if (iteration > 40){setError("ERROR responseStartPC timed out");return;}
+        if (!bStartPCResponded) setTimeout(responseStartPC, 1000, ++iteration)
         return;
     }
     //else: not a timeout but a response from the server
-	bStartIRCResponded = true;
-    var query = reqStartIRC.getResponseHeader("response");
-    var status = reqStartIRC.getResponseHeader("status");
-    if (query != "start_irc"){setError("ERROR Internal error. Wrong response header" + query);return;}
+        bStartPCResponded = true;
+    var query = reqStartPC.getResponseHeader("response");
+    var status = reqStartPC.getResponseHeader("status");
+    var pms_status = reqStartPC.getResponseHeader("pms_status");
+    if (query != "start_peer_connection"){setError("ERROR Internal error. Wrong response header" + query);return;}
 	if (status != "success"){setError("ERROR Received an error message");return;}
+        if (pms_status != "success"){setError("ERROR Failed to negotiate pre master secret.");return;}
 	//else successful response
 	document.getElementById("progress_bar").value = 100;
 	document.getElementById("progress_bar_selftest").value = 100;
@@ -388,7 +390,7 @@ function responseStartIRC(iteration){
 	//NB: we can set envvar from this JS code only because this file is part of the addon
 	//When debugging this file by simple loading into the browser, we won't be able to access env vars
 	Cc["@mozilla.org/process/environment;1"].getService(Ci.nsIEnvironment).set("TLSNOTARY_IRC_STARTED", "true");	 
-	//alert("You are now connected to IRC. The auditor is ready to start the auditing session. You may now open a new tab, type in a URL, navigate to a webpage you need, and press AUDIT THIS PAGE");
+        //alert("You are now connected. The auditor is ready to start the auditing session. You may now open a new tab, type in a URL, navigate to a webpage you need, and press AUDIT THIS PAGE");
 
 }
 
