@@ -106,7 +106,7 @@ function waitForIRCStarted(){
 						 " and cipher suite: "+tlsnCipherSuiteNames[tlsnCipherSuiteList[tlsnLinkIndex-1]]);
 		return; //give up
 	}
-	if (!helpmsg.startsWith("Navigate")){
+	if (!helpmsg.startsWith("Go to a page")){
 		setTimeout(waitForIRCStarted, 1000);
 		return;      
 	}
