@@ -1320,6 +1320,7 @@ def start_firefox(FF_to_backend_port):
 		'user_pref("gfx.direct2d.disabled", true);\n'
 		'user_pref("layers.acceleration.disabled", true);\n'
         'user_pref("browser.sessionstore.resume_from_crash", false);\n'
+        'user_pref("network.proxy.socks_remote_dns", false);\n'
         ])        
     os.putenv('FF_to_backend_port', str(FF_to_backend_port))
     os.putenv('FF_first_window', 'true')   #prevents addon confusion when websites open multiple FF windows
