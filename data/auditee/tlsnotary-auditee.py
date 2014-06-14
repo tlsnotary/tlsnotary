@@ -292,13 +292,16 @@ def get_html_paths(domain):
     #Remove the data from the auditee to the auditor (except handshake) from the copied
     #trace using editcap. (To address the small possibility of data leakage from request urls)
     output = check_output([tshark_exepath,'-r',tracecopy_path,'-Y',
-                                    'ssl.handshake.certificate','-T','fields',
-                                    '-e','tcp.srcport'])
+                                    'ssl.handshake.certificate',
+				    '-o','http.ssl.port:1025-65535',
+				    '-T','fields',
+                                   '-e','tcp.srcport'])
     if not output:
         raise Exception("No certificate found in trace.")
     #gather the trace frames which were sent from the same port as the certificate
     output = check_output([tshark_exepath,'-r',tracecopy_path,'-Y',
                                     'ssl.handshake or tcp.srcport=='+output.strip(),
+				    '-o','http.ssl.port:1025-65535',
                                     '-T','fields','-e','frame.number'])
     if not output:
         raise Exception("Error parsing trace for server frames")
