@@ -3,6 +3,12 @@ IRCsocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 chunk_size = 350
 import socket
 from tlsn_common import *
+verbose = False
+
+'''log to console'''
+def ltc(msg):
+    if verbose:
+        print (msg)
 
 def start_connection(my_nick):
     '''Connects to IRC using my_nick as nick and the settings for IRC
@@ -51,7 +57,7 @@ def send_msg(data,ackQ,recipient,seq_init=100000):
                 try: ackQ.get_nowait()
                 except: pass
             bytessent = IRCsocket.send(irc_msg)
-            print('SENT: ' + str(bytessent) + ' ' + irc_msg)
+            ltc('SENT: ' + str(bytessent) + ' ' + irc_msg)
             try:
                 ack_check = ackQ.get(block=True, timeout=3)
             except: continue #send again because ack was not received
@@ -81,7 +87,7 @@ def receive_single_msg(msg_type,my_nick=None):
     try: buffer = IRCsocket.recv(1024)
     except: return False
     if not buffer: return False
-    print (buffer)
+    ltc(buffer)
 
     #sometimes the IRC server may pack multiple PRIVMSGs into one message separated with /r/n/
     messages = buffer.split('\r\n')
@@ -150,7 +156,7 @@ def msg_receiver(my_nick,counterparty_nick,ackQueue,recvQueue,message_headers,se
             if not counterparty_nick == find_nick(msg): continue
 
             #this is one of our messages; output to console
-            print ('RECEIVED:' + buffer)
+            ltc('RECEIVED:' + buffer)
 
             #acknowledgements are not our business here; put them on the queue
             if len(msg)==5 and msg[4].startswith('ack:'):

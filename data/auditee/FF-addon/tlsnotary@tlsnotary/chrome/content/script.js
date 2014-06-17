@@ -2,11 +2,13 @@ var bStartRecordingResponded = false;
 var bStopRecordingResponded = false;
 var bStopPreparePMS = false;
 var bGetHTMLPaths = false;
+var bAuditeeMacCheckResponded = false;
 var bIsRecordingSoftwareStarted = false; //we start the software only once
 var reqStartRecording;
 var reqStopRecording;
 var reqPreparePMS;
 var reqGetHTMLPaths;
+var reqAuditeeMacCheck;
 var port;
 var tab_url_full = "";//full URL at the time when AUDIT* is pressed
 var tab_url = ""; //the URL at the time when AUDIT* is pressed (only the domain part up to the first /)
@@ -20,12 +22,13 @@ var button_spinner;
 var button_stop_enabled;
 var button_stop_disabled;
 var testingMode = false;
+var proxy_port_int;
 
 port = Cc["@mozilla.org/process/environment;1"].getService(Ci.nsIEnvironment).get("FF_to_backend_port");
 //setting homepage should be done from here rather than defaults.js in order to have the desired effect. FF's quirk.
 Cc["@mozilla.org/preferences-service;1"].getService(Ci.nsIPrefService).getBranch("browser.startup.").setCharPref("homepage", "chrome://tlsnotary/content/auditee.html");
 //TODO: the pref  below must be set from here rather than defaults.js because Firefox overrides them on startup
-Cc["@mozilla.org/preferences-service;1"].getService(Ci.nsIPrefService).getBranch("network.proxy.").setIntPref("type", 0);
+switchProxy(false);
 Components.utils.import("resource://gre/modules/PopupNotifications.jsm");
 
 
@@ -83,10 +86,7 @@ function startRecording(){
 	button_spinner.hidden = false;
 	button_stop_disabled.hidden = false;
 	button_stop_enabled.hidden = true;
-	if (bIsRecordingSoftwareStarted){
-		preparePMS();
-		return;
-	}	
+
 	help.value = "Initializing the recording software"
 	reqStartRecording = new XMLHttpRequest();
     reqStartRecording.onload = responseStartRecording;
@@ -119,12 +119,8 @@ function responseStartRecording(iteration){
 	}
 	//else successful response
 	bIsRecordingSoftwareStarted = true;
-	var proxy_port = reqStartRecording.getResponseHeader("proxy_port");
-	var prefs = Cc["@mozilla.org/preferences-service;1"].getService(Ci.nsIPrefService);
-	var port_int = parseInt(proxy_port);
-	prefs.setIntPref("network.proxy.type", 1);
-	prefs.setCharPref("network.proxy.ssl","127.0.0.1");
-	prefs.setIntPref("network.proxy.ssl_port", port_int);
+    var proxy_port = reqStartRecording.getResponseHeader("proxy_port");
+	proxy_port_int = parseInt(proxy_port);
 	preparePMS();
 }
 
@@ -161,20 +157,29 @@ function responsePreparePMS(iteration){
 		help.value = "ERROR Received an error message: " + status;
 		return;
 	}
-	//else success preparing PMS, resume page reload
-	help.value = "Waiting for the page to reload fully"
+    //else success preparing PMS, send request to wait
+    //for backend to signal successful receipt of server traffic
+    //before beginning the reload
+    auditeeMacCheck();
+
+    help.value = "Waiting for the page to reload fully (decrypted HTML will open in new tab)"
 	//don't reuse TLS sessions
 	var sdr = Cc["@mozilla.org/security/sdr;1"].getService(Ci.nsISecretDecoderRing);
 	sdr.logoutAndTeardown();
+
+    //observer lets us cut off any attempts to connect except
+    //the main page resource
 	observer.register();
-	audited_browser.addProgressListener(loadListener);
-	audited_browser.reloadWithFlags(Ci.nsIWebNavigation.LOAD_FLAGS_BYPASS_CACHE);
+
+    switchProxy(true);
+
+    audited_browser.reloadWithFlags(Ci.nsIWebNavigation.LOAD_FLAGS_BYPASS_CACHE);
 	makeSureReloadDoesntTakeForever(0);
 }
 
 
 function makeSureReloadDoesntTakeForever(iteration) {
-	if (help.value == "Waiting for the page to reload fully") {
+    if (help.value == "Waiting for the page to reload fully (decrypted HTML will open in new tab)") {
 		if (iteration > 300){
 			help.value = "ERROR page reloading is taking too long. You may Stop loading this page and try again"
             return;
@@ -189,12 +194,20 @@ function myObserver() {}
 myObserver.prototype = {
   observe: function(aSubject, topic, data) {
 	 var httpChannel = aSubject.QueryInterface(Ci.nsIHttpChannel);
-	 var url = httpChannel.URI.spec; 
-	 if (url == tab_url_full) {
-		observer.unregister();
-		Cc["@mozilla.org/process/environment;1"].getService(Ci.nsIEnvironment).set("NSS_PATCH_STAGE_ONE", "true");
-		console.log("nss patch toggled");
-	}
+	 var url = httpChannel.URI.spec;
+	 if (url.startsWith("http://127.0.0.1:")) return;
+	 else if (url != tab_url_full) {
+		 //drop all random request which dont match the urlbar, however dont touch
+		 //localhost requests to the backend
+		console.log("cancelled url: " + url);
+		aSubject.cancel(Components.results.NS_BINDING_ABORTED);
+		return;
+	 }
+	 //else url matched
+	 console.log("allowed url: " + url);
+	 observer.unregister();
+	 Cc["@mozilla.org/process/environment;1"].getService(Ci.nsIEnvironment).set("NSS_PATCH_STAGE_ONE", "true");
+	 console.log("nss patch toggled");
   },
   register: function() {
     var observerService = Cc["@mozilla.org/observer-service;1"].getService(Ci.nsIObserverService);
@@ -206,29 +219,38 @@ myObserver.prototype = {
   }
 }
 
-
-//copied from https://developer.mozilla.org/en-US/docs/Code_snippets/Progress_Listeners
-const STATE_STOP = Ci.nsIWebProgressListener.STATE_STOP;
-const STATE_IS_WINDOW = Ci.nsIWebProgressListener.STATE_IS_WINDOW;
-//start decrypting the trace as soon as DOM is loaded
-var loadListener = {
-    QueryInterface: XPCOMUtils.generateQI(["nsIWebProgressListener",
-                                           "nsISupportsWeakReference"]),
-
-    onStateChange: function(aWebProgress, aRequest, aFlag, aStatus) {
-        if ((aFlag & STATE_STOP) && (aFlag & STATE_IS_WINDOW) && (aWebProgress.DOMWindow == aWebProgress.DOMWindow.top)) {
-            // This fires when the page load finishes
-			audited_browser.removeProgressListener(this);
-			help.value = "Decrypting HTML (will pop up in a new tab)"
-			get_html_paths();
-        }
-    },
-    onLocationChange: function(aProgress, aRequest, aURI) {},
-    onProgressChange: function(aWebProgress, aRequest, curSelf, maxSelf, curTot, maxTot) {},
-    onStatusChange: function(aWebProgress, aRequest, aStatus, aMessage) {},
-    onSecurityChange: function(aWebProgress, aRequest, aState) {}
+function auditeeMacCheck(){
+    reqAuditeeMacCheck = new XMLHttpRequest();
+    reqAuditeeMacCheck.onload = responseAuditeeMacCheck;
+    reqAuditeeMacCheck.open("HEAD", "http://127.0.0.1:"+port+"/auditee_mac_check", true);
+    reqAuditeeMacCheck.send();
+    responseAuditeeMacCheck(0);
 }
 
+
+function responseAuditeeMacCheck(iteration){
+    if (typeof iteration == "number"){
+        if (iteration > 60){
+            help.value = "auditee mac check error";
+           return;
+        }
+        if (!bAuditeeMacCheckResponded) setTimeout(responseAuditeeMacCheck, 1000, ++iteration)
+        return;
+    }
+    //else: not a timeout but a response from my backend server
+    bAuditeeMacCheckResponded = true;
+
+    //stop reload (equivalent to pressing red X)
+    audited_browser.stop();
+
+    //go back to online (and disable the proxy)
+    switchOffline(false);
+
+    //open decrypted tab only after the new reload has finished
+    //and the browser has been put into offline mode
+    audited_browser.addProgressListener(loadListener);
+    audited_browser.reloadWithFlags(Ci.nsIWebNavigation.LOAD_FLAGS_BYPASS_CACHE);
+}
 
 //get paths to decrypted html files on local filesystem and show the html
 function get_html_paths(){
@@ -240,20 +262,9 @@ function get_html_paths(){
     responseGetHTMLPaths(0);	
 }
 
-//NB: FF ignores offline mode when proxy is set to manual
-function toggleOffline(){
-	var curvalue = Cc["@mozilla.org/preferences-service;1"].getService(Ci.nsIPrefService).getBranch("network.proxy.").getIntPref("type");
-	var newvalue;
-	if (curvalue == 0) newvalue = 1;
-	if (curvalue == 1) newvalue = 0;
-	Cc["@mozilla.org/preferences-service;1"].getService(Ci.nsIPrefService).getBranch("network.proxy.").setIntPref("type", newvalue);
-	BrowserOffline.toggleOfflineStatus(); //analogous to toggling "Work Offline" in File menu
-}
-
-
 function responseGetHTMLPaths(iteration){
     if (typeof iteration == "number"){
-        if (iteration > 10){
+        if (iteration > 20){
 			help.value = "ERROR responseGetHTMLPaths timed out";
             return;
         }
@@ -281,16 +292,20 @@ function responseGetHTMLPaths(iteration){
 		return;
 	}
 	//else successful response
-	b64_html_paths = reqGetHTMLPaths.getResponseHeader("html_paths");
-	html_paths_string = atob(b64_html_paths);
-	html_paths = html_paths_string.split("&");
-	toggleOffline();
-	for (var i=0; i<html_paths.length; i++){
-		if (html_paths[i] == "") continue;
-		let browser = gBrowser.addTab(html_paths[i]);
-	}
-	//FIXME: we should install a pageload listener here rather than relying on timeout
-	setTimeout(toggleOffline, 1000);
+    b64_html_paths = reqGetHTMLPaths.getResponseHeader("html_paths");
+    html_paths_string = atob(b64_html_paths);
+
+    html_paths = html_paths_string.split("&").filter(function(e){return e});
+
+    //in new tlsnotary, perhaps there cannot be more than one html,
+    //but kept in a loop just in case
+    for (var i=0; i<html_paths.length; i++){
+        var browser = gBrowser.getBrowserForTab(gBrowser.addTab(html_paths[i]));
+        if (i==html_paths.length-1){
+            browser.addProgressListener(loadListener2);
+        }
+    }
+
 	help.value = "Page decryption successful. Go to another page and press AUDIT THIS PAGE or press FINISH";
 	button_record_enabled.hidden = false;
 	button_spinner.hidden = true;
@@ -298,11 +313,79 @@ function responseGetHTMLPaths(iteration){
 	button_stop_enabled.hidden = false;
 }
 
+//copied from https://developer.mozilla.org/en-US/docs/Code_snippets/Progress_Listeners
+const STATE_STOP = Ci.nsIWebProgressListener.STATE_STOP;
+const STATE_IS_WINDOW = Ci.nsIWebProgressListener.STATE_IS_WINDOW;
+
+var loadListener = {
+    QueryInterface: XPCOMUtils.generateQI(["nsIWebProgressListener",
+                                           "nsISupportsWeakReference"]),
+
+    onStateChange: function(aWebProgress, aRequest, aFlag, aStatus) {
+        if ((aFlag & STATE_STOP) && (aFlag & STATE_IS_WINDOW) && (aWebProgress.DOMWindow == aWebProgress.DOMWindow.top)) {
+            // This fires when the page load finishes
+            audited_browser.removeProgressListener(this);
+            switchOffline(true);
+            get_html_paths();
+        }
+    },
+    onLocationChange: function(aProgress, aRequest, aURI) {},
+    onProgressChange: function(aWebProgress, aRequest, curSelf, maxSelf, curTot, maxTot) {},
+    onStatusChange: function(aWebProgress, aRequest, aStatus, aMessage) {},
+    onSecurityChange: function(aWebProgress, aRequest, aState) {}
+}
+
+//TODO: It should be possible to reuse the loadListener code
+//(e.g. something like loadListener2 = loadListener; loadListener2.onStateChange = ...)
+//but have not managed it yet.
+var loadListener2 = {
+    QueryInterface: XPCOMUtils.generateQI(["nsIWebProgressListener",
+                                           "nsISupportsWeakReference"]),
+
+    onStateChange: function(aWebProgress, aRequest, aFlag, aStatus) {
+        if ((aFlag & STATE_STOP) && (aFlag & STATE_IS_WINDOW) && (aWebProgress.DOMWindow == aWebProgress.DOMWindow.top)) {
+            // This fires when the page load finishes
+            switchOffline(false);
+        }
+    },
+    onLocationChange: function(aProgress, aRequest, aURI) {},
+    onProgressChange: function(aWebProgress, aRequest, curSelf, maxSelf, curTot, maxTot) {},
+    onStatusChange: function(aWebProgress, aRequest, aStatus, aMessage) {},
+    onSecurityChange: function(aWebProgress, aRequest, aState) {}
+}
+
+
+function switchProxy(s){
+    if (s == true){
+        var prefs = Cc["@mozilla.org/preferences-service;1"].getService(Ci.nsIPrefService);
+        prefs.setIntPref("network.proxy.type", 1);
+        prefs.setCharPref("network.proxy.ssl","127.0.0.1");
+        //proxy_port_int is set in responseStartRecording
+        prefs.setIntPref("network.proxy.ssl_port", proxy_port_int);
+    }
+    else{
+        Cc["@mozilla.org/preferences-service;1"].getService(Ci.nsIPrefService).getBranch("network.proxy.").setIntPref("type", 0);
+    }
+}
+
+//if switch set to true, go offline, else go online
+function switchOffline(s){
+    //NB: FF ignores offline mode when proxy is set to manual
+    switchProxy(false);
+    var ioService = Components.classes["@mozilla.org/network/io-service;1"].getService(Components.interfaces.nsIIOService2);
+    if (!ioService.offline && s){
+        BrowserOffline.toggleOfflineStatus();
+    }
+    else if (ioService.offline && !s){
+        BrowserOffline.toggleOfflineStatus();
+    }
+    //other 2 conditions, do nothing
+}
 
 function stopRecording(){
 	help.value = "Preparing the data to be sent to the auditor"
 	//disable proxy so that we can reach our localhost backend
-	Cc["@mozilla.org/preferences-service;1"].getService(Ci.nsIPrefService).getBranch("network.proxy.").setIntPref("type", 0);
+    switchProxy(false);
 	button_spinner.hidden = true;
 	button_record_enabled.hidden = true;
 	button_stop_enabled.hidden = true;
@@ -341,7 +424,7 @@ function responseStopRecording(iteration){
 		return;
 	}
 	//else successful response, disable proxying
-	Cc["@mozilla.org/preferences-service;1"].getService(Ci.nsIPrefService).setIntPref("network.proxy.type", 0);
+    switchProxy(false);
 	popupShow("Congratulations. The auditor has acknowledged successful receipt of your audit data. You may now close the browser");
 	help.value = "Auditing session ended successfully";
 	return;
