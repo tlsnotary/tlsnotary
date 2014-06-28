@@ -296,7 +296,6 @@ if __name__ == "__main__":
     thread_auditor.daemon = True
     thread_auditor.start()
 
-    time.sleep(2.0)
     #start auditee
     thread_auditee = ThreadWithRetval(target= start_auditee)
     thread_auditee.daemon = True
