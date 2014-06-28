@@ -301,7 +301,17 @@ def process_messages():
                 #also create a file where the auditor can see the domain and pubkey
                 with open (os.path.join(auditeetrace_dir, 'domain'+seqno), 'rb') as f: domain_data = f.read()
                 with open (os.path.join(commit_dir, 'pubkey'+seqno), 'rb') as f: pubkey_data = f.read()
-                write_data = domain_data + '\n\n' + 'The auditee claims that the server above presented the public key below\n' + 'Open the server address in your browser and check that the public key matches\n' + 'This step is mandatory to ascertain that the auditee hasn\'t tampered with the audit data\n' + pubkey_data
+                write_data = domain_data + '\n\n'
+                write_data += """
+The auditee claims that the server above presented the public key below
+Open the server address in your browser and check that the public key matches
+This step is mandatory to ascertain that the auditee hasn\'t tampered with the audit data
+In Firefox, click the padlock to the left of the URL bar -> More Information -> View Certificate -> Details
+ -> in Certificate Fields choose Subject\'s Public Key -> Modulus should be: """
+                write_data += '\n\n'
+                #format pubkey in nice rows of 16 hex numbers just like Firefox does
+                for i in range(len(pubkey_data)/48):
+                    write_data += pubkey_data[i*48:(i+1)*48] + '\n' 
                 with open(os.path.join(decr_dir, 'domain'+seqno), 'wb') as f: f.write(write_data)               
             progressQueue.put(time.strftime('%H:%M:%S', time.localtime()) + ': All decrypted HTML can be found in ' + decr_dir)
             progressQueue.put(time.strftime('%H:%M:%S', time.localtime()) + ': You may now close the browser.')
