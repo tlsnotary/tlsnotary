@@ -742,7 +742,7 @@ def new_audited_connection(uid):
     
    
 #scan the dir until a new file appears and then spawn a new processing thread
-def nss_patch_audited_connections():
+def nsspatch_dir_scan():
     uid = ''
     bNewUIDFound = False    
     while True:
@@ -987,15 +987,18 @@ def start_recording():
     logdir = join(current_sessiondir, 'tracelog')
     if not os.path.exists(logdir): os.makedirs(logdir)
 
-    #TODO: do this stuff once only
-    if OS=='mswin': stcppipe_exename = 'stcppipe.exe'
-    elif OS=='linux': 
-        if platform.architecture()[0] == '64bit': stcppipe_exename = 'stcppipe64_linux'
-        else: stcppipe_exename = 'stcppipe_linux'
-    elif OS=='macos': 
-        if platform.architecture()[0] == '64bit':stcppipe_exename = 'stcppipe64_mac'
-        else: stcppipe_exename = 'stcppipe_mac'
-
+    if not hasattr(start_recording, 'first_run_happened'):  #do this only once on first run
+        if OS=='mswin': start_recording.stcppipe_exename  = 'stcppipe.exe'
+        elif OS=='linux': 
+            if platform.architecture()[0] == '64bit': 
+                start_recording.stcppipe_exename  = 'stcppipe64_linux'
+            else: start_recording.stcppipe_exename  = 'stcppipe_linux'
+        elif OS=='macos': 
+            if platform.architecture()[0] == '64bit':
+                start_recording.stcppipe_exename  = 'stcppipe64_mac'
+            else: start_recording.stcppipe_exename  = 'stcppipe_mac'
+    stcppipe_exename = start_recording.stcppipe_exename
+    
     for i in range(3):
         stcppipe_in_port = random.randint(1025,65535)
         stcppipe_proc = Popen([join(datadir, 'stcppipe', stcppipe_exename),'-d',
@@ -1023,9 +1026,13 @@ def start_recording():
         bWasStarted = True
         break
     if bWasStarted == False: return ('failure to start sleep proxy')
-    thread = threading.Thread(target= nss_patch_audited_connections)
-    thread.daemon = True
-    thread.start()
+    
+    if not hasattr(start_recording, 'first_run_happened'):
+        thread = threading.Thread(target= nsspatch_dir_scan)
+        thread.daemon = True
+        thread.start()        
+        start_recording.first_run_happened = True #static variable. Initialized only on first function's run
+    
     return ('success', FF_proxy_port)
 
 
