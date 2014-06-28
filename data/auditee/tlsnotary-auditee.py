@@ -455,14 +455,10 @@ def prepare_pms():
         pms1 = '\x03\x01'+os.urandom(secretbytes_amount) + ('\x00' * (24-2-secretbytes_amount))
         #derive MS
         label = 'master secret'
-        seed = cr + sr       
-        md5A1 = hmac.new(pms1, label+seed, md5).digest()
-        md5A2 = hmac.new(pms1, md5A1, md5).digest()
-        md5A3 = hmac.new(pms1, md5A2, md5).digest()      
-        md5hmac1 = hmac.new(pms1, md5A1 + label + seed, md5).digest()
-        md5hmac2 = hmac.new(pms1, md5A2 + label + seed, md5).digest()
-        md5hmac3 = hmac.new(pms1, md5A3 + label + seed, md5).digest()
-        md5hmac = md5hmac1+md5hmac2+md5hmac3
+        seed = cr + sr
+
+        md5hmac = shared.TLS10PRF(label+seed,first_half=pms1)[0]
+
         ms = shared.xor(md5hmac, shahmac)[:48]
         #derive expanded keys for AES256
         #this is not optimized in a loop on purpose. I want people to see exactly what is going on        
@@ -470,44 +466,9 @@ def prepare_pms():
         ms_second_half = ms[24:]
         label = 'key expansion'
         seed = sr + cr
-        md5A1 = hmac.new(ms_first_half, label+seed, md5).digest()
-        md5A2 = hmac.new(ms_first_half, md5A1, md5).digest()
-        md5A3 = hmac.new(ms_first_half, md5A2, md5).digest()
-        md5A4 = hmac.new(ms_first_half, md5A3, md5).digest()
-        md5A5 = hmac.new(ms_first_half, md5A4, md5).digest()
-        md5A6 = hmac.new(ms_first_half, md5A5, md5).digest()
-        md5A7 = hmac.new(ms_first_half, md5A6, md5).digest()
-        md5A8 = hmac.new(ms_first_half, md5A7, md5).digest()
-        md5A9 = hmac.new(ms_first_half, md5A8, md5).digest()
-        #---------#
-        md5hmac1 = hmac.new(ms_first_half, md5A1 + label + seed, md5).digest()
-        md5hmac2 = hmac.new(ms_first_half, md5A2 + label + seed, md5).digest()
-        md5hmac3 = hmac.new(ms_first_half, md5A3 + label + seed, md5).digest()
-        md5hmac4 = hmac.new(ms_first_half, md5A4 + label + seed, md5).digest()
-        md5hmac5 = hmac.new(ms_first_half, md5A5 + label + seed, md5).digest()
-        md5hmac6 = hmac.new(ms_first_half, md5A6 + label + seed, md5).digest()
-        md5hmac7 = hmac.new(ms_first_half, md5A7 + label + seed, md5).digest()
-        md5hmac8 = hmac.new(ms_first_half, md5A8 + label + seed, md5).digest()
-        md5hmac9 = hmac.new(ms_first_half, md5A9 + label + seed, md5).digest()       
-        md5hmac = md5hmac1+md5hmac2+md5hmac3+md5hmac4+md5hmac5+md5hmac6+md5hmac7+md5hmac8+md5hmac9
-        #---------#    
-        sha1A1 = hmac.new(ms_second_half, label+seed, sha1).digest()
-        sha1A2 = hmac.new(ms_second_half, sha1A1, sha1).digest()
-        sha1A3 = hmac.new(ms_second_half, sha1A2, sha1).digest()
-        sha1A4 = hmac.new(ms_second_half, sha1A3, sha1).digest()
-        sha1A5 = hmac.new(ms_second_half, sha1A4, sha1).digest()
-        sha1A6 = hmac.new(ms_second_half, sha1A5, sha1).digest()
-        sha1A7 = hmac.new(ms_second_half, sha1A6, sha1).digest()
-        #---------#        
-        sha1hmac1 = hmac.new(ms_second_half, sha1A1 + label + seed, sha1).digest()
-        sha1hmac2 = hmac.new(ms_second_half, sha1A2 + label + seed, sha1).digest()
-        sha1hmac3 = hmac.new(ms_second_half, sha1A3 + label + seed, sha1).digest()
-        sha1hmac4 = hmac.new(ms_second_half, sha1A4 + label + seed, sha1).digest()
-        sha1hmac5 = hmac.new(ms_second_half, sha1A5 + label + seed, sha1).digest()
-        sha1hmac6 = hmac.new(ms_second_half, sha1A6 + label + seed, sha1).digest()
-        sha1hmac7 = hmac.new(ms_second_half, sha1A7 + label + seed, sha1).digest()        
-        sha1hmac = sha1hmac1+sha1hmac2+sha1hmac3+sha1hmac4+sha1hmac5+sha1hmac6+sha1hmac7        
-        gexpanded_keys = shared.xor(md5hmac, sha1hmac)
+
+        gexpanded_keys = shared.TLS10PRF(label+seed,req_bytes=120,full_secret = ms)[2]
+
         client_mac_key = gexpanded_keys[:20]
         client_encryption_key = gexpanded_keys[40:72]
         client_iv = gexpanded_keys[104:120]
@@ -525,12 +486,15 @@ def prepare_pms():
         label = 'client finished'
         seed = md5_verify + sha_verify
         ms_first_half = ms[:24]
-        ms_second_half = ms[24:]       
+        ms_second_half = ms[24:]
+        verify_data = shared.TLS10PRF(label+seed,req_bytes=12,full_secret=ms)[2]
+        '''
         md5A1 = hmac.new(ms_first_half, label+seed, md5).digest()
         md5hmac1 = hmac.new(ms_first_half, md5A1 + label + seed, md5).digest()        
         sha1A1 = hmac.new(ms_second_half, label+seed, sha1).digest()
         sha1hmac1 = hmac.new(ms_second_half, sha1A1 + label + seed, sha1).digest()
         verify_data = shared.xor(md5hmac1, sha1hmac1)[:12]
+        '''
         #HMAC and AES-encrypt the verify_data      
         hmac_for_verify_data = hmac.new(client_mac_key, '\x00\x00\x00\x00\x00\x00\x00\x00' + '\x16' + '\x03\x01' + '\x00\x10' + '\x14\x00\x00\x0c' + verify_data, sha1).digest()
         moo = AESModeOfOperation()
@@ -694,14 +658,8 @@ def new_audited_connection(uid):
     if len(modulus_len) == 1: modulus_len.insert(0,0)  #zero-pad to 2 bytes    
     #get my md5hmac half which auditor uses to get his half of MS
     label = 'master secret'
-    seed = cr + sr    
-    md5A1 = hmac.new(PMS1, label+seed, md5).digest()
-    md5A2 = hmac.new(PMS1, md5A1, md5).digest()
-    md5A3 = hmac.new(PMS1, md5A2, md5).digest()
-    md5hmac1 = hmac.new(PMS1, md5A1 + label + seed, md5).digest()
-    md5hmac2 = hmac.new(PMS1, md5A2 + label + seed, md5).digest()
-    md5hmac3 = hmac.new(PMS1, md5A3 + label + seed, md5).digest()
-    md5hmac = md5hmac1+md5hmac2+md5hmac3
+    seed = cr + sr
+    md5hmac = shared.TLS10PRF(label+seed,first_half=PMS1)[0]
     md5hmac1_for_MS = md5hmac[:24]
     md5hmac2_for_MS = md5hmac[24:48]
           
@@ -744,22 +702,8 @@ def new_audited_connection(uid):
     #Regardless of theciphersuite, we generate the max key material we'd ever need which is 136 bytes
     label = 'key expansion'
     seed = sr + cr
-    #this is not optimized in a loop on purpose. I want people to see exactly what is going on   
-    sha1A1 = hmac.new(MS2, label+seed, sha1).digest()
-    sha1A2 = hmac.new(MS2, sha1A1, sha1).digest()
-    sha1A3 = hmac.new(MS2, sha1A2, sha1).digest()
-    sha1A4 = hmac.new(MS2, sha1A3, sha1).digest()
-    sha1A5 = hmac.new(MS2, sha1A4, sha1).digest()
-    sha1A6 = hmac.new(MS2, sha1A5, sha1).digest()
-    sha1A7 = hmac.new(MS2, sha1A6, sha1).digest()   
-    sha1hmac1 = hmac.new(MS2, sha1A1 + label + seed, sha1).digest()
-    sha1hmac2 = hmac.new(MS2, sha1A2 + label + seed, sha1).digest()
-    sha1hmac3 = hmac.new(MS2, sha1A3 + label + seed, sha1).digest()
-    sha1hmac4 = hmac.new(MS2, sha1A4 + label + seed, sha1).digest()
-    sha1hmac5 = hmac.new(MS2, sha1A5 + label + seed, sha1).digest()
-    sha1hmac6 = hmac.new(MS2, sha1A6 + label + seed, sha1).digest()
-    sha1hmac7 = hmac.new(MS2, sha1A7 + label + seed, sha1).digest()    
-    sha1hmac140bytes = sha1hmac1+sha1hmac2+sha1hmac3+sha1hmac4+sha1hmac5+sha1hmac6+sha1hmac7
+    sha1hmac140bytes = shared.TLS10PRF(label+seed,req_bytes=140,second_half=MS2)[1]
+
     #this if/else is purely for expliciteness, we could simply xor the 140bytes with however long the md5hmac is
     if cipher_suite == 'AES256': sha1hmac_for_ek = sha1hmac140bytes[:136]
     elif cipher_suite == 'AES128': sha1hmac_for_ek = sha1hmac140bytes[:104]
@@ -790,8 +734,7 @@ def new_audited_connection(uid):
     #see RFC2246 7.4.9. Finished & 5. HMAC and the pseudorandom function
     label = 'client finished'
     seed = md5_digest + sha_digest
-    sha1A1 = hmac.new(MS2, label+seed, sha1).digest()
-    sha1hmac1 = hmac.new(MS2, sha1A1 + label + seed, sha1).digest()
+    sha1hmac1 = shared.TLS10PRF(label+seed,req_bytes=12,second_half=MS2)[1]
     verify_data = shared.xor(verify_hmac, sha1hmac1)[:12]
     with open(join(nss_patch_dir, 'verify_data'+uid), 'wb') as f: f.write(bytearray(verify_data))
     with open(join(nss_patch_dir, 'verify_data'+uid+'ready'), 'wb') as f: f.close()

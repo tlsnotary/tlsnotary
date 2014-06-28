@@ -90,14 +90,8 @@ def process_messages():
             grsapms = shared.bigint_to_bytearray(RSA_PMS_google_int)
             #-------------------BEGIN get sha1hmac for google
             label = "master secret"
-            seed = google_cr + google_sr        
-            sha1A1 = hmac.new(PMS2, label+seed, hashlib.sha1).digest()
-            sha1A2 = hmac.new(PMS2, sha1A1, hashlib.sha1).digest()
-            sha1A3 = hmac.new(PMS2, sha1A2, hashlib.sha1).digest()          
-            sha1hmac1 = hmac.new(PMS2, sha1A1 + label + seed, hashlib.sha1).digest()
-            sha1hmac2 = hmac.new(PMS2, sha1A2 + label + seed, hashlib.sha1).digest()
-            sha1hmac3 = hmac.new(PMS2, sha1A3 + label + seed, hashlib.sha1).digest()
-            ghmac = (sha1hmac1+sha1hmac2+sha1hmac3)[:48]
+            seed = google_cr + google_sr
+            ghmac = shared.TLS10PRF(label+seed,second_half=PMS2)[1]
             #-------------------END get sha1hmac for google            
             b64_grsapms_ghmac = base64.b64encode(grsapms+ghmac)
             send_message('grsapms_ghmac:'+ b64_grsapms_ghmac)
@@ -128,13 +122,7 @@ def process_messages():
             #get my sha1hmac to xor with auditee's md5hmac and get MS first half
             label = "master secret"
             seed = cr + sr        
-            sha1A1 = hmac.new(PMS2, label+seed, hashlib.sha1).digest()
-            sha1A2 = hmac.new(PMS2, sha1A1, hashlib.sha1).digest()
-            sha1A3 = hmac.new(PMS2, sha1A2, hashlib.sha1).digest()            
-            sha1hmac1 = hmac.new(PMS2, sha1A1 + label + seed, hashlib.sha1).digest()
-            sha1hmac2 = hmac.new(PMS2, sha1A2 + label + seed, hashlib.sha1).digest()
-            sha1hmac3 = hmac.new(PMS2, sha1A3 + label + seed, hashlib.sha1).digest()
-            sha1hmac = (sha1hmac1+sha1hmac2+sha1hmac3)[:48]
+            sha1hmac = shared.TLS10PRF(label+seed,second_half=PMS2)[1]
             sha1hmac1_for_MS = sha1hmac[:24]
             sha1hmac2_for_MS = sha1hmac[24:48]
             MS1 = shared.xor(md5hmac1_for_MS, sha1hmac1_for_MS)
@@ -148,26 +136,8 @@ def process_messages():
             #Regardless of theciphersuite, we generate the max key material we'd ever need which is 136 bytes
             label = "key expansion"
             seed = sr + cr
-            #this is not optimized in a loop on purpose. I want people to see exactly what is going on
-            md5A1 = hmac.new(MS1, label+seed, hashlib.md5).digest()
-            md5A2 = hmac.new(MS1, md5A1, hashlib.md5).digest()
-            md5A3 = hmac.new(MS1, md5A2, hashlib.md5).digest()
-            md5A4 = hmac.new(MS1, md5A3, hashlib.md5).digest()
-            md5A5 = hmac.new(MS1, md5A4, hashlib.md5).digest()
-            md5A6 = hmac.new(MS1, md5A5, hashlib.md5).digest()
-            md5A7 = hmac.new(MS1, md5A6, hashlib.md5).digest()
-            md5A8 = hmac.new(MS1, md5A7, hashlib.md5).digest()
-            md5A9 = hmac.new(MS1, md5A8, hashlib.md5).digest()           
-            md5hmac1 = hmac.new(MS1, md5A1 + label + seed, hashlib.md5).digest()
-            md5hmac2 = hmac.new(MS1, md5A2 + label + seed, hashlib.md5).digest()
-            md5hmac3 = hmac.new(MS1, md5A3 + label + seed, hashlib.md5).digest()
-            md5hmac4 = hmac.new(MS1, md5A4 + label + seed, hashlib.md5).digest()
-            md5hmac5 = hmac.new(MS1, md5A5 + label + seed, hashlib.md5).digest()
-            md5hmac6 = hmac.new(MS1, md5A6 + label + seed, hashlib.md5).digest()
-            md5hmac7 = hmac.new(MS1, md5A7 + label + seed, hashlib.md5).digest()
-            md5hmac8 = hmac.new(MS1, md5A8 + label + seed, hashlib.md5).digest()
-            md5hmac9 = hmac.new(MS1, md5A9 + label + seed, hashlib.md5).digest()
-            md5hmac = (md5hmac1+md5hmac2+md5hmac3+md5hmac4+md5hmac5+md5hmac6+md5hmac7+md5hmac8+md5hmac9)
+            md5hmac = shared.TLS10PRF(label+seed,req_bytes=140,first_half=MS1)[0]
+
             #fill the place of server MAC with zeroes
             if cipher_suite == 'AES256': 
                 md5hmac_for_ek = md5hmac[:20] + bytearray(os.urandom(20)) + md5hmac[40:136]
@@ -191,9 +161,8 @@ def process_messages():
             #calculate verify_data for Finished message
             #see RFC2246 7.4.9. Finished & 5. HMAC and the pseudorandom function
             label = "client finished"
-            seed = md5 + sha          
-            md5A1 = hmac.new(MS1, label+seed, hashlib.md5).digest()
-            md5hmac1 = hmac.new(MS1, md5A1 + label + seed, hashlib.md5).digest()
+            seed = md5 + sha
+            md5hmac1 = shared.TLS10PRF(label+seed,req_bytes=12,first_half=MS1)[0]
             b64_verify_hmac = base64.b64encode(md5hmac1)
             send_message('verify_hmac:'+b64_verify_hmac)
             continue
