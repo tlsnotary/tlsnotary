@@ -28,7 +28,7 @@ try: import wingdbstub
 except: pass
 datadir = os.path.dirname(os.path.realpath(__file__))
 sys.path.append(os.path.dirname(datadir))
-import shared
+
 installdir = os.path.dirname(os.path.dirname(datadir))
 sessionsdir = join(datadir, 'sessions')
 time_str = time.strftime('%d-%b-%Y-%H-%M-%S', time.gmtime())
@@ -45,7 +45,7 @@ recvQueue = Queue.Queue() #all messages from the auditor are placed here by rece
 ackQueue = Queue.Queue() #ack numbers are placed here
 auditor_nick = '' #we learn auditor's nick as soon as we get a hello_server signed by the auditor
 my_nick = '' #our nick is randomly generated on connection
-myPrvKey = auditorPubKey = None
+myPrvKey = myPubKey = auditorPubKey = None
 google_modulus = 0
 google_exponent = 0
 
@@ -79,20 +79,20 @@ def import_auditor_pubkey(auditor_pubkey_b64modulus):
 
 
 def newkeys():
-    global myPrvKey                
+    global myPrvKey,myPubKey
     #Usually the auditee would reuse a keypair from the previous session
     #but for privacy reasons the auditee may want to generate a new key
-    pubkey, privkey = rsa.newkeys(1024)
-    myPrvKey = privkey
-    my_pem_pubkey = pubkey.save_pkcs1()
-    my_pem_privkey = privkey.save_pkcs1()
+    myPubKey, myPrvKey = rsa.newkeys(1024)
+
+    my_pem_pubkey = myPubKey.save_pkcs1()
+    my_pem_privkey = myPrvKey.save_pkcs1()
     with open(join(current_sessiondir, 'myprivkey'), 'wb') as f: f.write(my_pem_privkey)
     with open(join(current_sessiondir, 'mypubkey'), 'wb') as f: f.write(my_pem_pubkey)
     #also save the keys as recent, so that they could be reused in the next session
     if not os.path.exists(join(datadir, 'recentkeys')): os.makedirs(join(datadir, 'recentkeys'))
     with open(join(datadir, 'recentkeys', 'myprivkey'), 'wb') as f: f.write(my_pem_privkey)
     with open(join(datadir, 'recentkeys', 'mypubkey'), 'wb') as f: f.write(my_pem_pubkey)
-    pubkey_export = b64encode(shared.bigint_to_bytearray(pubkey.n))
+    pubkey_export = b64encode(shared.bigint_to_bytearray(myPubKey.n))
     return pubkey_export
 
 
@@ -133,8 +133,9 @@ class HandlerClass(SimpleHTTPServer.SimpleHTTPRequestHandler):
                     with open(join(current_sessiondir, 'auditorpubkey'), 'wb') as f: f.write(auditor_pubkey_pem)
                     global auditorPubKey                    
                     auditorPubKey = rsa.PublicKey.load_pkcs1(auditor_pubkey_pem)
-                my_pubkey = rsa.PublicKey.load_pkcs1(my_pubkey_pem)
-                my_pubkey_export = b64encode(shared.bigint_to_bytearray(my_pubkey.n))
+                global myPubKey
+                myPubKey = rsa.PublicKey.load_pkcs1(my_pubkey_pem)
+                my_pubkey_export = b64encode(shared.bigint_to_bytearray(myPubKey.n))
                 if auditor_pubkey_pem == '': auditor_pubkey_export = ''
                 else: auditor_pubkey_export = b64encode(shared.bigint_to_bytearray(auditorPubKey.n))
                 self.respond({'response':'get_recent_keys', 'mypubkey':my_pubkey_export,
@@ -342,14 +343,12 @@ def get_html_paths():
     with open(tracecopy_path, 'rb') as f: data=f.read()
     commit_hash = sha256(data).digest()
     md5hmac_hash = sha256(md5hmac).digest()  
-    b64_commit_hash = b64encode(commit_hash+md5hmac_hash)
-    reply = send_and_recv('commit_hash:'+b64_commit_hash)
+    reply = send_and_recv('commit_hash:'+commit_hash+md5hmac_hash)
     if reply[0] != 'success': raise Exception ('Failed to receive a reply')
     if not reply[1].startswith('sha1hmac_for_MS:'):
         raise Exception ('bad reply. Expected sha1hmac_for_MS')
-    b64_sha1hmac_for_MS = reply[1][len('sha1hmac_for_MS:'):]
-    try: sha1hmac_for_MS = b64decode(b64_sha1hmac_for_MS)
-    except:  raise Exception ('base64 decode error in sha1hmac_for_MS')
+    sha1hmac_for_MS = reply[1][len('sha1hmac_for_MS:'):]
+
     #construct MS
     ms = shared.xor(md5hmac, sha1hmac_for_MS)[:48]
     sslkeylog = join(commit_dir, 'sslkeylog' + str(len(cr_list)))
@@ -398,8 +397,7 @@ def get_html_paths():
     
 
 def send_link(filelink):
-    b64_link = b64encode(filelink)
-    reply = send_and_recv('link:'+b64_link)
+    reply = send_and_recv('link:'+filelink)
     if not reply[0] == 'success' : return 'failure'
     if not reply[1].startswith('response:') : return 'failure'
     response = reply[1][len('response:'):]
@@ -440,14 +438,11 @@ def prepare_pms():
         sr = sh[11:43]
         #give auditor cr&sr and get an encrypted second half of PMS,
         #and shahmac that needs to be xored with my md5hmac to get MS
-        b64_crsr = b64encode(cr+sr)
-        reply = send_and_recv('gcr_gsr:'+b64_crsr)       
+        reply = send_and_recv('gcr_gsr:'+cr+sr)
         if reply[0] != 'success': raise Exception ('Failed to receive a reply for gcr_gsr:')
         if not reply[1].startswith('grsapms_ghmac:'):
             raise Exception ('bad reply. Expected grsapms_ghmac:')
-        b64_grsapms_ghmac = reply[1][len('grsapms_ghmac:'):]
-        try: grsapms_ghmac = b64decode(b64_grsapms_ghmac)    
-        except: raise Exception ('base64 decode error in grsapms_ghmac')       
+        grsapms_ghmac = reply[1][len('grsapms_ghmac:'):]
         rsapms2 = grsapms_ghmac[:256]
         shahmac = grsapms_ghmac[256:304]
         #generate my first half of PMS which will be returned if the check with 
@@ -528,9 +523,8 @@ def prepare_pms():
     
 #send a message and return the response received
 def send_and_recv (data):
-    if not ('success' == shared.send_msg(data,ackQueue,auditor_nick,seq_init=None)):
+    if not ('success' == shared.tlsn_send_msg(data,auditorPubKey,ackQueue,auditor_nick,seq_init=None)):
         return ('failure','')
-
     #receive a response (these are collected into the recvQueue by the receiving thread)
     for i in range(3):
         try: onemsg = recvQueue.get(block=True, timeout=5)
@@ -663,15 +657,12 @@ def new_audited_connection(uid):
     md5hmac1_for_MS = md5hmac[:24]
     md5hmac2_for_MS = md5hmac[24:48]
           
-    b64_cr_sr_hmac_n_e= b64encode(cipher_suite_first_byte+cr+sr+
-                                             md5hmac1_for_MS+modulus_len+n+e)
-    reply = send_and_recv('cr_sr_hmac_n_e:'+b64_cr_sr_hmac_n_e)    
+    cr_sr_hmac_n_e= cipher_suite_first_byte+cr+sr+ md5hmac1_for_MS+modulus_len+n+e
+    reply = send_and_recv('cr_sr_hmac_n_e:'+cr_sr_hmac_n_e)
     if reply[0] != 'success': return ('Failed to receive a reply for cr_sr_hmac_n_e:')
     if not reply[1].startswith('rsapms_hmacms_hmacek:'):
         return 'bad reply. Expected rsapms_hmacms_hmacek:'
-    b64_rsapms_hmacms_hmacek = reply[1][len('rsapms_hmacms_hmacek:'):]
-    try: rsapms_hmacms_hmacek = b64decode(b64_rsapms_hmacms_hmacek)    
-    except: return ('base64 decode error in rsapms_hmacms_hmacek')
+    rsapms_hmacms_hmacek = reply[1][len('rsapms_hmacms_hmacek:'):]
   
     RSA_PMS2 = rsapms_hmacms_hmacek[:modulus_len_int]
     RSA_PMS2_int = shared.ba2int(RSA_PMS2)
@@ -723,13 +714,10 @@ def new_audited_connection(uid):
     with open(join(nss_patch_dir, 'md5'+uid), 'rb') as f: md5_digest = f.read()
     with open(join(nss_patch_dir, 'sha'+uid), 'rb') as f: sha_digest = f.read()
     
-    b64_verify_md5sha = b64encode(md5_digest+sha_digest)
-    reply = send_and_recv('verify_md5sha:'+b64_verify_md5sha)
+    reply = send_and_recv('verify_md5sha:'+md5_digest+sha_digest)
     if reply[0] != 'success': return ('Failed to receive a reply')
     if not reply[1].startswith('verify_hmac:'): return ('bad reply. Expected verify_hmac:')
-    b64_verify_hmac = reply[1][len('verify_hmac:'):]
-    try: verify_hmac = b64decode(b64_verify_hmac)    
-    except: return ('base64 decode error')    
+    verify_hmac = reply[1][len('verify_hmac:'):]
     #calculate verify_data for Finished message
     #see RFC2246 7.4.9. Finished & 5. HMAC and the pseudorandom function
     label = 'client finished'
@@ -1038,12 +1026,12 @@ def start_recording():
 
 #respond to PING messages and put all the other messages onto the recvQueue
 def receivingThread(my_nick, auditor_nick):
-    shared.msg_receiver(my_nick,auditor_nick,ackQueue,recvQueue,shared.message_types_from_auditor)
+    shared.tlsn_msg_receiver(my_nick,auditor_nick,ackQueue,recvQueue,shared.message_types_from_auditor,myPrvKey)
                
 def start_peer_messaging():
     global my_nick
     my_nick= 'user' + ''.join(random.choice('0123456789') for x in range(10))
-    shared.start_connection(my_nick)
+    shared.tlsn_initialise_messaging(my_nick)
     #if we got here, no exceptions were thrown, which counts as success.
     return 'success'
 
@@ -1116,34 +1104,38 @@ def peer_handshake():
     #this is how the auditor knows that we are addressing him.
     modulus = shared.bigint_to_bytearray(auditorPubKey.n)[:10]
     signed_hello = rsa.sign('client_hello', myPrvKey, 'SHA-1')
-    b64_hello = b64encode(modulus+signed_hello)
-
     #format the 'reliable site' pubkey
     google_n = shared.bigint_to_bytearray(google_modulus)
     google_e = shared.bigint_to_bytearray(google_exponent)
-    b64_google_pubkey = b64encode(google_n+google_e)
 
     bIsAuditorRegistered = False
     for attempt in range(6): #try for 6*10 secs to find the auditor
         if bIsAuditorRegistered == True: break #previous iteration successfully regd the auditor
         time_attempt_began = int(time.time())
-        shared.send_raw(' :client_hello:'+b64_hello)
+        shared.tlsn_send_single_msg(' :client_hello:',modulus+signed_hello,auditorPubKey)
         time.sleep(1)
-        shared.send_raw(' :google_pubkey:'+b64_google_pubkey)
+        shared.tlsn_send_single_msg(' :google_pubkey:',google_n+google_e,auditorPubKey)
+        signed_hello_message_dict = {}
+        full_signed_hello = ''
         while not bIsAuditorRegistered:
-            if int(time.time()) - time_attempt_began > 10: break
-            x = shared.receive_single_msg('server_hello:',my_nick)
+            if int(time.time()) - time_attempt_began > 20: break
+            x = shared.tlsn_receive_single_msg('server_hello:',myPrvKey,my_nick)
             if not x: continue
-            b64_signed_hello_header,returned_auditor_nick = x
-            b64_signed_hello = b64_signed_hello_header[len('server_hello:'):]
-            signed_hello = b64decode(b64_signed_hello)
-            try:
-                rsa.verify('server_hello', signed_hello, auditorPubKey)
-                auditor_nick = returned_auditor_nick
-                bIsAuditorRegistered = True
-                print ('Auditor successfully verified')
-            except:
-                    return ('Failed to verify the auditor. Are you sure you have the correct auditor\'s pubkey?')
+            returned_msg,returned_auditor_nick = x
+            hdr, seq, signed_hello, ending = returned_msg
+            signed_hello_message_dict[seq] = signed_hello
+            if 'EOL' in ending:
+                sh_message_len = seq + 1
+                if range(sh_message_len) == signed_hello_message_dict.keys():
+                    for i in range(sh_message_len):
+                        full_signed_hello += signed_hello_message_dict[i]
+                    try:
+                        rsa.verify('server_hello', full_signed_hello, auditorPubKey)
+                        auditor_nick = returned_auditor_nick
+                        bIsAuditorRegistered = True
+                        print ('Auditor successfully verified')
+                    except: raise
+                            #return ('Failed to verify the auditor. Are you sure you have the correct auditor\'s pubkey?')
 
     if not bIsAuditorRegistered:
         print ('Failed to register auditor within 60 seconds')
@@ -1386,7 +1378,6 @@ def first_run_check():
             shutil.rmtree(join(datadir, 'tmpextract'))    
     
 if __name__ == "__main__":
-    shared.load_program_config()
     first_run_check()
     sys.path.append(join(datadir, 'python', 'rsa-3.1.4'))
     sys.path.append(join(datadir, 'python', 'pyasn1-0.1.7'))
@@ -1398,7 +1389,8 @@ if __name__ == "__main__":
     from pyasn1.type import univ
     from pyasn1.codec.der import encoder, decoder
     from slowaes import AESModeOfOperation        
-    
+    import shared
+    shared.load_program_config()
     if OS=='linux':
         if not (check_output(['which','tshark']) and check_output(['which','editcap'])):
             raise Exception("Please install tshark and editcap before running tlsnotary")

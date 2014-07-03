@@ -3,17 +3,13 @@ from ConfigParser import SafeConfigParser
 import os
 import threading
 
+#General utility objects used by both auditor and auditee.
 
 config = SafeConfigParser()
 
 config_location = os.path.join(os.path.dirname(os.path.realpath(__file__)),'tlsnotary.ini')
 
 required_options = {'IRC':['irc_server','irc_port','channel_name']}
-
-#valid types of tlsnotary message to be passed on the private message channel
-message_types_from_auditor = ('grsapms_ghmac', 'rsapms_hmacms_hmacek', 'verify_hmac:', 'response:', 'sha1hmac_for_MS')
-
-message_types_from_auditee =  ('cr_sr_hmac_n_e', 'gcr_gsr', 'verify_md5sha:', 'zipsig:', 'link:', 'commit_hash:')
 
 def load_program_config():    
     loadedFiles = config.read([config_location])

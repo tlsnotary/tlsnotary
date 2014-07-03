@@ -28,7 +28,6 @@ except: pass
 
 datadir = os.path.dirname(os.path.realpath(__file__))
 sys.path.append(os.path.dirname(datadir))
-import shared
 installdir = os.path.dirname(os.path.dirname(datadir))
 sessionsdir = os.path.join(datadir, 'sessions')
 time_str = time.strftime("%d-%b-%Y-%H-%M-%S", time.gmtime())
@@ -42,7 +41,7 @@ elif platform == 'Darwin': OS = 'macos'
 
 my_nick = ''
 auditee_nick = ''
-myPrivateKey = auditeePublicKey = None
+myPrivateKey = myPubKey = auditeePublicKey = None
 recvQueue = Queue.Queue() #all messages destined for me
 ackQueue = Queue.Queue() #auditee ACKs
 progressQueue = Queue.Queue() #messages intended to be displayed by the frontend
@@ -65,10 +64,10 @@ class StoppableThreadedHttpServer (ThreadingMixIn, BaseHTTPServer.HTTPServer):
 
 #respond to PING messages and put all the other messages onto the recvQueue
 def receivingThread():
-    shared.msg_receiver(my_nick,auditee_nick,ackQueue,recvQueue,shared.message_types_from_auditee,seq_init=None)                
+    shared.tlsn_msg_receiver(my_nick,auditee_nick,ackQueue,recvQueue,shared.message_types_from_auditee,myPrivateKey,seq_init=None)
 
 def send_message(data):
-    if ('success' == shared.send_msg(data,ackQueue,auditee_nick)):
+    if ('success' == shared.tlsn_send_msg(data,auditeePublicKey,ackQueue,auditee_nick)):
         return ('success',)
     else:
         return ('failure',)
@@ -78,10 +77,9 @@ def process_messages():
     while True:
         try: msg = recvQueue.get(block=True, timeout=1)
         except: continue
+
         if msg.startswith('gcr_gsr:'):
-            b64_gcr_gsr = msg[len('gcr_gsr:'):]
-            try: gcr_gsr = base64.b64decode(b64_gcr_gsr)
-            except: raise Exception ('base64 decode error in cr_gcr_gsr')
+            gcr_gsr = msg[len('gcr_gsr:'):]
             google_cr = gcr_gsr[:32]
             google_sr = gcr_gsr[32:64]
             #second half of pre-master secret
@@ -93,15 +91,12 @@ def process_messages():
             seed = google_cr + google_sr
             ghmac = shared.TLS10PRF(label+seed,second_half=PMS2)[1]
             #-------------------END get sha1hmac for google            
-            b64_grsapms_ghmac = base64.b64encode(grsapms+ghmac)
-            send_message('grsapms_ghmac:'+ b64_grsapms_ghmac)
+            send_message('grsapms_ghmac:'+ grsapms+ghmac)
             continue
          #---------------------------------------------------------------------#
         elif msg.startswith('cr_sr_hmac_n_e:'): 
             progressQueue.put(time.strftime('%H:%M:%S', time.localtime()) + ': Processing data from the auditee.')
-            b64_cr_sr_hmac_n_e = msg[len('cr_sr_hmac_n_e:'):]
-            try: cr_sr_hmac_n_e = base64.b64decode(b64_cr_sr_hmac_n_e)
-            except: raise Exception ('base64 decode error in cr_sr_hmac_n_e')
+            cr_sr_hmac_n_e = msg[len('cr_sr_hmac_n_e:'):]
             cipher_suite_int = int(cr_sr_hmac_n_e[:1].encode('hex'), 16)
             if cipher_suite_int == 4: cipher_suite = 'RC4MD5'
             elif cipher_suite_int == 5: cipher_suite = 'RC4SHA'
@@ -148,14 +143,11 @@ def process_messages():
             elif cipher_suite == 'RC4MD5': 
                 md5hmac_for_ek = md5hmac[:16] + bytearray(os.urandom(16)) + md5hmac[32:64]     
             rsapms_hmacms_hmacek = shared.bigint_to_bytearray(RSA_PMS2_int)+sha1hmac2_for_MS+md5hmac_for_ek
-            b64_rsapms_hmacms_hmacek = base64.b64encode(rsapms_hmacms_hmacek)
-            send_message('rsapms_hmacms_hmacek:'+ b64_rsapms_hmacms_hmacek)
+            send_message('rsapms_hmacms_hmacek:'+ rsapms_hmacms_hmacek)
             continue
         #---------------------------------------------------------------------#
         elif msg.startswith('verify_md5sha:'):
-            b64_md5sha = msg[len('verify_md5sha:') : ]
-            try: md5sha = base64.b64decode(b64_md5sha)
-            except: raise Exception ('base64 decode error in verify_md5sha')
+            md5sha = msg[len('verify_md5sha:') : ]
             md5 = md5sha[:16] #md5 hash is 16bytes
             sha = md5sha[16:]   #sha hash is 20 bytes          
             #calculate verify_data for Finished message
@@ -163,14 +155,11 @@ def process_messages():
             label = "client finished"
             seed = md5 + sha
             md5hmac1 = shared.TLS10PRF(label+seed,req_bytes=12,first_half=MS1)[0]
-            b64_verify_hmac = base64.b64encode(md5hmac1)
-            send_message('verify_hmac:'+b64_verify_hmac)
+            send_message('verify_hmac:'+md5hmac1)
             continue
         #------------------------------------------------------------------------------------------------------#    
         elif msg.startswith('commit_hash:'):
-            b64_commit_hash = msg[len('commit_hash:'):]
-            try: commit_hash = base64.b64decode(b64_commit_hash)
-            except: raise Exception ('base64 decode error in commit_hash')
+            commit_hash = msg[len('commit_hash:'):]
             trace_hash = commit_hash[:32]
             md5hmac_hash = commit_hash[32:64]
             commit_dir = os.path.join(current_sessiondir, 'commit')
@@ -196,14 +185,11 @@ def process_messages():
             with open(sha1hmac_path, 'wb') as f: f.write(sha1hmac)
             cr_path = os.path.join(commit_dir, 'cr'+str(my_seqno))
             with open(cr_path, 'wb') as f: f.write(cr)
-            b64_sha1hmac = base64.b64encode(sha1hmac) 
-            send_message('sha1hmac_for_MS:'+b64_sha1hmac)
+            send_message('sha1hmac_for_MS:'+sha1hmac)
             continue  
         #---------------------------------------------------------------------#
         elif msg.startswith('link:'):
-            b64_link = msg[len('link:'):]
-            try: link = base64.b64decode(b64_link)
-            except: raise Exception ('base64 decode error in link')
+            link = msg[len('link:'):]
             time.sleep(1) #just in case the upload server needs some time to prepare the file
             req = urllib2.Request(link)
             resp = urllib2.urlopen(req)
@@ -395,6 +381,7 @@ def import_auditee_pubkey(auditee_pubkey_b64modulus):
 def get_recent_keys():
     global myPrivateKey
     global auditeePublicKey
+    global myPubKey
     #this is the very first command that we expect in a new session.
     #If this is the very first time tlsnotary is run, there will be no saved keys
     #otherwise we load up the saved keys which the user can override with new keys if need be
@@ -406,8 +393,8 @@ def get_recent_keys():
             with open(os.path.join(current_sessiondir, 'myprivkey'), 'w') as f: f.write(my_privkey_pem)
             with open(os.path.join(current_sessiondir, 'mypubkey'), 'w') as f: f.write(my_pubkey_pem)
             myPrivateKey = rsa.PrivateKey.load_pkcs1(my_privkey_pem)
-            my_pubkey = rsa.PublicKey.load_pkcs1(my_pubkey_pem)
-            my_pubkey_export = base64.b64encode(shared.bigint_to_bytearray(my_pubkey.n))
+            myPubKey = rsa.PublicKey.load_pkcs1(my_pubkey_pem)
+            my_pubkey_export = base64.b64encode(shared.bigint_to_bytearray(myPubKey.n))
         if os.path.exists(os.path.join(datadir, 'recentkeys', 'auditeepubkey')):
             with open(os.path.join(datadir, 'recentkeys', 'auditeepubkey'), 'r') as f: auditee_pubkey_pem = f.read()
             with open(os.path.join(current_sessiondir, 'auditorpubkey'), 'w') as f: f.write(auditee_pubkey_pem)
@@ -418,10 +405,10 @@ def get_recent_keys():
       
 def new_keypair():
     global myPrivateKey
-    pubkey, privkey = rsa.newkeys(1024)
-    myPrivateKey = privkey
-    my_pubkey_pem = pubkey.save_pkcs1()
-    my_privkey_pem = privkey.save_pkcs1()
+    global myPubKey
+    myPubKey, myPrivateKey = rsa.newkeys(1024)
+    my_pubkey_pem = myPubKey.save_pkcs1()
+    my_privkey_pem = myPrivateKey.save_pkcs1()
     #------------------------------------------
     with open(os.path.join(current_sessiondir, 'myprivkey'), 'w') as f: f.write(my_privkey_pem)
     with open(os.path.join(current_sessiondir, 'mypubkey'), 'w') as f: f.write(my_pubkey_pem)
@@ -430,60 +417,78 @@ def new_keypair():
     with open(os.path.join(datadir, 'recentkeys' , 'myprivkey'), 'w') as f: f.write(my_privkey_pem)
     with open(os.path.join(datadir, 'recentkeys', 'mypubkey'), 'w') as f: f.write(my_pubkey_pem)
     my_pubkey = rsa.PublicKey.load_pkcs1(my_pubkey_pem)
-    my_pubkey_export = base64.b64encode(shared.bigint_to_bytearray(my_pubkey.n))
+    my_pubkey_export = base64.b64encode(shared.bigint_to_bytearray(myPubKey.n))
     return my_pubkey_export
 
 def registerAuditeeThread():
     global auditee_nick
     global google_modulus
     global google_exponent
-
+    global myPubKey
     with open(os.path.join(current_sessiondir, 'mypubkey'), 'r') as f: my_pubkey_pem =f.read()
-    myPublicKey = rsa.PublicKey.load_pkcs1(my_pubkey_pem)
-    myModulus = shared.bigint_to_bytearray(myPublicKey.n)[:10]
+    myPubKey = rsa.PublicKey.load_pkcs1(my_pubkey_pem)
+    myModulus = shared.bigint_to_bytearray(myPubKey.n)[:10]
     bIsAuditeeRegistered = False
-
+    hello_message_dict = {}
+    google_pubkey_message_dict = {}
+    full_hello = ''
+    full_google_pubkey   = ''
     while not (bIsAuditeeRegistered or bTerminateAllThreads):
-        msg = shared.receive_single_msg((':google_pubkey:',':client_hello:'))
-        if not msg: continue
-        if msg[0].startswith(':google_pubkey:') and auditee_nick != '': #we already got the first client_hello part
-            try:
-                b64_google_pubkey = msg[0][len(':google_pubkey:'):]
-                google_pubkey =  base64.b64decode(b64_google_pubkey)
-                google_modulus_byte = google_pubkey[:256]
-                google_exponent_byte = google_pubkey[256:]
-                google_modulus = int(google_modulus_byte.encode('hex'),16)
-                google_exponent = int(google_exponent_byte.encode('hex'),16)
-                print ('Auditee successfully verified')
-                bIsAuditeeRegistered = True
-                break
-            except:
-                print ('Error while processing google pubkey')
-                auditee_nick=''#erase the nick so that the auditee could try registering again
-                continue
-        #if we got here, it must be a client hello
-        b64_hello = msg[0][len(':client_hello:'):]
-        try:
-            hello = base64.b64decode(b64_hello)
-            modulus = hello[:10] #this is the first 10 bytes of modulus of auditor's pubkey
-            sig = hello[10:] #this is a sig for 'client_hello'. The auditor is expected to have received auditee's pubkey via other channels
-            if modulus != myModulus : continue
-            rsa.verify('client_hello', sig, auditeePublicKey)
-            #we get here if there was no exception
-            auditee_nick = msg[1]
-        except:
-            print ('Verification of a hello message failed')
-            continue
+        x = shared.tlsn_receive_single_msg((':google_pubkey:',':client_hello:'),myPrivateKey)
+        if not x: continue
+        msg_array,nick = x
+        header, seq, msg, ending = msg_array
+        if 'google_pubkey' in header and auditee_nick != '': #we already got the first client_hello part
+            google_pubkey_message_dict[seq] = msg
+            if 'EOL' in ending:
+                google_message_len = seq + 1
+                if range(google_message_len) == google_pubkey_message_dict.keys():
+                    try:
+                        for i in range(google_message_len):
+                            full_google_pubkey += google_pubkey_message_dict[i]
+                        google_modulus_byte = full_google_pubkey[:256]
+                        google_exponent_byte = full_google_pubkey[256:]
+                        google_modulus = int(google_modulus_byte.encode('hex'),16)
+                        google_exponent = int(google_exponent_byte.encode('hex'),16)
+                        print ('Auditee successfully verified')
+                        bIsAuditeeRegistered = True
+                        break
+                    except:
+                        print ('Error while processing google pubkey')
+                        auditee_nick=''#erase the nick so that the auditee could try registering again
+                        continue
+
+        #if we got here, it *should* be a client hello; if not
+        #we just move on
+        if not 'client_hello' in header: continue
+
+        hello_message_dict[seq] = msg
+        if 'EOL' in ending:
+            hello_message_len = seq +1
+            if range(hello_message_len) == hello_message_dict.keys():
+                try:
+                    for i in range(hello_message_len):
+                        full_hello += hello_message_dict[i]
+
+                    modulus = full_hello[:10] #this is the first 10 bytes of modulus of auditor's pubkey
+                    sig = str(full_hello[10:]) #this is a sig for 'client_hello'. The auditor is expected to have received auditee's pubkey via other channels
+                    if modulus != myModulus : continue
+                    rsa.verify('client_hello', sig, auditeePublicKey)
+                    #we get here if there was no exception
+                    auditee_nick = nick
+                except:
+                    print ('Verification of a hello message failed')
+                    continue
 
     if not bIsAuditeeRegistered:
         return ('failure',)
     #else send back a hello message
     signed_hello = rsa.sign('server_hello', myPrivateKey, 'SHA-1')
-    b64_signed_hello = base64.b64encode(signed_hello)
 
     #send twice because it was observed that the msg would not appear on the chan
     for x in range(2):
-        shared.send_raw(':'+auditee_nick + ' server_hello:'+b64_signed_hello)
+        shared.tlsn_send_single_msg('server_hello',signed_hello,auditeePublicKey,ctrprty_nick = auditee_nick)
+        #shared.send_raw(b64encode(shared.encrypt(':'+auditee_nick + ' server_hello:'+signed_hello,myPubKey)))
         time.sleep(2)
 
     progressQueue.put(time.strftime('%H:%M:%S', time.localtime()) + ': Auditee has been authorized. Awaiting data...')
@@ -506,8 +511,7 @@ def start_peer_messaging():
     ': Connecting to '+shared.config.get('IRC','irc_server')+' and joining #'+shared.config.get('IRC','channel_name'))
 
     my_nick= 'user' + ''.join(random.choice('0123456789') for x in range(10))
-
-    shared.start_connection(my_nick)
+    shared.tlsn_initialise_messaging(my_nick)
     #if we got here, no exceptions were thrown, which counts as success.
 
     thread = threading.Thread(target= registerAuditeeThread)
@@ -570,7 +574,6 @@ def first_run_check():
   
 
 if __name__ == "__main__": 
-    shared.load_program_config()
     first_run_check()
     #both on first and subsequent runs
     sys.path.append(os.path.join(datadir, 'python', 'rsa-3.1.4'))
@@ -579,7 +582,8 @@ if __name__ == "__main__":
     import pyasn1
     from pyasn1.type import univ
     from pyasn1.codec.der import encoder, decoder       
-
+    import shared
+    shared.load_program_config()
     thread = shared.ThreadWithRetval(target= http_server)
     thread.daemon = True
     thread.start()

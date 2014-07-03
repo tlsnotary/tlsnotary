@@ -1,6 +1,23 @@
 import math, os, binascii, hmac
 from hashlib import md5, sha1
 from tlsn_common import xor
+from base64 import b64encode,b64decode
+import rsa
+
+#encrypt and base64 encode
+def ee(msg,pubkey):
+    #print ("from msg: ",msg)
+    #print ('about to encode this message: ',str(msg))
+    return b64encode(rsa.encrypt(str(msg),pubkey))
+
+#decrypt and base64decode
+def dd(cipher,privkey):
+    msg = rsa.decrypt(b64decode(cipher),privkey)
+    #print ('decoded this message: ',str(msg))
+    return msg
+
+
+
 
 md5_hash_len = 16
 sha1_hash_len = 20
