@@ -128,3 +128,42 @@ def get_html_from_asciidump(ascii_dump):
                     return -1
                 break
         return binary_html.split('\r\n\r\n', 1)[1]
+
+def get_ciphertext_from_asciidump(ascii_dump):
+    '''Explanation
+    Relies on tshark's -x hex/ascii dump output format as of 1.10.7
+    Given tshark -x output ascii_dump, return the complete ciphertext
+    extraced from the reassembled TCP segments, with ssl record headers stripped.
+    The returned ciphertext is formatted as a list of integers, suitable for input into
+    AES decryption.
+    NB the input tshark -x dump should *not* be generated with an sslkeylogfile (I am
+    not sure that it wouldn't work, but it's not intended).
+    This ciphertext generation is intended to be carried by an auditee who does *not*
+    have access to the master secrets.
+    '''
+
+    #sanity checks
+    if not ascii_dump:
+        raise Exception("Cannot find ciphertext; tshark ascii dump appears to be empty.")
+
+    ciphertext = ''
+
+    for data_chunk in re.split('Reassembled TCP \([0-9]+ bytes\):',ascii_dump)[1:]:
+        rtcp_ciphertext = ''
+        remaining = filter(None,data_chunk.split('\n'))
+        #TODO make this easier on the eye.
+        linenums = [i for i,x in enumerate(remaining) if (not all(c in string.hexdigits for c in x[:4])) or ('0000'==x[:4] and i != 0)]
+        cipher_lines = remaining[:min(linenums)] if len(linenums) else remaining
+        for cipher_line in cipher_lines:
+            try:
+                rtcp_ciphertext += cipher_line.split('  ')[1].replace(' ','').decode('hex')
+            except:
+                print ("Failed to extract ciphertext from this line: ",cipher_line)
+                raise
+        #remove the ssl record header (170301XXXX)
+        ciphertext += rtcp_ciphertext[5:]
+    if not ciphertext:
+        raise Exception("Could not find ciphertext in hex-ascii dump")
+
+    ciphertext = map(ord,ciphertext)
+    return ciphertext

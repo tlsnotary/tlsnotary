@@ -45,8 +45,8 @@ myPrivateKey = myPubKey = auditeePublicKey = None
 recvQueue = Queue.Queue() #all messages destined for me
 ackQueue = Queue.Queue() #auditee ACKs
 progressQueue = Queue.Queue() #messages intended to be displayed by the frontend
-google_modulus = google_exponent = 0
-secretbytes_amount=8
+rsModulus = rsExponent = 0
+tlsnSession = None
 bTerminateAllThreads = False
 
 #processes each http request in a separate thread
@@ -74,87 +74,50 @@ def send_message(data):
  
 #Receive messages from auditee, perform calculations, and respond to them accordingly
 def process_messages():
+    global tlsnSession
     while True:
         try: msg = recvQueue.get(block=True, timeout=1)
         except: continue
 
         if msg.startswith('gcr_gsr:'):
             gcr_gsr = msg[len('gcr_gsr:'):]
-            google_cr = gcr_gsr[:32]
-            google_sr = gcr_gsr[32:64]
-            #second half of pre-master secret
-            PMS2 =  os.urandom(secretbytes_amount) + ('\x00' * (24-secretbytes_amount-1)) + '\x01'
-            RSA_PMS_google_int = pow( int(('\x01'+('\x00'*25)+PMS2).encode('hex'),16), google_exponent, google_modulus )
-            grsapms = shared.bigint_to_bytearray(RSA_PMS_google_int)
-            #-------------------BEGIN get sha1hmac for google
-            label = "master secret"
-            seed = google_cr + google_sr
-            ghmac = shared.TLS10PRF(label+seed,second_half=PMS2)[1]
-            #-------------------END get sha1hmac for google            
-            send_message('grsapms_ghmac:'+ grsapms+ghmac)
+            googleSession = shared.TLSNSSLClientSession('google.com')
+            googleSession.clientRandom = gcr_gsr[:32]
+            googleSession.serverRandom = gcr_gsr[32:64]
+            #pubkey required to set encrypted pms
+            googleSession.serverModulus = rsModulus
+            googleSession.serverExponent = rsExponent
+            googleSession.setAuditorSecret()
+            grsapms = shared.bigint_to_bytearray(googleSession.encSecondHalfPMS)
+            send_message('grsapms_ghmac:'+ grsapms+googleSession.pAuditor)
+            #we keep resetting so that the final, successful choice is stored
+            tlsnSession.auditorSecret = googleSession.auditorSecret
             continue
          #---------------------------------------------------------------------#
         elif msg.startswith('cr_sr_hmac_n_e:'): 
             progressQueue.put(time.strftime('%H:%M:%S', time.localtime()) + ': Processing data from the auditee.')
             cr_sr_hmac_n_e = msg[len('cr_sr_hmac_n_e:'):]
-            cipher_suite_int = int(cr_sr_hmac_n_e[:1].encode('hex'), 16)
-            if cipher_suite_int == 4: cipher_suite = 'RC4MD5'
-            elif cipher_suite_int == 5: cipher_suite = 'RC4SHA'
-            elif cipher_suite_int == 47: cipher_suite = 'AES128'
-            elif cipher_suite_int == 53: cipher_suite = 'AES256'
-            else: raise Exception ('invalid cipher sute')
-            cr = cr_sr_hmac_n_e[1:33]
-            sr = cr_sr_hmac_n_e[33:65]
+            tlsnSession.clientRandom = cr_sr_hmac_n_e[1:33]
+            tlsnSession.serverRandom = cr_sr_hmac_n_e[33:65]
+            tlsnSession.chosenCipherSuite = int(cr_sr_hmac_n_e[:1].encode('hex'),16)
             md5hmac1_for_MS=cr_sr_hmac_n_e[65:89] #half of MS's 48 bytes
-            n_len = cr_sr_hmac_n_e[89:91]
-            n_len_int = int(n_len.encode('hex'),16)
+            n_len_int = int(cr_sr_hmac_n_e[89:91].encode('hex'),16)
             n = cr_sr_hmac_n_e[91:91+n_len_int]
             e = cr_sr_hmac_n_e[91+n_len_int:91+n_len_int+3]
-            n_int = int(n.encode('hex'),16)
-            e_int = int(e.encode('hex'),16)                        
-            #RSA encryption without padding: ciphertext = plaintext^e mod n
-            RSA_PMS2_int = pow( int(('\x01'+('\x00'*25)+PMS2).encode('hex'),16), e_int, n_int )
-            #get my sha1hmac to xor with auditee's md5hmac and get MS first half
-            label = "master secret"
-            seed = cr + sr        
-            sha1hmac = shared.TLS10PRF(label+seed,second_half=PMS2)[1]
-            sha1hmac1_for_MS = sha1hmac[:24]
-            sha1hmac2_for_MS = sha1hmac[24:48]
-            MS1 = shared.xor(md5hmac1_for_MS, sha1hmac1_for_MS)
-            #master secret key expansion
-            #see RFC2246 6.3. Key calculation & 5. HMAC and the pseudorandom function
-            #The amount of key material for each ciphersuite:
-            #AES256-CBC-SHA: mac key 20*2, encryption key 32*2, IV 16*2 == 136bytes
-            #AES128-CBC-SHA: mac key 20*2, encryption key 16*2, IV 16*2 == 104bytes
-            #RC4128_MD5: mac key 16*2, encryption key 16*2 == 64 bytes
-            #RC4128_SHA: mac key 20*2, encryption key 16*2 == 72bytes
-            #Regardless of theciphersuite, we generate the max key material we'd ever need which is 136 bytes
-            label = "key expansion"
-            seed = sr + cr
-            md5hmac = shared.TLS10PRF(label+seed,req_bytes=140,first_half=MS1)[0]
-
-            #fill the place of server MAC with zeroes
-            if cipher_suite == 'AES256': 
-                md5hmac_for_ek = md5hmac[:20] + bytearray(os.urandom(20)) + md5hmac[40:136]
-            elif cipher_suite == 'AES128':
-                md5hmac_for_ek = md5hmac[:20] + bytearray(os.urandom(20)) + md5hmac[40:104]
-            elif cipher_suite == 'RC4SHA':
-                md5hmac_for_ek = md5hmac[:20] + bytearray(os.urandom(20)) + md5hmac[40:72]
-            elif cipher_suite == 'RC4MD5': 
-                md5hmac_for_ek = md5hmac[:16] + bytearray(os.urandom(16)) + md5hmac[32:64]     
-            rsapms_hmacms_hmacek = shared.bigint_to_bytearray(RSA_PMS2_int)+sha1hmac2_for_MS+md5hmac_for_ek
+            tlsnSession.serverModulus = int(n.encode('hex'),16)
+            tlsnSession.serverExponent = int(e.encode('hex'),16)
+            if not tlsnSession.auditorSecret: raise Exception("Auditor PMS secret data should have already been set.")
+            tlsnSession.setAuditorSecret() #will set the enc PMS second half
+            tlsnSession.setMasterSecretHalf(half=1,providedPValue=md5hmac1_for_MS)
+            garbageizedHMAC = tlsnSession.getPValueMS('auditor',[1]) #withhold the server mac
+            rsapms_hmacms_hmacek = shared.bigint_to_bytearray(tlsnSession.encSecondHalfPMS)+tlsnSession.pAuditor[24:]+garbageizedHMAC
             send_message('rsapms_hmacms_hmacek:'+ rsapms_hmacms_hmacek)
             continue
         #---------------------------------------------------------------------#
         elif msg.startswith('verify_md5sha:'):
-            md5sha = msg[len('verify_md5sha:') : ]
-            md5 = md5sha[:16] #md5 hash is 16bytes
-            sha = md5sha[16:]   #sha hash is 20 bytes          
-            #calculate verify_data for Finished message
-            #see RFC2246 7.4.9. Finished & 5. HMAC and the pseudorandom function
-            label = "client finished"
-            seed = md5 + sha
-            md5hmac1 = shared.TLS10PRF(label+seed,req_bytes=12,first_half=MS1)[0]
+            md5sha = msg[len('verify_md5sha:'):]
+            md5hmac1 = tlsnSession.getVerifyHMAC(md5sha[16:],md5sha[:16],half=1)
+            with open('auditordata.txt','wb') as f: f.write(tlsnSession.dump())
             send_message('verify_hmac:'+md5hmac1)
             continue
         #------------------------------------------------------------------------------------------------------#    
@@ -182,10 +145,10 @@ def process_messages():
             with open(trace_hash_path, 'wb') as f: f.write(trace_hash)
             with open(md5hmac_hash_path, 'wb') as f: f.write(md5hmac_hash)
             sha1hmac_path = os.path.join(commit_dir, 'sha1hmac'+str(my_seqno))
-            with open(sha1hmac_path, 'wb') as f: f.write(sha1hmac)
+            with open(sha1hmac_path, 'wb') as f: f.write(tlsnSession.pAuditor)
             cr_path = os.path.join(commit_dir, 'cr'+str(my_seqno))
-            with open(cr_path, 'wb') as f: f.write(cr)
-            send_message('sha1hmac_for_MS:'+sha1hmac)
+            with open(cr_path, 'wb') as f: f.write(tlsnSession.clientRandom)
+            send_message('sha1hmac_for_MS:'+tlsnSession.pAuditor)
             continue  
         #---------------------------------------------------------------------#
         elif msg.startswith('link:'):
@@ -422,8 +385,8 @@ def new_keypair():
 
 def registerAuditeeThread():
     global auditee_nick
-    global google_modulus
-    global google_exponent
+    global rsModulus
+    global rsExponent
     global myPubKey
     with open(os.path.join(current_sessiondir, 'mypubkey'), 'r') as f: my_pubkey_pem =f.read()
     myPubKey = rsa.PublicKey.load_pkcs1(my_pubkey_pem)
@@ -448,8 +411,8 @@ def registerAuditeeThread():
                             full_google_pubkey += google_pubkey_message_dict[i]
                         google_modulus_byte = full_google_pubkey[:256]
                         google_exponent_byte = full_google_pubkey[256:]
-                        google_modulus = int(google_modulus_byte.encode('hex'),16)
-                        google_exponent = int(google_exponent_byte.encode('hex'),16)
+                        rsModulus = int(google_modulus_byte.encode('hex'),16)
+                        rsExponent = int(google_exponent_byte.encode('hex'),16)
                         print ('Auditee successfully verified')
                         bIsAuditeeRegistered = True
                         break
@@ -577,13 +540,17 @@ if __name__ == "__main__":
     first_run_check()
     #both on first and subsequent runs
     sys.path.append(os.path.join(datadir, 'python', 'rsa-3.1.4'))
-    sys.path.append(os.path.join(datadir, 'python', 'pyasn1-0.1.7'))    
+    sys.path.append(os.path.join(datadir, 'python', 'pyasn1-0.1.7'))
+    sys.path.append(os.path.join(datadir, 'python', 'slowaes'))
     import rsa
     import pyasn1
     from pyasn1.type import univ
-    from pyasn1.codec.der import encoder, decoder       
+    from pyasn1.codec.der import encoder, decoder
+    from slowaes import AESModeOfOperation
     import shared
     shared.load_program_config()
+    global tlsnSession
+    tlsnSession = shared.TLSNSSLClientSession('dummy.com')
     thread = shared.ThreadWithRetval(target= http_server)
     thread.daemon = True
     thread.start()

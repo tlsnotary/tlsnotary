@@ -46,16 +46,13 @@ ackQueue = Queue.Queue() #ack numbers are placed here
 auditor_nick = '' #we learn auditor's nick as soon as we get a hello_server signed by the auditor
 my_nick = '' #our nick is randomly generated on connection
 myPrvKey = myPubKey = auditorPubKey = None
-google_modulus = 0
-google_exponent = 0
-
+rsModulus = None
+rsExponent = None
+tlsnSession = None
 stcppipe_proc = None
 tshark_exepath = editcap_exepath= ''
-secretbytes_amount=13
 firefox_pid = stcppipe_pid = selftest_pid = 0
 
-PMS1 = '' #first half of pre-master secret. global because of google check
-md5hmac = '' #used in get_html_paths to construct the full MS after committing to a hash
 cr_list = [] #a list of all client_randoms for recorded pages used by tshark to search for html only in audited tracefiles.
 auditee_mac_check = False #tmp var
 get_html_paths_retval = None #tmp  var
@@ -77,7 +74,6 @@ def import_auditor_pubkey(auditor_pubkey_b64modulus):
         print (e)
         return ('failure')
 
-
 def newkeys():
     global myPrvKey,myPubKey
     #Usually the auditee would reuse a keypair from the previous session
@@ -94,7 +90,6 @@ def newkeys():
     with open(join(datadir, 'recentkeys', 'mypubkey'), 'wb') as f: f.write(my_pem_pubkey)
     pubkey_export = b64encode(shared.bigint_to_bytearray(myPubKey.n))
     return pubkey_export
-
 
 #Receive HTTP HEAD requests from FF addon
 class HandlerClass(SimpleHTTPServer.SimpleHTTPRequestHandler):
@@ -184,9 +179,6 @@ class HandlerClass(SimpleHTTPServer.SimpleHTTPRequestHandler):
         #----------------------------------------------------------------------#
         if self.path.startswith('/prepare_pms'):
             rv = prepare_pms()
-            if rv[0] == 'success':
-                global PMS1
-                PMS1 = rv[1]
             self.respond({'response':'prepare_pms', 'status':rv[0]})
             return             
         #----------------------------------------------------------------------#
@@ -270,16 +262,6 @@ class HandlerClass(SimpleHTTPServer.SimpleHTTPRequestHandler):
             self.respond({'response':'unknown command'})
             return
 
-#given a client random (or any bin data) and a directory
-#return the name of any file that contains that data
-def find_trace_file_for_cr(crx,dirx):
-    tracelog_files = os.listdir(dirx)
-    for one_trace in tracelog_files:
-        with open(join(tracelog_dir, one_trace), 'rb') as f: data=f.read()
-        if data.count(cr) == 1: return one_trace
-    raise Exception ('Client random not found in trace files')
-
-
 def get_html_paths():
     #there may be an edge case when the request fails to trigger the nss patch
     #FIXME: find a more elegant way to handle such a scenario
@@ -308,7 +290,7 @@ def get_html_paths():
     if not os.path.exists(commit_dir): os.makedirs(commit_dir)
     tracecopy_path = join(commit_dir, 'trace'+ str(len(cr_list)) )
     md5hmac_path = join(commit_dir, 'md5hmac'+ str(len(cr_list)) )
-    with open(md5hmac_path, 'wb') as f: f.write(md5hmac)
+    with open(md5hmac_path, 'wb') as f: f.write(tlsnSession.pAuditee)
     #copy the tracefile to a new location, b/c stcppipe may still be appending it
     shutil.copyfile(join(tracelog_dir, one_trace), tracecopy_path)
     #Remove the data from the auditee to the auditor (except handshake) from the copied
@@ -342,7 +324,7 @@ def get_html_paths():
     #send the hash of tracefile and md5hmac
     with open(tracecopy_path, 'rb') as f: data=f.read()
     commit_hash = sha256(data).digest()
-    md5hmac_hash = sha256(md5hmac).digest()  
+    md5hmac_hash = sha256(tlsnSession.pAuditee).digest()
     reply = send_and_recv('commit_hash:'+commit_hash+md5hmac_hash)
     if reply[0] != 'success': raise Exception ('Failed to receive a reply')
     if not reply[1].startswith('sha1hmac_for_MS:'):
@@ -350,7 +332,7 @@ def get_html_paths():
     sha1hmac_for_MS = reply[1][len('sha1hmac_for_MS:'):]
 
     #construct MS
-    ms = shared.xor(md5hmac, sha1hmac_for_MS)[:48]
+    ms = shared.xor(tlsnSession.pAuditee, sha1hmac_for_MS)[:48]
     sslkeylog = join(commit_dir, 'sslkeylog' + str(len(cr_list)))
     ssldebuglog = join(commit_dir, 'ssldebuglog' + str(len(cr_list)))    
     cr_hexl = binascii.hexlify(cr)
@@ -390,11 +372,7 @@ def get_html_paths():
         html_paths += path + '&'
     global get_html_paths_retval
     get_html_paths_retval = ('success',html_paths)
-    return get_html_paths_retval
-    
-    
-
-    
+    return get_html_paths_retval 
 
 def send_link(filelink):
     reply = send_and_recv('link:'+filelink)
@@ -403,120 +381,55 @@ def send_link(filelink):
     response = reply[1][len('response:'):]
     return response
 
-
 #Because there is a 1 in 6 chance that the encrypted PMS will contain zero bytes in its
 #padding, we first try the encrypted PMS with google.com and see if it gets rejected.
 #return my first half of PMS which will be used in the actual audited connection to the server
 def prepare_pms():    
     for i in range(5): #try 5 times until google check succeeds
         #first 4 bytes of client random are unix time
-        cr_time = shared.bigint_to_bytearray(int(time.time()))
-        cr = cr_time + os.urandom(28)
-        client_hello = '\x16\x03\x01\x00\x2d\x01\x00\x00\x29\x03\x01' + cr + '\x00\x00\x02\x00\x35\x01\x00'
+        googleSession = shared.TLSNSSLClientSession('google.com')
+        if not googleSession: raise Exception("Client hello construction failed in prepare_pms")
         tlssock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         tlssock.settimeout(10)
-        tlssock.connect(('google.com', 443))
-        tlssock.send(client_hello)
+        tlssock.connect((googleSession.serverName, googleSession.sslPort))
+        tlssock.send(googleSession.handshakeMessages[0])
         #we must get 3 concatenated tls handshake messages in response:
         #sh --> server_hello, cert --> certificate, shd --> server_hello_done
         time.sleep(1)
         sh_cert_shd = tlssock.recv(8192*2)  #google sends a ridiculously long cert chain of 10KB+
-        #server hello always starts with 16 03 01 * * 02
-        #certificate always starts with 16 03 01 * * 0b
-        shd = '\x16\x03\x01\x00\x04\x0e\x00\x00\x00'
-        sh_magic = re.compile(b'\x16\x03\x01..\x02')
-        if not re.match(sh_magic, sh_cert_shd): raise Exception ('Invalid server hello')
-        if not sh_cert_shd.endswith(shd): raise Exception ('invalid server hello done')
-        #find the beginning of certificate message
-        cert_magic = re.compile(b'\x16\x03\x01..\x0b')
-        cert_match = re.search(cert_magic, sh_cert_shd)
-        if not cert_match: raise Exception ('Invalid certificate message')
-        cert_start_position = cert_match.start()
-        sh = sh_cert_shd[:cert_start_position]
-        cert = sh_cert_shd[cert_start_position : -len(shd)]
-        #extract google_server_random from server_hello
-        sr = sh[11:43]
+        if not googleSession.processServerHello(sh_cert_shd):
+            raise Exception("Failure in processing of server Hello from " + googleSession.serverName)
         #give auditor cr&sr and get an encrypted second half of PMS,
         #and shahmac that needs to be xored with my md5hmac to get MS
-        reply = send_and_recv('gcr_gsr:'+cr+sr)
+        reply = send_and_recv('gcr_gsr:'+googleSession.clientRandom+googleSession.serverRandom)
         if reply[0] != 'success': raise Exception ('Failed to receive a reply for gcr_gsr:')
         if not reply[1].startswith('grsapms_ghmac:'):
             raise Exception ('bad reply. Expected grsapms_ghmac:')
         grsapms_ghmac = reply[1][len('grsapms_ghmac:'):]
         rsapms2 = grsapms_ghmac[:256]
         shahmac = grsapms_ghmac[256:304]
-        #generate my first half of PMS which will be returned if the check with 
-        #google.com is successful
-        pms1 = '\x03\x01'+os.urandom(secretbytes_amount) + ('\x00' * (24-2-secretbytes_amount))
-        #derive MS
-        label = 'master secret'
-        seed = cr + sr
-
-        md5hmac = shared.TLS10PRF(label+seed,first_half=pms1)[0]
-
-        ms = shared.xor(md5hmac, shahmac)[:48]
-        #derive expanded keys for AES256
-        #this is not optimized in a loop on purpose. I want people to see exactly what is going on        
-        ms_first_half = ms[:24]
-        ms_second_half = ms[24:]
-        label = 'key expansion'
-        seed = sr + cr
-
-        gexpanded_keys = shared.TLS10PRF(label+seed,req_bytes=120,full_secret = ms)[2]
-
-        client_mac_key = gexpanded_keys[:20]
-        client_encryption_key = gexpanded_keys[40:72]
-        client_iv = gexpanded_keys[104:120]
-        #RSA-encrypt my half of PMS with google's pubkey
-        RSA_PMS1_int = pow( shared.ba2int('\x02'+('\x01'*156)+'\x00'+pms1+('\x00'*24)) + 1, google_exponent, google_modulus)
-        RSA_PMS2_int = shared.ba2int(rsapms2)
-        enc_pms_int = (RSA_PMS1_int*RSA_PMS2_int) % google_modulus 
-        encpms = shared.bigint_to_bytearray(enc_pms_int)
-        #calculate verify_data for Finished message
-        #see RFC2246 7.4.9. Finished & 5. HMAC and the pseudorandom function
-        client_key_exchange = '\x16\x03\x01\x01\x06\x10\x00\x01\x02\x01\00' + encpms        
-        handshake_messages = client_hello[5:]+sh[5:]+cert[5:]+shd[5:]+client_key_exchange[5:]
-        sha_verify = sha1(handshake_messages).digest()
-        md5_verify = md5(handshake_messages).digest()
-        label = 'client finished'
-        seed = md5_verify + sha_verify
-        ms_first_half = ms[:24]
-        ms_second_half = ms[24:]
-        verify_data = shared.TLS10PRF(label+seed,req_bytes=12,full_secret=ms)[2]
-        '''
-        md5A1 = hmac.new(ms_first_half, label+seed, md5).digest()
-        md5hmac1 = hmac.new(ms_first_half, md5A1 + label + seed, md5).digest()        
-        sha1A1 = hmac.new(ms_second_half, label+seed, sha1).digest()
-        sha1hmac1 = hmac.new(ms_second_half, sha1A1 + label + seed, sha1).digest()
-        verify_data = shared.xor(md5hmac1, sha1hmac1)[:12]
-        '''
-        #HMAC and AES-encrypt the verify_data      
-        hmac_for_verify_data = hmac.new(client_mac_key, '\x00\x00\x00\x00\x00\x00\x00\x00' + '\x16' + '\x03\x01' + '\x00\x10' + '\x14\x00\x00\x0c' + verify_data, sha1).digest()
-        moo = AESModeOfOperation()
-        cleartext = '\x14\x00\x00\x0c' + verify_data + hmac_for_verify_data     
-        cleartext_list = shared.bigint_to_list(shared.ba2int(cleartext))
-        client_encryption_key_list =  shared.bigint_to_list(shared.ba2int(client_encryption_key))
-        client_iv_list =  shared.bigint_to_list(shared.ba2int(client_iv))
-        padded_cleartext = cleartext + ('\x0b' * 12) #this is TLS CBC padding, NOT PKCS7
-        try:
-            mode, orig_len, encrypted_verify_data_and_hmac_for_verify_data = moo.encrypt( str(padded_cleartext), moo.modeOfOperation['CBC'], client_encryption_key_list, moo.aes.keySize['SIZE_256'], client_iv_list)
-        except Exception, e: # TODO find out why I once got TypeError: 'NoneType' object is not iterable.  It helps to catch an exception here
-            print ('Caught exception while doing slowaes encrypt: ', e)
-            tlssock.close()
-            continue
-        #send and expect change cipher spec from google.com as a sign of success
-        change_cipher_spec = '\x14\x03\01\x00\x01\x01'
-        finished = '\x16\x03\x01\x00\x30' + bytearray(encrypted_verify_data_and_hmac_for_verify_data)       
-        tlssock.send(client_key_exchange+change_cipher_spec+finished)
+        googleSession.pAuditor = shahmac
+        googleSession.extractCertificate()
+        googleSession.extractModAndExp()
+        googleSession.setAuditeeSecret()
+        googleSession.setMasterSecretHalf() #default values means full MS created
+        googleSession.doKeyExpansion()
+        googleSession.encSecondHalfPMS = shared.ba2int(rsapms2)
+        googleSession.setEncryptedPMS()
+        data = googleSession.getCKECCSF()
+        tlssock.send(data)
         time.sleep(1)
         response = tlssock.recv(8192)
-        if not response.count(change_cipher_spec):
+        tlssock.close()
+        if not response.count(googleSession.handshakeMessages[5]):
             #the response did not contain ccs == error alert received
-            tlssock.close()
+            print ("Response was: ")
+            print (binascii.hexlify(response))
             continue
         #else ccs was in the response
-        tlssock.close()
-        return ('success', pms1) #successfull pms check        
+        global tlsnSession
+        tlsnSession.auditeeSecret = googleSession.auditeeSecret
+        return ('success',None) #successfull pms check
     #no dice after 5 tries
     raise Exception ('Could not prepare PMS with google after 5 tries')
 
@@ -582,7 +495,6 @@ def pipebytes_getlink(mfile):
                           '&touch=yes&r='+('%.16f' % random.uniform(0,1)), timeout=5)
     return ('http://host03.pipebytes.com/get.py?key='+key)
 
-
 def stop_recording():
     os.kill(stcppipe_proc.pid, signal.SIGTERM)
     #trace* files in committed dir is what auditor needs
@@ -600,110 +512,50 @@ def stop_recording():
         try: link = pipebytes_getlink(join(tracedir, 'mytrace.zip'))
         except: return 'failure'
     return send_link(link)
-    
-
-    
+       
 #The NSS patch has created a new file in the nss_patch_dir
 def new_audited_connection(uid): 
-    global md5hmac
-    
     with  open(join(nss_patch_dir, 'der'+uid), 'rb') as fd: der = fd.read()
     #TODO: find out why on windows \r\n newline makes its way into der encoding
     if OS=='mswin': der = der.replace('\r\n', '\n')
-    with  open(join(nss_patch_dir, 'cr'+uid), 'rb') as fd: cr = fd.read()
-    with open(join(nss_patch_dir, 'sr'+uid), 'rb') as fd: sr = fd.read()
+    with  open(join(nss_patch_dir, 'cr'+uid), 'rb') as fd: tlsnSession.clientRandom = fd.read()
+    with open(join(nss_patch_dir, 'sr'+uid), 'rb') as fd: tlsnSession.serverRandom = fd.read()
+
+    #get the cipher suite
     with open(join(nss_patch_dir, 'cipher_suite'+uid), 'rb') as fd: cs = fd.read()
     #cipher suite 2 bytes long in network byte order, we need only the first byte
     cipher_suite_first_byte = cs[:1]
-    cipher_suite_int = shared.ba2int(cipher_suite_first_byte)
-    if cipher_suite_int == 4: cipher_suite = 'RC4MD5'
-    elif cipher_suite_int == 5: cipher_suite = 'RC4SHA'
-    elif cipher_suite_int == 47: cipher_suite = 'AES128'
-    elif cipher_suite_int == 53: cipher_suite = 'AES256'
-    else: raise Exception ('invalid cipher sute')
-    cr_list.append(cr)   
-    #extract n and e from the pubkey
-    try:       
-        rv  = decoder.decode(der, asn1Spec=univ.Sequence())
-        bitstring = rv[0].getComponentByPosition(1)
-        #bitstring is a list of ints, like [01110001010101000...]
-        #convert it into into a string   '01110001010101000...'
-        stringOfBits = ''
-        for bit in bitstring:
-            bit_as_str = str(bit)
-            stringOfBits += bit_as_str    
-        #treat every 8 chars as an int and pack the ints into a bytearray
-        ba = bytearray()
-        for i in range(0, len(stringOfBits)/8):
-            onebyte = stringOfBits[i*8 : (i+1)*8]
-            oneint = int(onebyte, base=2)
-            ba.append(oneint)  
-        #decoding the nested sequence
-        rv  = decoder.decode(str(ba), asn1Spec=univ.Sequence())
-        exponent = rv[0].getComponentByPosition(1)
-        modulus = rv[0].getComponentByPosition(0)
-        modulus_int = int(modulus)
-        exponent_int = int(exponent)
-        n = shared.bigint_to_bytearray(modulus_int)
-        e = shared.bigint_to_bytearray(exponent_int)
-    except: return 'Error decoding der pubkey'
-    modulus_len_int = len(n)       
-    modulus_len = shared.bigint_to_bytearray(modulus_len_int)
-    if len(modulus_len) == 1: modulus_len.insert(0,0)  #zero-pad to 2 bytes    
-    #get my md5hmac half which auditor uses to get his half of MS
-    label = 'master secret'
-    seed = cr + sr
-    md5hmac = shared.TLS10PRF(label+seed,first_half=PMS1)[0]
-    md5hmac1_for_MS = md5hmac[:24]
-    md5hmac2_for_MS = md5hmac[24:48]
-          
-    cr_sr_hmac_n_e= cipher_suite_first_byte+cr+sr+ md5hmac1_for_MS+modulus_len+n+e
+    tlsnSession.chosenCipherSuite =  shared.ba2int(cipher_suite_first_byte)
+
+    cr_list.append(tlsnSession.clientRandom)
+
+    tlsnSession.extractModAndExp(der)
+    if not tlsnSession.auditeeSecret: raise Exception("Cannot start the audited TLS session without the auditeeSecret already set.")
+    tlsnSession.setAuditeeSecret() #will set the enc pms first half
+    md5hmac_1_for_MS = tlsnSession.pAuditee[:24]
+    cr_sr_hmac_n_e= cipher_suite_first_byte+tlsnSession.clientRandom+tlsnSession.serverRandom+ \
+                md5hmac_1_for_MS+tlsnSession.serverModLength+\
+                shared.bigint_to_bytearray(tlsnSession.serverModulus)+\
+                shared.bigint_to_bytearray(tlsnSession.serverExponent)
     reply = send_and_recv('cr_sr_hmac_n_e:'+cr_sr_hmac_n_e)
     if reply[0] != 'success': return ('Failed to receive a reply for cr_sr_hmac_n_e:')
     if not reply[1].startswith('rsapms_hmacms_hmacek:'):
         return 'bad reply. Expected rsapms_hmacms_hmacek:'
     rsapms_hmacms_hmacek = reply[1][len('rsapms_hmacms_hmacek:'):]
-  
-    RSA_PMS2 = rsapms_hmacms_hmacek[:modulus_len_int]
-    RSA_PMS2_int = shared.ba2int(RSA_PMS2)
-    shahmac2_for_MS = rsapms_hmacms_hmacek[modulus_len_int:modulus_len_int+24]
-    if cipher_suite == 'AES256': 
-        md5hmac_for_ek = rsapms_hmacms_hmacek[modulus_len_int+24:modulus_len_int+24+136]
-    elif cipher_suite == 'AES128': 
-        md5hmac_for_ek = rsapms_hmacms_hmacek[modulus_len_int+24:modulus_len_int+24+104]
-    elif cipher_suite == 'RC4SHA': 
-        md5hmac_for_ek = rsapms_hmacms_hmacek[modulus_len_int+24:modulus_len_int+24+72]
-    elif cipher_suite == 'RC4MD5': 
-        md5hmac_for_ek = rsapms_hmacms_hmacek[modulus_len_int+24:modulus_len_int+24+64]       
-    #RSA encryption without padding: ciphertext = plaintext^e mod n
-    RSA_PMS1_int = pow(shared.ba2int(('\x02'+('\x01'*(modulus_len_int - 100))+'\x00'+
-                                PMS1+('\x00'*24))) + 1, exponent_int, modulus_int)
-    enc_pms_int = (RSA_PMS2_int*RSA_PMS1_int) % modulus_int 
-    enc_pms = shared.bigint_to_bytearray(enc_pms_int)
+    ml = shared.ba2int(tlsnSession.serverModLength)
+    RSA_PMS2 = rsapms_hmacms_hmacek[:ml]
+    tlsnSession.encSecondHalfPMS = shared.ba2int(RSA_PMS2)
+    enc_pms = shared.bigint_to_bytearray(tlsnSession.setEncryptedPMS())
     with open(join(nss_patch_dir, 'encpms'+uid), 'wb') as f: f.write(enc_pms)
-    with open(join(nss_patch_dir, 'encpms'+uid+'ready' ), 'wb') as f: f.close()   
-    #master secret key expansion
-    MS2 = shared.xor(md5hmac2_for_MS, shahmac2_for_MS)
-    #see RFC2246 6.3. Key calculation & 5. HMAC and the pseudorandom function
-    #The amount of key material for each ciphersuite:
-    #AES256-CBC-SHA: mac key 20*2, encryption key 32*2, IV 16*2 == 136bytes
-    #AES128-CBC-SHA: mac key 20*2, encryption key 16*2, IV 16*2 == 104bytes
-    #RC4128_SHA: mac key 20*2, encryption key 16*2 == 72bytes
-    #RC4128_MD5: mac key 16*2, encryption key 16*2 == 64 bytes
-    #Regardless of theciphersuite, we generate the max key material we'd ever need which is 136 bytes
-    label = 'key expansion'
-    seed = sr + cr
-    sha1hmac140bytes = shared.TLS10PRF(label+seed,req_bytes=140,second_half=MS2)[1]
+    with open(join(nss_patch_dir, 'encpms'+uid+'ready' ), 'wb') as f: f.close()
 
-    #this if/else is purely for expliciteness, we could simply xor the 140bytes with however long the md5hmac is
-    if cipher_suite == 'AES256': sha1hmac_for_ek = sha1hmac140bytes[:136]
-    elif cipher_suite == 'AES128': sha1hmac_for_ek = sha1hmac140bytes[:104]
-    elif cipher_suite == 'RC4SHA': sha1hmac_for_ek = sha1hmac140bytes[:72]
-    elif cipher_suite == 'RC4MD5': sha1hmac_for_ek = sha1hmac140bytes[:64]     
-    expanded_keys =  shared.xor(sha1hmac_for_ek, md5hmac_for_ek)
-    #server mac key == expanded_keys[20:40]( or [16:32] for RC4MD5) contains random garbage from auditor
+    tlsnSession.setMasterSecretHalf(half=2,providedPValue = rsapms_hmacms_hmacek[ml:ml+24])
+    tlsnSession.pMasterSecretAuditor = rsapms_hmacms_hmacek[ml+24:ml+24+tlsnSession.cipherSuites[tlsnSession.chosenCipherSuite][-1]]
+    expanded_keys = tlsnSession.doKeyExpansion()
+
     with open(join(nss_patch_dir, 'expanded_keys'+uid), 'wb') as f: f.write(expanded_keys)
     with open(join(nss_patch_dir, 'expanded_keys'+uid+'ready'), 'wb') as f: f.close()     
+
     #wait for nss patch to create md5 and then sha files
     while True:
         if not os.path.isfile(join(nss_patch_dir, 'sha'+uid)):
@@ -711,6 +563,7 @@ def new_audited_connection(uid):
         else:
             time.sleep(0.1)
             break  
+
     with open(join(nss_patch_dir, 'md5'+uid), 'rb') as f: md5_digest = f.read()
     with open(join(nss_patch_dir, 'sha'+uid), 'rb') as f: sha_digest = f.read()
     
@@ -718,14 +571,12 @@ def new_audited_connection(uid):
     if reply[0] != 'success': return ('Failed to receive a reply')
     if not reply[1].startswith('verify_hmac:'): return ('bad reply. Expected verify_hmac:')
     verify_hmac = reply[1][len('verify_hmac:'):]
-    #calculate verify_data for Finished message
-    #see RFC2246 7.4.9. Finished & 5. HMAC and the pseudorandom function
-    label = 'client finished'
-    seed = md5_digest + sha_digest
-    sha1hmac1 = shared.TLS10PRF(label+seed,req_bytes=12,second_half=MS2)[1]
-    verify_data = shared.xor(verify_hmac, sha1hmac1)[:12]
+    verify_data = tlsnSession.getVerifyDataForFinished(sha_verify=sha_digest,md5_verify=md5_digest,\
+                                                                half=2,providedPValue=verify_hmac)
+
     with open(join(nss_patch_dir, 'verify_data'+uid), 'wb') as f: f.write(bytearray(verify_data))
     with open(join(nss_patch_dir, 'verify_data'+uid+'ready'), 'wb') as f: f.close()
+    with open('auditeedata.txt','wb') as f: f.write(tlsnSession.dump())
     return 'success'
     
    
@@ -929,9 +780,7 @@ def tcpproxy_thread(parenthread, FF_proxy_port, stcppipe_in_port):
     thread = threading.Thread(target= tcpproxy_new_connection_thread, args=(new_socket, socket_stcppipe))
     thread.daemon = True
     thread.start()   
-   
-   
-            
+              
 def httpsproxy_thread(parenthread, port):
     socket_proxy = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     try: socket_proxy.bind(('localhost', port))
@@ -947,7 +796,6 @@ def httpsproxy_thread(parenthread, port):
     thread.daemon = True
     thread.start()
         
-
 def start_recording():
     global stcppipe_proc
     global stcppipe_pid
@@ -1023,7 +871,6 @@ def start_recording():
     
     return ('success', FF_proxy_port)
 
-
 #respond to PING messages and put all the other messages onto the recvQueue
 def receivingThread(my_nick, auditor_nick):
     shared.tlsn_msg_receiver(my_nick,auditor_nick,ackQueue,recvQueue,shared.message_types_from_auditor,myPrvKey)
@@ -1036,63 +883,25 @@ def start_peer_messaging():
     return 'success'
 
 def get_reliable_site_certificate():
+    global rsModulus
+    global rsExponent
+
     #TODO this is currently only valid for google.com
     #Intention is to make it more flexible and robust.
-    global google_modulus
-    global google_exponent
+    rsSession = shared.TLSNSSLClientSession('google.com',443)
+
     tlssock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     tlssock.settimeout(10)
-    tlssock.connect(('google.com', 443))
-    cr_time = shared.bigint_to_bytearray(int(time.time()))
-    cr_google = cr_time + os.urandom(28)
-    client_hello = '\x16\x03\x01\x00\x2d\x01\x00\x00\x29\x03\x01' + cr_google + '\x00\x00\x02\x00\x35\x01\x00'
-    tlssock.send(client_hello)
+    tlssock.connect((rsSession.serverName, rsSession.sslPort))
+    tlssock.send(rsSession.handshakeMessages[0])
     time.sleep(1)
-    serverhello_certificate_serverhellodone = tlssock.recv(8192*2)    #google sends a ridiculously long cert chain of 10KB+
-    #server hello starts with 16 03 01 * * 02
-    #certificate starts with 16 03 01 * * 0b
-    serverhellodone = '\x16\x03\x01\x00\x04\x0e\x00\x00\x00'
+    sh_cert_shd = tlssock.recv(8192*2)    #google sends a ridiculously long cert chain of 10KB+
 
-    if not re.match(re.compile(b'\x16\x03\x01..\x02'), serverhello_certificate_serverhellodone):
-        print ('Invalid server hello from google')
-        return 'failure'
-    if not serverhello_certificate_serverhellodone.endswith(serverhellodone):
-        print ('invalid server hello done from google')
-        return 'failure'
-    #find the beginning of certificate message
-    cert_match = re.search(re.compile(b'\x16\x03\x01..\x0b'), serverhello_certificate_serverhellodone)
-    if not cert_match:
-        print ('Invalid certificate message from google')
-        return 'failure'
-    cert_start_position = cert_match.start()
-    certificate = serverhello_certificate_serverhellodone[cert_start_position : -len(serverhellodone)]
-    #extract modulus and exponent from the certificate
-    cert_len = shared.ba2int(certificate[12:15])
-    google_cert = certificate[15:15+cert_len]
-    try:
-        rv  = decoder.decode(google_cert, asn1Spec=univ.Sequence())
-        bitstring = rv[0].getComponentByPosition(0).getComponentByPosition(6).getComponentByPosition(1)
-        #bitstring is a list of ints, like [01110001010101000...]
-        #convert it into into a string   '01110001010101000...'
-        stringOfBits = ''
-        for bit in bitstring:
-            bit_as_str = str(bit)
-            stringOfBits += bit_as_str
-        #treat every 8 chars as an int and pack the ints into a bytearray
-        ba = bytearray()
-        for i in range(0, len(stringOfBits)/8):
-            onebyte = stringOfBits[i*8 : (i+1)*8]
-            oneint = int(onebyte, base=2)
-            ba.append(oneint)
-        #decoding the nested sequence
-        rv  = decoder.decode(str(ba), asn1Spec=univ.Sequence())
-        exponent = rv[0].getComponentByPosition(1)
-        modulus = rv[0].getComponentByPosition(0)
-        google_modulus = int(modulus)
-        google_exponent = int(exponent)
-    except:
-        print ('Error decoding der pubkey from google')
-        return 'failure'
+    rsSession.processServerHello(sh_cert_shd)
+
+    if not rsSession.extractCertificate(): print ("Failed to extract certificate")
+    rsModulus, rsExponent = rsSession.extractModAndExp()
+    if not rsModulus: print ("Failed to extract pubkey")
 
 def peer_handshake():
     global my_nick
@@ -1105,8 +914,8 @@ def peer_handshake():
     modulus = shared.bigint_to_bytearray(auditorPubKey.n)[:10]
     signed_hello = rsa.sign('client_hello', myPrvKey, 'SHA-1')
     #format the 'reliable site' pubkey
-    google_n = shared.bigint_to_bytearray(google_modulus)
-    google_e = shared.bigint_to_bytearray(google_exponent)
+    rs_n = shared.bigint_to_bytearray(rsModulus)
+    rs_e = shared.bigint_to_bytearray(rsExponent)
 
     bIsAuditorRegistered = False
     for attempt in range(6): #try for 6*10 secs to find the auditor
@@ -1114,7 +923,7 @@ def peer_handshake():
         time_attempt_began = int(time.time())
         shared.tlsn_send_single_msg(' :client_hello:',modulus+signed_hello,auditorPubKey)
         time.sleep(1)
-        shared.tlsn_send_single_msg(' :google_pubkey:',google_n+google_e,auditorPubKey)
+        shared.tlsn_send_single_msg(' :google_pubkey:',rs_n+rs_e,auditorPubKey)
         signed_hello_message_dict = {}
         full_signed_hello = ''
         while not bIsAuditorRegistered:
@@ -1145,9 +954,7 @@ def peer_handshake():
     thread.daemon = True
     thread.start()
     return 'success'
-    
-    
-    
+       
 def start_firefox(FF_to_backend_port):    
     if OS=='linux':
         firefox_exepath = join(datadir, 'firefoxcopy', 'firefox')
@@ -1220,7 +1027,6 @@ def start_firefox(FF_to_backend_port):
     except Exception,e: return ('Error starting Firefox: %s' %e,)
     return ('success', ff_proc)
 
-
 class StoppableHttpServer (BaseHTTPServer.HTTPServer):
     """http server that reacts to self.stop flag"""
     retval = ''
@@ -1231,7 +1037,6 @@ class StoppableHttpServer (BaseHTTPServer.HTTPServer):
                 self.handle_request()
         return self.retval;
     
-
 #HTTP server to talk with Firefox addon
 def http_server(parentthread):    
     #allow three attempts in case if the port is in use
@@ -1256,8 +1061,7 @@ def http_server(parentthread):
     print ('Serving HTTP on', sa[0], 'port', sa[1], '...',end='\r\n')
     httpd.serve_forever()
     return
-    
-        
+           
 def quit(sig=0, frame=0):
     if stcppipe_pid != 0:
         try: os.kill(stcppipe_pid, signal.SIGTERM)
@@ -1270,7 +1074,6 @@ def quit(sig=0, frame=0):
         except: pass #selftest not runnng    
     exit(1)
     
- 
 def first_run_check():
     #On first run, extract rsa,pyasn1,firefox and check hashes
     rsa_dir = join(datadir, 'python', 'rsa-3.1.4')
@@ -1391,6 +1194,8 @@ if __name__ == "__main__":
     from slowaes import AESModeOfOperation        
     import shared
     shared.load_program_config()
+    global tlsnSession
+    tlsnSession = shared.TLSNSSLClientSession('dummy.com')
     if OS=='linux':
         if not (check_output(['which','tshark']) and check_output(['which','editcap'])):
             raise Exception("Please install tshark and editcap before running tlsnotary")
