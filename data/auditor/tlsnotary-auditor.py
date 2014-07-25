@@ -117,7 +117,6 @@ def process_messages():
         elif msg.startswith('verify_md5sha:'):
             md5sha = msg[len('verify_md5sha:'):]
             md5hmac1 = tlsnSession.getVerifyHMAC(md5sha[16:],md5sha[:16],half=1)
-            with open('auditordata.txt','wb') as f: f.write(tlsnSession.dump())
             send_message('verify_hmac:'+md5hmac1)
             continue
         #------------------------------------------------------------------------------------------------------#    

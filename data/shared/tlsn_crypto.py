@@ -23,7 +23,6 @@ sha1_hash_len = 20
 #*********** TLS CODE ********************
 class TLSNSSLClientSession(object):
     def __init__(self,server,port=443,ccs=53):
-        print ("initialising SSLSession")
         self.serverName = server
         self.sslPort = port
         self.tlsVersionNum = '1.0'
@@ -170,7 +169,8 @@ class TLSNSSLClientSession(object):
 
         #we can construct the encrypted form if pubkey is known
         if (self.serverModulus):
-            self.encFirstHalfPMS = pow(ba2int('\x02'+('\x01'*63)+os.urandom(15)+'\x00'+\
+            padding = '\x01'*15 #TODO this is intended to be random, but needs testing
+            self.encFirstHalfPMS = pow(ba2int('\x02'+('\x01'*63)+padding+'\x00'+\
             pms1+('\x00'*24)) + 1, self.serverExponent, self.serverModulus)
 
         #can construct the full encrypted pre master secret if
@@ -196,7 +196,8 @@ class TLSNSSLClientSession(object):
 
         #we can construct the encrypted form if pubkey is known
         if (self.serverModulus):
-            self.encSecondHalfPMS = pow( int(('\x01'+('\x01'*63)+os.urandom(15)+ \
+            padding = '\x01'*15 #TODO this is intended to be random but needs testing
+            self.encSecondHalfPMS = pow( int(('\x01'+('\x01'*63)+padding+ \
             ('\x00'*25)+pms2).encode('hex'),16), self.serverExponent, self.serverModulus )
 
         return (self.pAuditor,self.encSecondHalfPMS)
@@ -376,6 +377,15 @@ class TLSNSSLClientSession(object):
         self.handshakeMessages[6] = '\x16\x03\x01\x00\x30' + bytearray(hmacedVerifyData)
         return bytearray('').join(self.handshakeMessages[4:])
 
+    def completeHandshake(self, rsapms2):
+        self.extractCertificate()
+        self.extractModAndExp()
+        self.setAuditeeSecret()
+        self.setMasterSecretHalf() #default values means full MS created
+        self.doKeyExpansion()
+        self.encSecondHalfPMS = ba2int(rsapms2)
+        self.setEncryptedPMS()
+        return self.getCKECCSF()
 
 def TLS10PRF(seed, req_bytes = 48, first_half=None,second_half=None,full_secret=None):
     '''

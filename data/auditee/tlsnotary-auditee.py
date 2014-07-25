@@ -388,7 +388,7 @@ def prepare_pms():
     for i in range(5): #try 5 times until google check succeeds
         #first 4 bytes of client random are unix time
         googleSession = shared.TLSNSSLClientSession('google.com')
-        if not googleSession: raise Exception("Client hello construction failed in prepare_pms")
+        if not googleSession: raise Exception("Client session construction failed in prepare_pms")
         tlssock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         tlssock.settimeout(10)
         tlssock.connect((googleSession.serverName, googleSession.sslPort))
@@ -409,21 +409,14 @@ def prepare_pms():
         rsapms2 = grsapms_ghmac[:256]
         shahmac = grsapms_ghmac[256:304]
         googleSession.pAuditor = shahmac
-        googleSession.extractCertificate()
-        googleSession.extractModAndExp()
-        googleSession.setAuditeeSecret()
-        googleSession.setMasterSecretHalf() #default values means full MS created
-        googleSession.doKeyExpansion()
-        googleSession.encSecondHalfPMS = shared.ba2int(rsapms2)
-        googleSession.setEncryptedPMS()
-        data = googleSession.getCKECCSF()
+        data = googleSession.completeHandshake(rsapms2)
         tlssock.send(data)
         time.sleep(1)
         response = tlssock.recv(8192)
         tlssock.close()
         if not response.count(googleSession.handshakeMessages[5]):
             #the response did not contain ccs == error alert received
-            print ("Response was: ")
+            print ("PMS trial failed, server response was: ")
             print (binascii.hexlify(response))
             continue
         #else ccs was in the response
@@ -576,7 +569,6 @@ def new_audited_connection(uid):
 
     with open(join(nss_patch_dir, 'verify_data'+uid), 'wb') as f: f.write(bytearray(verify_data))
     with open(join(nss_patch_dir, 'verify_data'+uid+'ready'), 'wb') as f: f.close()
-    with open('auditeedata.txt','wb') as f: f.write(tlsnSession.dump())
     return 'success'
     
    
