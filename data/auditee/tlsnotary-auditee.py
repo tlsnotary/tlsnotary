@@ -387,44 +387,45 @@ def send_link(filelink):
 def prepare_pms():    
     for i in range(5): #try 5 times until google check succeeds
         #first 4 bytes of client random are unix time
-        googleSession = shared.TLSNSSLClientSession('google.com')
-        if not googleSession: raise Exception("Client session construction failed in prepare_pms")
+        pmsSession = shared.TLSNSSLClientSession(shared.config.get('SSL','reliable_site'),\
+                                            int(shared.config.get('SSL','reliable_site_ssl_port')))
+        if not pmsSession: raise Exception("Client session construction failed in prepare_pms")
         tlssock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         tlssock.settimeout(10)
-        tlssock.connect((googleSession.serverName, googleSession.sslPort))
-        tlssock.send(googleSession.handshakeMessages[0])
+        tlssock.connect((pmsSession.serverName, pmsSession.sslPort))
+        tlssock.send(pmsSession.handshakeMessages[0])
         #we must get 3 concatenated tls handshake messages in response:
         #sh --> server_hello, cert --> certificate, shd --> server_hello_done
         time.sleep(1)
         sh_cert_shd = tlssock.recv(8192*2)  #google sends a ridiculously long cert chain of 10KB+
-        if not googleSession.processServerHello(sh_cert_shd):
-            raise Exception("Failure in processing of server Hello from " + googleSession.serverName)
+        if not pmsSession.processServerHello(sh_cert_shd):
+            raise Exception("Failure in processing of server Hello from " + pmsSession.serverName)
         #give auditor cr&sr and get an encrypted second half of PMS,
         #and shahmac that needs to be xored with my md5hmac to get MS
-        reply = send_and_recv('gcr_gsr:'+googleSession.clientRandom+googleSession.serverRandom)
+        reply = send_and_recv('gcr_gsr:'+pmsSession.clientRandom+pmsSession.serverRandom)
         if reply[0] != 'success': raise Exception ('Failed to receive a reply for gcr_gsr:')
         if not reply[1].startswith('grsapms_ghmac:'):
             raise Exception ('bad reply. Expected grsapms_ghmac:')
         grsapms_ghmac = reply[1][len('grsapms_ghmac:'):]
         rsapms2 = grsapms_ghmac[:256]
         shahmac = grsapms_ghmac[256:304]
-        googleSession.pAuditor = shahmac
-        data = googleSession.completeHandshake(rsapms2)
+        pmsSession.pAuditor = shahmac
+        data = pmsSession.completeHandshake(rsapms2)
         tlssock.send(data)
         time.sleep(1)
         response = tlssock.recv(8192)
         tlssock.close()
-        if not response.count(googleSession.handshakeMessages[5]):
+        if not response.count(pmsSession.handshakeMessages[5]):
             #the response did not contain ccs == error alert received
             print ("PMS trial failed, server response was: ")
             print (binascii.hexlify(response))
             continue
         #else ccs was in the response
         global tlsnSession
-        tlsnSession.auditeeSecret = googleSession.auditeeSecret
+        tlsnSession.auditeeSecret = pmsSession.auditeeSecret
         return ('success',None) #successfull pms check
     #no dice after 5 tries
-    raise Exception ('Could not prepare PMS with google after 5 tries')
+    raise Exception ('Could not prepare PMS with ', shared.config.get('SSL','reliable_site'), ' after 5 tries')
 
     
 #send a message and return the response received
@@ -878,9 +879,8 @@ def get_reliable_site_certificate():
     global rsModulus
     global rsExponent
 
-    #TODO this is currently only valid for google.com
-    #Intention is to make it more flexible and robust.
-    rsSession = shared.TLSNSSLClientSession('google.com',443)
+    rsSession = shared.TLSNSSLClientSession(shared.config.get('SSL','reliable_site'),\
+                                    int(shared.config.get('SSL','reliable_site_ssl_port')))
 
     tlssock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     tlssock.settimeout(10)
@@ -891,6 +891,7 @@ def get_reliable_site_certificate():
 
     rsSession.processServerHello(sh_cert_shd)
 
+    #TODO: fallback to alternatives if one site fails
     if not rsSession.extractCertificate(): print ("Failed to extract certificate")
     rsModulus, rsExponent = rsSession.extractModAndExp()
     if not rsModulus: print ("Failed to extract pubkey")
