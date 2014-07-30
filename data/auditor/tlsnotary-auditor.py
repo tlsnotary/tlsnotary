@@ -46,7 +46,6 @@ recvQueue = Queue.Queue() #all messages destined for me
 ackQueue = Queue.Queue() #auditee ACKs
 progressQueue = Queue.Queue() #messages intended to be displayed by the frontend
 rsModulus = rsExponent = 0
-tlsnSession = None
 bTerminateAllThreads = False
 
 #processes each http request in a separate thread
@@ -74,13 +73,14 @@ def send_message(data):
  
 #Receive messages from auditee, perform calculations, and respond to them accordingly
 def process_messages():
-    global tlsnSession
+
     while True:
         try: msg = recvQueue.get(block=True, timeout=1)
         except: continue
 
         if msg.startswith('gcr_gsr:'):
             gcr_gsr = msg[len('gcr_gsr:'):]
+            tlsnSession = shared.TLSNSSLClientSession('dummy.com')
             googleSession = shared.TLSNSSLClientSession('google.com')
             googleSession.clientRandom = gcr_gsr[:32]
             googleSession.serverRandom = gcr_gsr[32:64]
@@ -109,7 +109,7 @@ def process_messages():
             if not tlsnSession.auditorSecret: raise Exception("Auditor PMS secret data should have already been set.")
             tlsnSession.setAuditorSecret() #will set the enc PMS second half
             tlsnSession.setMasterSecretHalf(half=1,providedPValue=md5hmac1_for_MS)
-            garbageizedHMAC = tlsnSession.getPValueMS('auditor',[1]) #withhold the server mac
+            garbageizedHMAC = tlsnSession.getPValueMS('auditor',[2]) #withhold the server mac
             rsapms_hmacms_hmacek = shared.bigint_to_bytearray(tlsnSession.encSecondHalfPMS)+tlsnSession.pAuditor[24:]+garbageizedHMAC
             send_message('rsapms_hmacms_hmacek:'+ rsapms_hmacms_hmacek)
             continue
@@ -122,31 +122,33 @@ def process_messages():
         #------------------------------------------------------------------------------------------------------#    
         elif msg.startswith('commit_hash:'):
             commit_hash = msg[len('commit_hash:'):]
-            trace_hash = commit_hash[:32]
+            response_hash = commit_hash[:32]
             md5hmac_hash = commit_hash[32:64]
             commit_dir = os.path.join(current_sessiondir, 'commit')
             if not os.path.exists(commit_dir): os.makedirs(commit_dir)
             #file names are assigned sequentially hash1, hash2 etc.
-            #The auditee must provide tracefiles trace1, trace2 corresponding to these sequence numbers
+            #The auditee must provide responsefiles response1, response2 corresponding to these sequence numbers
             commdir_list = os.listdir(commit_dir)
             #get last seqno
-            seqnos = [int(one_trace[len('tracehash'):]) for one_trace 
-                      in commdir_list if one_trace.startswith('tracehash')]
+            seqnos = [int(one_response[len('responsehash'):]) for one_response
+                      in commdir_list if one_response.startswith('responsehash')]
             last_seqno = max([0] + seqnos) #avoid throwing by feeding at least one value 0
             my_seqno = last_seqno+1
-            trace_hash_path = os.path.join(commit_dir, 'tracehash'+str(my_seqno))
+            response_hash_path = os.path.join(commit_dir, 'responsehash'+str(my_seqno))
             n_hexlified = binascii.hexlify(n)
             n_write = " ".join(n_hexlified[i:i+2] for i in range(0, len(n_hexlified), 2)) #pubkey in the format 09 56 23 ....
             pubkey_path = os.path.join(commit_dir, 'pubkey'+str(my_seqno))
-            trace_hash_path = os.path.join(commit_dir, 'tracehash'+str(my_seqno))
+            response_hash_path = os.path.join(commit_dir, 'responsehash'+str(my_seqno))
             md5hmac_hash_path =  os.path.join(commit_dir, 'md5hmac_hash'+str(my_seqno))
             with open(pubkey_path, 'wb') as f: f.write(n_write)            
-            with open(trace_hash_path, 'wb') as f: f.write(trace_hash)
+            with open(response_hash_path, 'wb') as f: f.write(response_hash)
             with open(md5hmac_hash_path, 'wb') as f: f.write(md5hmac_hash)
             sha1hmac_path = os.path.join(commit_dir, 'sha1hmac'+str(my_seqno))
             with open(sha1hmac_path, 'wb') as f: f.write(tlsnSession.pAuditor)
             cr_path = os.path.join(commit_dir, 'cr'+str(my_seqno))
             with open(cr_path, 'wb') as f: f.write(tlsnSession.clientRandom)
+            sr_path = os.path.join(commit_dir,'sr'+str(my_seqno))
+            with open(sr_path,'wb') as f: f.write(tlsnSession.serverRandom)
             send_message('sha1hmac_for_MS:'+tlsnSession.pAuditor)
             continue  
         #---------------------------------------------------------------------#
@@ -160,25 +162,28 @@ def process_messages():
             zipf = zipfile.ZipFile(os.path.join(current_sessiondir, 'auditeetrace.zip'), 'r')
             auditeetrace_dir = os.path.join(current_sessiondir, 'auditeetrace')
             zipf.extractall(auditeetrace_dir)
-            response = 'success' #unless overridden by a failure in sanity check
+            link_response = 'success' #unless overridden by a failure in sanity check
             #sanity: all trace names must be unique and their hashes must correspond to the
             #hashes which the auditee committed to earlier
             adir_list = os.listdir(auditeetrace_dir)
             seqnos = []
-            for one_trace in adir_list:
-                if not one_trace.startswith('trace'): continue
-                try: this_seqno = int(one_trace[len('trace'):])
-                except: raise Exception ('WARNING: Could not cast trace\'s tail to int')
+            for one_response in adir_list:
+                if not one_response.startswith('response'): continue
+                try: this_seqno = int(one_response[len('response'):])
+                except: raise Exception ('WARNING: Could not cast response\'s tail to int')
                 if this_seqno in seqnos: 
-                    raise Exception ('WARNING: multiple tracefiles names detected')
-                saved_hash_path = os.path.join(commit_dir, 'tracehash'+str(this_seqno))
+                    raise Exception ('WARNING: multiple responsefiles names detected')
+                saved_hash_path = os.path.join(commit_dir, 'responsehash'+str(this_seqno))
                 if not os.path.exists(saved_hash_path): 
-                    raise Exception ('WARNING: Auditee gave a trace number which doesn\'t have a committed hash')
+                    raise Exception ('WARNING: Auditee gave a response number which doesn\'t have a committed hash')
                 with open(saved_hash_path, 'rb') as f: saved_hash = f.read()
-                with open(os.path.join(auditeetrace_dir, one_trace), 'rb') as f: tracedata = f.read()
-                trace_hash = hashlib.sha256(tracedata).digest()
-                if not saved_hash == trace_hash: 
-                    raise Exception ('WARNING: Trace\'s hash doesn\'t match the hash committed to')
+                with open(os.path.join(auditeetrace_dir, one_response), 'rb') as f: responsedata = f.read()
+                response_hash = hashlib.sha256(responsedata).digest()
+                if not saved_hash == response_hash:
+                    raise Exception ('WARNING: response\'s hash doesn\'t match the hash committed to')
+                IV_path = os.path.join(auditeetrace_dir,'IV'+str(this_seqno))
+                if not os.path.exists(IV_path):
+                    raise Exception("WARNING: Could not find IV block in auditeetrace")
                 md5hmac_path = os.path.join(auditeetrace_dir, 'md5hmac'+str(this_seqno))
                 if not os.path.exists(md5hmac_path):
                     raise Exception ('WARNING: Could not find md5hmac in auditeetrace')
@@ -193,59 +198,37 @@ def process_messages():
                 #elif no errors
                 seqnos.append(this_seqno)
                 continue
-            send_message('response:'+response)
-            if response == 'success':
-                progressQueue.put(time.strftime('%H:%M:%S', time.localtime()) + ': The auditee has successfully finished the audit session')
-            else:
-                progressQueue.put(time.strftime('%H:%M:%S', time.localtime()) + ': WARNING!!! The auditee FAILED the audit session')
-            progressQueue.put(time.strftime('%H:%M:%S', time.localtime()) + ': Decrypting  auditee\'s data')
-            #decrypt  the tracefiles
+            #Todo: this isn't right; we are not triggering failure anywhere in the above loop
+            send_message('response:'+link_response)
+
+            #decrypt  the response files
             decr_dir = os.path.join(current_sessiondir, 'decrypted')
             os.makedirs(decr_dir)
-            for one_trace in adir_list:
-                if not one_trace.startswith('trace'): continue
-                seqno = one_trace[len('trace'):]
+            for one_response in adir_list:
+                if not one_response.startswith('response'): continue
+                seqno = one_response[len('response'):]
                 with open(os.path.join(auditeetrace_dir, 'md5hmac'+seqno), 'rb') as f: md5hmac = f.read()
+                with open(os.path.join(auditeetrace_dir,'response'+seqno),'rb') as f: response = f.read()
+                with open(os.path.join(auditeetrace_dir,'IV'+seqno),'rb') as f: IV_data = f.read()
                 with open(os.path.join(commit_dir, 'sha1hmac'+seqno), 'rb') as f: sha1hmac = f.read()
                 with open(os.path.join(commit_dir, 'cr'+seqno), 'rb') as f: cr = f.read()
-                ms = shared.xor(md5hmac, sha1hmac)
-                sslkeylog = os.path.join(decr_dir, 'sslkeylog'+seqno)
-                ssldebuglog = os.path.join(decr_dir, 'ssldebuglog'+seqno)
-                cr_hexl = binascii.hexlify(cr)
-                ms_hexl = binascii.hexlify(ms)
-                with open(sslkeylog, 'wb') as f: 
-                    f.write('CLIENT_RANDOM ' + cr_hexl + ' ' + ms_hexl + '\n')
-                try: output = subprocess.check_output([tshark_exepath, '-r', 
-                                                    os.path.join(auditeetrace_dir, one_trace),
-                                                     '-Y', 'ssl and http.content_type contains html', 
-                                                     '-o', 'http.ssl.port:1025-65535', 
-                                                     '-o', 'ssl.keylog_file:'+ sslkeylog,
-                                                     '-o', 'ssl.ignore_ssl_mac_failed:False',
-                                                     '-o', 'ssl.debug_file:' + ssldebuglog,
-                                                     '-x'])
-                except: #maybe an old tshark version, Replace -Y with -R
-                    try: output = subprocess.check_output([tshark_exepath, '-r',
-                                                           os.path.join(auditeetrace_dir, one_trace),
-                                                          '-R', 'ssl and http.content_type contains html',
-                                                          '-o', 'http.ssl.port:1025-65535', 
-                                                          '-o', 'ssl.keylog_file:'+ sslkeylog,
-                                                          '-o', 'ssl.ignore_ssl_mac_failed:False',
-                                                          '-o', 'ssl.debug_file:' + ssldebuglog,
-                                                          '-x'])
-                    except: raise Exception ('Could not launch tshark')
-                if output == '': raise Exception ("Failed to find HTML in escrowtrace")
-                with open(ssldebuglog, 'rb') as f: debugdata = f.read()
-                if debugdata.count('mac failed') > 0:
-                    raise Exception('Mac check failed in tracefile')
-                #output may contain multiple frames with HTML, we examine them one-by-one
-                separator = re.compile('Frame ' + re.escape('(') + '[0-9]{2,7} bytes' + re.escape(')') + ':')
-                #ignore the first split element which is always an empty string
-                frames = re.split(separator, output)[1:]    
-                html_paths = ''
-                for index,oneframe in enumerate(frames):
-                    html = shared.get_html_from_asciidump(oneframe)
-                    path = os.path.join(decr_dir, 'html-'+seqno+'-'+str(index))
-                    with open(path, 'wb') as f: f.write(html)
+                with open(os.path.join(commit_dir, 'sr'+seqno), 'rb') as f: sr = f.read()
+                #get the expanded keys and decrypt the corresponding response file
+                decrSession = shared.TLSNSSLClientSession('dummy.com')
+                decrSession.clientRandom = cr
+                decrSession.serverRandom = sr
+                decrSession.pAuditee = md5hmac
+                decrSession.pAuditor = sha1hmac
+                decrSession.setMasterSecretHalf()
+                decrSession.doKeyExpansion()
+                decrSession.storeServerAppDataRecords(response)
+                decrSession.lastServerCiphertextBlock = IV_data
+                plaintext, bad_mac = decrSession.processServerAppDataRecords()
+                if bad_mac:
+                    print ("AUDIT FAILURE - invalid mac")
+                    link_response = 'false'
+                path = os.path.join(decr_dir, 'html-'+seqno) #todo - more than one?
+                with open(path, 'wb') as f: f.write(plaintext) #todo maybe strip headers?
                 #also create a file where the auditor can see the domain and pubkey
                 with open (os.path.join(auditeetrace_dir, 'domain'+seqno), 'rb') as f: domain_data = f.read()
                 with open (os.path.join(commit_dir, 'pubkey'+seqno), 'rb') as f: pubkey_data = f.read()
@@ -260,7 +243,13 @@ In Firefox, click the padlock to the left of the URL bar -> More Information -> 
                 #format pubkey in nice rows of 16 hex numbers just like Firefox does
                 for i in range(len(pubkey_data)/48):
                     write_data += pubkey_data[i*48:(i+1)*48] + '\n' 
-                with open(os.path.join(decr_dir, 'domain'+seqno), 'wb') as f: f.write(write_data)               
+                with open(os.path.join(decr_dir, 'domain'+seqno), 'wb') as f: f.write(write_data)
+
+            if link_response == 'success':
+                progressQueue.put(time.strftime('%H:%M:%S', time.localtime()) + ': The auditee has successfully finished the audit session')
+            else:
+                progressQueue.put(time.strftime('%H:%M:%S', time.localtime()) + ': WARNING!!! The auditee FAILED the audit session')
+            progressQueue.put(time.strftime('%H:%M:%S', time.localtime()) + ': Decrypting  auditee\'s data')
             progressQueue.put(time.strftime('%H:%M:%S', time.localtime()) + ': All decrypted HTML can be found in ' + decr_dir)
             progressQueue.put(time.strftime('%H:%M:%S', time.localtime()) + ': You may now close the browser.')
             continue
@@ -548,8 +537,6 @@ if __name__ == "__main__":
     from slowaes import AESModeOfOperation
     import shared
     shared.load_program_config()
-    global tlsnSession
-    tlsnSession = shared.TLSNSSLClientSession('dummy.com')
     thread = shared.ThreadWithRetval(target= http_server)
     thread.daemon = True
     thread.start()

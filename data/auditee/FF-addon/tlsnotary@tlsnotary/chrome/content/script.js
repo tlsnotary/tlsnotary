@@ -23,13 +23,43 @@ var button_stop_enabled;
 var button_stop_disabled;
 var testingMode = false;
 var proxy_port_int;
+var headers="";
 
 port = Cc["@mozilla.org/process/environment;1"].getService(Ci.nsIEnvironment).get("FF_to_backend_port");
 //setting homepage should be done from here rather than defaults.js in order to have the desired effect. FF's quirk.
 Cc["@mozilla.org/preferences-service;1"].getService(Ci.nsIPrefService).getBranch("browser.startup.").setCharPref("homepage", "chrome://tlsnotary/content/auditee.html");
-//TODO: the pref  below must be set from here rather than defaults.js because Firefox overrides them on startup
-switchProxy(false);
 Components.utils.import("resource://gre/modules/PopupNotifications.jsm");
+
+var observer2;
+
+function myObserver2() {}
+myObserver2.prototype = {
+  observe: function(aSubject, topic, data) {
+     var httpChannel = aSubject.QueryInterface(Ci.nsIHttpChannel);
+     var url = httpChannel.URI.spec;
+     aSubject.cancel(Components.results.NS_BINDING_ABORTED);
+       if (tab_url_full == url){
+            observer2.unregister();
+       }
+     //if for some weird reason the tab url is not the first
+     //url requested, the wrong headers will be set; but then
+     //they will be overridden because we do not unregister
+     console.log("allowed url: " + url);
+     headers = "";
+     headers += "GET /" + tab_url + " HTTP/1.1" + "\r\n";
+     aSubject.visitRequestHeaders(function(header,value){
+                                  headers += header +": " + value + "\r\n";})
+  },
+  register: function() {
+    var observerService = Cc["@mozilla.org/observer-service;1"].getService(Ci.nsIObserverService);
+    observerService.addObserver(this, "http-on-modify-request", false);
+  },
+  unregister: function() {
+    var observerService = Cc["@mozilla.org/observer-service;1"].getService(Ci.nsIObserverService);
+    observerService.removeObserver(this, "http-on-modify-request");
+  }
+}
+
 
 
 function popupShow(text) {
@@ -66,7 +96,7 @@ function pollEnvvar(){
 	button_spinner = document.getElementById("button_spinner");
 	button_stop_enabled = document.getElementById("button_stop_enabled");
 	button_stop_disabled = document.getElementById("button_stop_disabled");
-	observer = new myObserver();
+
 	help.value = "Go to a page and press AUDIT THIS PAGE. Then wait for the page to reload automatically.";
 	button_record_disabled.hidden = true;
 	button_record_enabled.hidden = false;
@@ -75,62 +105,33 @@ function pollEnvvar(){
 
 
 function startRecording(){
-	audited_browser = gBrowser.selectedBrowser;
-	tab_url_full = audited_browser.contentWindow.location.href;
+    audited_browser = gBrowser.selectedBrowser;
+    tab_url_full = audited_browser.contentWindow.location.href;
+
 	if (!tab_url_full.startsWith("https://")){
 		help.value = "ERROR You can only audit pages which start with https://";
 		return;
 	}
-	tab_url = tab_url_full.split('/')[2]
+    var x = tab_url_full.split('/');
+    x.splice(0,3);
+    tab_url = x.join('/');
 	button_record_enabled.hidden = true;
 	button_spinner.hidden = false;
 	button_stop_disabled.hidden = false;
 	button_stop_enabled.hidden = true;
-
+    observer2 = new myObserver2();
+    observer2.register();
+    audited_browser.reloadWithFlags(Ci.nsIWebNavigation.LOAD_FLAGS_BYPASS_CACHE);
 	help.value = "Initializing the recording software"
-	reqStartRecording = new XMLHttpRequest();
-    reqStartRecording.onload = responseStartRecording;
-    reqStartRecording.open("HEAD", "http://127.0.0.1:"+port+"/start_recording", true);
-    reqStartRecording.send();
-    responseStartRecording(0);
+    setTimeout(preparePMS,500);
 }
-
-
-function responseStartRecording(iteration){
-    if (typeof iteration == "number"){
-        if (iteration > 5){
-			help.value = "ERROR responseStartRecording timed out";
-            return;
-        }
-        if (!bStartRecordingResponded) setTimeout(responseStartRecording, 1000, ++iteration)
-        return;
-    }
-    //else: not a timeout but a response from the server
-	bStartRecordingResponded = true;
-    var query = reqStartRecording.getResponseHeader("response");
-    var status = reqStartRecording.getResponseHeader("status");
-    if (query != "start_recording"){
-		help.value = "ERROR Internal error. Wrong response header: " + query;
-        return;
-    }
-	if (status != "success"){
-		help.value = "ERROR Received an error message: " + status;
-		return;
-	}
-	//else successful response
-	bIsRecordingSoftwareStarted = true;
-    var proxy_port = reqStartRecording.getResponseHeader("proxy_port");
-	proxy_port_int = parseInt(proxy_port);
-	preparePMS();
-}
-
 
 function preparePMS(){
-	help.value = "Negotiating cryptographic parameters with the auditor"
-	//tell backend to prepare a google-checked PMS
+    help.value = "Audit is underway; please be patient";
 	reqPreparePMS = new XMLHttpRequest();
     reqPreparePMS.onload = responsePreparePMS;
-    reqPreparePMS.open("HEAD", "http://127.0.0.1:"+port+"/prepare_pms", true);
+    var b64headers = btoa(headers);
+    reqPreparePMS.open("HEAD", "http://127.0.0.1:"+port+"/prepare_pms?b64headers="+b64headers, true);
     reqPreparePMS.send();
     responsePreparePMS(0);	
 }
@@ -138,7 +139,7 @@ function preparePMS(){
 
 function responsePreparePMS(iteration){
     if (typeof iteration == "number"){
-        if (iteration > 20){
+        if (iteration > 100){
 			help.value = "ERROR responsePreparePMS timed out";
             return;
         }
@@ -153,146 +154,21 @@ function responsePreparePMS(iteration){
 		help.value = "ERROR Internal error. Wrong response header: " +query;
         return;
     }
-	if (status != "success"){
-		help.value = "ERROR Received an error message: " + status;
-		return;
-	}
-    //else success preparing PMS, send request to wait
-    //for backend to signal successful receipt of server traffic
-    //before beginning the reload
-    auditeeMacCheck();
-
-    help.value = "Waiting for the page to reload fully (decrypted HTML will open in new tab)"
-	//don't reuse TLS sessions
-	var sdr = Cc["@mozilla.org/security/sdr;1"].getService(Ci.nsISecretDecoderRing);
-	sdr.logoutAndTeardown();
-
-    //observer lets us cut off any attempts to connect except
-    //the main page resource
-	observer.register();
-
-    switchProxy(true);
-
-    audited_browser.reloadWithFlags(Ci.nsIWebNavigation.LOAD_FLAGS_BYPASS_CACHE);
-	makeSureReloadDoesntTakeForever(0);
-}
-
-
-function makeSureReloadDoesntTakeForever(iteration) {
-    if (help.value == "Waiting for the page to reload fully (decrypted HTML will open in new tab)") {
-		if (iteration > 300){
-			help.value = "ERROR page reloading is taking too long. You may Stop loading this page and try again"
-            return;
+    if (status != "success"){
+        if (testingMode == true) {
+            help.value = "ERROR Received an error message: " + status;
+            return; //failure to find HTML is considered a fatal error during testing
         }
-		setTimeout(makeSureReloadDoesntTakeForever, 1000, ++iteration);
-		return;
-	}
- }
-
-
-function myObserver() {}
-myObserver.prototype = {
-  observe: function(aSubject, topic, data) {
-	 var httpChannel = aSubject.QueryInterface(Ci.nsIHttpChannel);
-	 var url = httpChannel.URI.spec;
-	 if (url.startsWith("http://127.0.0.1:")) return;
-	 else if (url != tab_url_full) {
-		 //drop all random request which dont match the urlbar, however dont touch
-		 //localhost requests to the backend
-		console.log("cancelled url: " + url);
-		aSubject.cancel(Components.results.NS_BINDING_ABORTED);
-		return;
-	 }
-	 //else url matched
-	 console.log("allowed url: " + url);
-	 observer.unregister();
-	 Cc["@mozilla.org/process/environment;1"].getService(Ci.nsIEnvironment).set("NSS_PATCH_STAGE_ONE", "true");
-	 console.log("nss patch toggled");
-  },
-  register: function() {
-    var observerService = Cc["@mozilla.org/observer-service;1"].getService(Ci.nsIObserverService);
-    observerService.addObserver(this, "http-on-modify-request", false);
-  },
-  unregister: function() {
-    var observerService = Cc["@mozilla.org/observer-service;1"].getService(Ci.nsIObserverService);
-    observerService.removeObserver(this, "http-on-modify-request");
-  }
-}
-
-function auditeeMacCheck(){
-    reqAuditeeMacCheck = new XMLHttpRequest();
-    reqAuditeeMacCheck.onload = responseAuditeeMacCheck;
-    reqAuditeeMacCheck.open("HEAD", "http://127.0.0.1:"+port+"/auditee_mac_check", true);
-    reqAuditeeMacCheck.send();
-    responseAuditeeMacCheck(0);
-}
-
-
-function responseAuditeeMacCheck(iteration){
-    if (typeof iteration == "number"){
-        if (iteration > 60){
-            help.value = "auditee mac check error";
-           return;
-        }
-        if (!bAuditeeMacCheckResponded) setTimeout(responseAuditeeMacCheck, 1000, ++iteration)
+        help.value = "ERROR Received an error message: " + status + ". Page decryption FAILED. Try pressing AUDIT THIS PAGE again";
+        button_record_enabled.hidden = false;
+        button_spinner.hidden = true;
+        button_stop_disabled.hidden = true;
+        button_stop_enabled.hidden = false;
         return;
     }
-    //else: not a timeout but a response from my backend server
-    bAuditeeMacCheckResponded = true;
 
-    //stop reload (equivalent to pressing red X)
-    audited_browser.stop();
-
-    //go back to online (and disable the proxy)
-    switchOffline(false);
-
-    //open decrypted tab only after the new reload has finished
-    //and the browser has been put into offline mode
-    audited_browser.addProgressListener(loadListener);
-    audited_browser.reloadWithFlags(Ci.nsIWebNavigation.LOAD_FLAGS_BYPASS_CACHE);
-}
-
-//get paths to decrypted html files on local filesystem and show the html
-function get_html_paths(){
-	reqGetHTMLPaths = new XMLHttpRequest();
-    reqGetHTMLPaths.onload = responseGetHTMLPaths;
-    b64domain = btoa(tab_url);
-    reqGetHTMLPaths.open("HEAD", "http://127.0.0.1:"+port+"/get_html_paths?domain="+b64domain, true);
-    reqGetHTMLPaths.send();
-    responseGetHTMLPaths(0);	
-}
-
-function responseGetHTMLPaths(iteration){
-    if (typeof iteration == "number"){
-        if (iteration > 20){
-			help.value = "ERROR responseGetHTMLPaths timed out";
-            return;
-        }
-        if (!bGetHTMLPaths) setTimeout(responseGetHTMLPaths, 1000, ++iteration)
-        return;
-    }
-    //else: not a timeout but a response from my backend server
-	bGetHTMLPaths = true;
-    var query = reqGetHTMLPaths.getResponseHeader("response");
-    var status = reqGetHTMLPaths.getResponseHeader("status");
-    if (query != "get_html_paths"){
-		help.value = "ERROR Internal error. Wrong response header: " + query;
-        return;
-    }
-	if (status != "success"){
-		if (testingMode == true) {
-			help.value = "ERROR Received an error message: " + status;
-			return; //failure to find HTML is considered a fatal error during testing
-		}
-		help.value = "ERROR Received an error message: " + status + ". Page decryption FAILED. Try pressing AUDIT THIS PAGE again";
-		button_record_enabled.hidden = false;
-		button_spinner.hidden = true;
-		button_stop_disabled.hidden = true;
-		button_stop_enabled.hidden = false;
-		return;
-	}
-	//else successful response
-    b64_html_paths = reqGetHTMLPaths.getResponseHeader("html_paths");
+    //else successful response
+    b64_html_paths = reqPreparePMS.getResponseHeader("html_paths");
     html_paths_string = atob(b64_html_paths);
 
     html_paths = html_paths_string.split("&").filter(function(e){return e});
@@ -301,91 +177,17 @@ function responseGetHTMLPaths(iteration){
     //but kept in a loop just in case
     for (var i=0; i<html_paths.length; i++){
         var browser = gBrowser.getBrowserForTab(gBrowser.addTab(html_paths[i]));
-        if (i==html_paths.length-1){
-            browser.addProgressListener(loadListener2);
-        }
     }
 
-	help.value = "Page decryption successful. Go to another page and press AUDIT THIS PAGE or press FINISH";
-	button_record_enabled.hidden = false;
-	button_spinner.hidden = true;
-	button_stop_disabled.hidden = true;
-	button_stop_enabled.hidden = false;
-}
-
-//copied from https://developer.mozilla.org/en-US/docs/Code_snippets/Progress_Listeners
-const STATE_STOP = Ci.nsIWebProgressListener.STATE_STOP;
-const STATE_IS_WINDOW = Ci.nsIWebProgressListener.STATE_IS_WINDOW;
-
-var loadListener = {
-    QueryInterface: XPCOMUtils.generateQI(["nsIWebProgressListener",
-                                           "nsISupportsWeakReference"]),
-
-    onStateChange: function(aWebProgress, aRequest, aFlag, aStatus) {
-        if ((aFlag & STATE_STOP) && (aFlag & STATE_IS_WINDOW) && (aWebProgress.DOMWindow == aWebProgress.DOMWindow.top)) {
-            // This fires when the page load finishes
-            audited_browser.removeProgressListener(this);
-            switchOffline(true);
-            get_html_paths();
-        }
-    },
-    onLocationChange: function(aProgress, aRequest, aURI) {},
-    onProgressChange: function(aWebProgress, aRequest, curSelf, maxSelf, curTot, maxTot) {},
-    onStatusChange: function(aWebProgress, aRequest, aStatus, aMessage) {},
-    onSecurityChange: function(aWebProgress, aRequest, aState) {}
-}
-
-//TODO: It should be possible to reuse the loadListener code
-//(e.g. something like loadListener2 = loadListener; loadListener2.onStateChange = ...)
-//but have not managed it yet.
-var loadListener2 = {
-    QueryInterface: XPCOMUtils.generateQI(["nsIWebProgressListener",
-                                           "nsISupportsWeakReference"]),
-
-    onStateChange: function(aWebProgress, aRequest, aFlag, aStatus) {
-        if ((aFlag & STATE_STOP) && (aFlag & STATE_IS_WINDOW) && (aWebProgress.DOMWindow == aWebProgress.DOMWindow.top)) {
-            // This fires when the page load finishes
-            switchOffline(false);
-        }
-    },
-    onLocationChange: function(aProgress, aRequest, aURI) {},
-    onProgressChange: function(aWebProgress, aRequest, curSelf, maxSelf, curTot, maxTot) {},
-    onStatusChange: function(aWebProgress, aRequest, aStatus, aMessage) {},
-    onSecurityChange: function(aWebProgress, aRequest, aState) {}
-}
-
-
-function switchProxy(s){
-    if (s == true){
-        var prefs = Cc["@mozilla.org/preferences-service;1"].getService(Ci.nsIPrefService);
-        prefs.setIntPref("network.proxy.type", 1);
-        prefs.setCharPref("network.proxy.ssl","127.0.0.1");
-        //proxy_port_int is set in responseStartRecording
-        prefs.setIntPref("network.proxy.ssl_port", proxy_port_int);
-    }
-    else{
-        Cc["@mozilla.org/preferences-service;1"].getService(Ci.nsIPrefService).getBranch("network.proxy.").setIntPref("type", 0);
-    }
-}
-
-//if switch set to true, go offline, else go online
-function switchOffline(s){
-    //NB: FF ignores offline mode when proxy is set to manual
-    switchProxy(false);
-    var ioService = Components.classes["@mozilla.org/network/io-service;1"].getService(Components.interfaces.nsIIOService2);
-    if (!ioService.offline && s){
-        BrowserOffline.toggleOfflineStatus();
-    }
-    else if (ioService.offline && !s){
-        BrowserOffline.toggleOfflineStatus();
-    }
-    //other 2 conditions, do nothing
+    help.value = "Page decryption successful. Go to another page and press AUDIT THIS PAGE or press FINISH";
+    button_record_enabled.hidden = false;
+    button_spinner.hidden = true;
+    button_stop_disabled.hidden = true;
+    button_stop_enabled.hidden = false;
 }
 
 function stopRecording(){
 	help.value = "Preparing the data to be sent to the auditor"
-	//disable proxy so that we can reach our localhost backend
-    switchProxy(false);
 	button_spinner.hidden = true;
 	button_record_enabled.hidden = true;
 	button_stop_enabled.hidden = true;
@@ -401,7 +203,7 @@ function stopRecording(){
 
 function responseStopRecording(iteration){
     if (typeof iteration == "number"){
-        if (iteration > 30){
+        if (iteration > 100){
 			help.value = "ERROR responseStopRecording timed out ";
             return;
         }
@@ -423,8 +225,7 @@ function responseStopRecording(iteration){
 		help.value = "ERROR Received an error message: " + status;
 		return;
 	}
-	//else successful response, disable proxying
-    switchProxy(false);
+
 	popupShow("Congratulations. The auditor has acknowledged successful receipt of your audit data. You may now close the browser");
 	help.value = "Auditing session ended successfully";
 	return;
