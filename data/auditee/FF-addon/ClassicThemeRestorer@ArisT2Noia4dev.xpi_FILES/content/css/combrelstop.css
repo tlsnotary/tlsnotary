@@ -1,0 +1,14 @@
+@-moz-document url(chrome://browser/content/browser.xul){
+	
+	/* This simulates a combined stop reload button,
+	** if reload button is placed after stop button.
+	**
+	** Hide disabled stop button and hide reload button,
+	** if stop button is not disabled.
+	**/
+	toolbar[currentset*="ctraddon_stop-button,ctraddon_reload-button"]:not([customizing]) #ctraddon_stop-button[disabled],
+	toolbar[currentset*="ctraddon_stop-button,ctraddon_reload-button"]:not([customizing]) #ctraddon_stop-button:not([disabled]) ~ #ctraddon_reload-button{
+	  visibility:collapse !important;
+	}
+
+}

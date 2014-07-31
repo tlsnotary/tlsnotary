@@ -563,18 +563,24 @@ def peer_handshake():
     return 'success'
        
 def start_firefox(FF_to_backend_port):    
-    if OS=='linux':
-        firefox_exepath = join(datadir, 'firefoxcopy', 'firefox')
-        if not os.path.exists(firefox_exepath): raise Exception('firefox missing')
+    #sanity check
     if OS=='mswin':
-        firefox_exepath = join(datadir, 'firefoxcopy', 'firefox.exe')
-        if not os.path.exists(firefox_exepath): raise Exception('firefox missing')
-    if OS=='macos':
-        firefox_exepath = join(datadir, 'firefoxcopy', 'Contents', 'MacOS', 
-                                       'TorBrowser.app', 'Contents', 'MacOS', 'firefox')
-        if not os.path.exists(firefox_exepath): raise Exception('firefox missing')  
-    import stat
-    os.chmod(firefox_exepath,stat.S_IRWXU)
+        path_x86 = 'C:/Program Files (x86)/Mozilla Firefox/firefox.exe'
+        path_other = 'C:/Program Files/Mozilla Firefox/firefox.exe'
+        if os.path.exists(path_x86):
+            firefox_exepath = pathx86
+        elif os.path.exists(path_other):
+            firefox_exepath = path_other
+        else:
+            exit(FIREFOX_MISSING)
+    else:
+        if not check_output(['which','firefox']):
+            exit(FIREFOX_MISSING)
+        firefox_exepath = 'firefox'
+        #possibly required for some linuces?
+        #import stat
+        #os.chmod(firefox_exepath,stat.S_IRWXU)
+    firefox_exepath='/home/adam/firefox/firefox'
     logs_dir = join(datadir, 'logs')
     if not os.path.isdir(logs_dir): os.makedirs(logs_dir)
     with open(join(logs_dir, 'firefox.stdout'), 'w') as f: pass
@@ -582,24 +588,11 @@ def start_firefox(FF_to_backend_port):
     ffprof_dir = join(datadir, 'FF-profile')
     if not os.path.exists(ffprof_dir): os.makedirs(ffprof_dir)
     #show addon bar
-    with codecs.open(join(ffprof_dir, 'localstore.rdf'), 'w') as f:
-        f.write('<?xml version="1.0"?>'
-                '<RDF:RDF xmlns:NC="http://home.netscape.com/NC-rdf#" xmlns:RDF="http://www.w3.org/1999/02/22-rdf-syntax-ns#">'
-                '<RDF:Description RDF:about="chrome://browser/content/browser.xul">'
-                '<NC:persist RDF:resource="chrome://browser/content/browser.xul#addon-bar" collapsed="false"/>'
-                '</RDF:Description></RDF:RDF>')        
-    bundles_dir = join(os.path.dirname(firefox_exepath), 'distribution', 'bundles')
-    if not os.path.exists(bundles_dir):
-        os.makedirs(bundles_dir)
-        addons = os.listdir(join(datadir, 'FF-addon'))
-        for oneaddon in addons:
-            shutil.copytree(join(datadir, 'FF-addon', oneaddon), 
-                            join(bundles_dir, oneaddon))
     with open(join(ffprof_dir, 'prefs.js'), 'w') as f:
         f.writelines([
         'user_pref("browser.startup.homepage", "chrome://tlsnotary/content/auditee.html");\n',
         'user_pref("browser.startup.homepage_override.mstone", "ignore");\n', #prevents welcome page
-        'user_pref("browser.rights.3.shown", true);\n', 
+        'user_pref("browser.rights.3.shown", true);\n',
         'user_pref("app.update.auto", false);\n',
         'user_pref("app.update.enabled", false);\n',
         'user_pref("browser.shell.checkDefaultBrowser", false);\n',
@@ -614,15 +607,30 @@ def start_firefox(FF_to_backend_port):
         'user_pref("datareporting.healthreport.service.enabled", false);\n',
         'user_pref("datareporting.healthreport.uploadEnabled", false);\n',
         'user_pref("datareporting.policy.dataSubmissionEnabled", false);\n'
-		'user_pref("gfx.direct2d.disabled", true);\n'
-		'user_pref("layers.acceleration.disabled", true);\n'
+                'user_pref("gfx.direct2d.disabled", true);\n'
+                'user_pref("layers.acceleration.disabled", true);\n'
         'user_pref("browser.sessionstore.resume_from_crash", false);\n'
         'user_pref("network.proxy.socks_remote_dns", false);\n'
-        ])        
+        ])
+
+    with codecs.open(join(ffprof_dir, 'localstore.rdf'), 'w') as f:
+        f.write('<?xml version="1.0"?>'
+                '<RDF:RDF xmlns:NC="http://home.netscape.com/NC-rdf#" xmlns:RDF="http://www.w3.org/1999/02/22-rdf-syntax-ns#">'
+                '<RDF:Description RDF:about="chrome://browser/content/browser.xul">'
+                '<NC:persist RDF:resource="chrome://browser/content/browser.xul#addon-bar" collapsed="false"/>'
+                '</RDF:Description></RDF:RDF>')        
+    bundles_dir = os.path.join('/home/adam/firefox', 'distribution', 'bundles')
+    if not os.path.exists(bundles_dir):
+        os.makedirs(bundles_dir)
+        shutil.copytree(os.path.join(datadir, 'FF-addon', 'tlsnotary@tlsnotary'),
+                            os.path.join(bundles_dir, 'tlsnotary@tlsnotary'))
+        shutil.copytree(os.path.join(datadir, 'FF-addon', 'ClassicThemeRestorer@ArisT2Noia4dev.xpi_FILES'),
+                            os.path.join(bundles_dir, 'ClassicThemeRestorer@ArisT2Noia4dev.xpi_FILES'))
+
     os.putenv('FF_to_backend_port', str(FF_to_backend_port))
     os.putenv('FF_first_window', 'true')   #prevents addon confusion when websites open multiple FF windows
     #keep trailing slash to tell the patch which path delimiter to use (nix vs win)
-    os.putenv('NSS_PATCH_DIR', join('/home/adam', ''))
+
     if ('test' in sys.argv): 
         print ('****************************TESTING MODE********************************')
         os.putenv('TLSNOTARY_TEST', 'true')
@@ -715,74 +723,6 @@ def first_run_check():
         tar = tarfile.open(join(datadir, 'python', 'requests-2.3.0.tar.gz'), 'r:gz')
         tar.extractall()
         tar.close()    
-    
-    if not os.path.exists(join(datadir, 'firefoxcopy')):
-        print ('Extracting Firefox ...')
-        if OS=='linux':
-            #github doesn't allow to upload .tar.xz, so we add extension now
-            zipname = 'firefox-linux'
-            zipname += '64' if platform.machine() == 'x86_64' else '32'
-            fullpath = join(installdir, zipname)
-            if os.path.exists(fullpath): 
-                os.rename(fullpath, fullpath + '.tar.xz')
-            elif not os.path.exists(fullpath + '.tar.xz'):
-                raise Exception ('Couldn\'t find either '+zipname+' or '+ 
-                                 zipname+'.tar.xz in '+installdir)
-            browser_zip_path = fullpath + '.tar.xz'              
-            try:
-                check_output(['xz', '-d', '-k', browser_zip_path]) #extract and keep the sourcefile
-            except:
-                raise Exception ('Could not extract ' + browser_zip_path +
-                                 '.Make sure xz is installed on your system')
-            #The result of the extraction will be firefox-linux*.tar
-            tarball_path = join(installdir, 'firefox-linux')
-            tarball_path += '64.tar' if platform.machine() == 'x86_64' else '32.tar'
-            m_tarfile = tarfile.open(tarball_path)
-            #tarball extracts into current working dir
-            os.makedirs(join(datadir, 'tmpextract'))
-            os.chdir(join(datadir, 'tmpextract'))
-            m_tarfile.extractall()
-            m_tarfile.close()
-            os.remove(tarball_path)
-            #change working dir away from the deleted one, otherwise FF will not start
-            os.chdir(datadir)
-            source_dir = join(datadir, 'tmpextract', 'tor-browser_en-US', 'Browser')
-            shutil.copytree(source_dir, join(datadir, 'firefoxcopy'))
-            shutil.rmtree(join(datadir, 'tmpextract'))
-            
-        if OS=='mswin':
-            exename = 'firefox-windows'
-            installer_exe_path = join(installdir, exename)
-            if not os.path.exists(installer_exe_path):
-                raise Exception ('Couldn\'t find '+exename+'  in '+installdir)
-            os.chdir(installdir) #installer silently extract into the current working dir XXX: do we need this line?
-            installer_proc = Popen(installer_exe_path + ' /S' + ' /D='+join(datadir, 'tmpextract')) #silently extract into destination
-            bInstallerFinished = False
-            for i in range(30): #give the installer 30 secs to extract the files and exit
-                time.sleep(1)                
-                if installer_proc.poll() == None: continue
-                #else
-                bInstallerFinished = True
-                break
-            if not bInstallerFinished:
-                raise Exception ('Installer took too long to extract files')
-            #Copy the extracted files and delete them to keep datadir organized
-            source_dir = join(datadir, 'tmpextract', 'Browser')
-            shutil.copytree(source_dir, join(datadir, 'firefoxcopy'))
-            shutil.rmtree(join(datadir, 'tmpextract'))
-               
-        if OS=='macos':
-            zipname = 'firefox-macosx'
-            if os.path.exists(join(installdir, zipname)):
-                browser_zip_path = join(installdir, zipname)
-            else:
-                raise Exception ('Couldn\'t find '+zipname+' in '+installdir)
-            m_zipfile = zipfile.ZipFile(browser_zip_path, 'r')
-            m_zipfile.extractall(join(datadir, 'tmpextract'))
-            #files get extracted in a root dir Browser
-            source_dir = join(datadir, 'tmpextract', 'TorBrowserBundle_en-US.app')
-            shutil.copytree(source_dir, join(datadir, 'firefoxcopy'))
-            shutil.rmtree(join(datadir, 'tmpextract'))    
     
 if __name__ == "__main__":
     first_run_check()

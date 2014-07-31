@@ -1,0 +1,254 @@
+@namespace url(http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul);
+@-moz-document url(chrome://browser/content/browser.xul) {
+
+	#nav-bar #notification-popup-box + *{
+	  -moz-padding-start: 9px !important;
+	  transition: none !important;
+	}
+
+	#nav-bar #notification-popup-box[hidden] + * {
+	  -moz-padding-start: 2px !important;
+	  transition: none !important;
+	}
+
+	#nav-bar #notification-popup-box:not([hidden]) {
+	  padding-left:2px !important;
+	  padding-right:2px !important;
+	  transition: none !important;
+	}
+	
+    #nav-bar #urlbar-container > #urlbar-wrapper > #urlbar,
+	#nav-bar #urlbar-container[forwarddisabled] > #urlbar-wrapper > #urlbar {
+      margin-left: 4px !important; /* has to be this for ltr and rtl locales */
+      transition: none !important;
+      transition-property: none !important;
+      transition-delay: 0s !important;
+    }
+
+	#main-window #navigator-toolbox #urlbar-wrapper {
+	  -moz-box-align: center !important;
+	}
+
+	#main-window[ctraddon_appbutton_on_navbar="true"] #appmenu-popup {
+	  margin-top:0px !important;
+	}
+
+	#navigator-toolbox #nav-bar #back-button > .toolbarbutton-icon{
+	  padding: 2px 0px !important;
+      margin: 0px 0px !important;
+	}
+	
+	#navigator-toolbox #nav-bar #forward-button > .toolbarbutton-icon{
+	  padding: 2px 0px !important;
+      margin: 0px !important;
+	}
+	#navigator-toolbox #nav-bar #back-button,
+	#navigator-toolbox #nav-bar #forward-button{
+      margin: -1px 0 !important;
+	}
+
+	/* Fx31*/
+	#main-window[fx31="true"] #navigator-toolbox #nav-bar:-moz-locale-dir(ltr) #forward-button{
+      margin-left: 4px !important;
+	}
+	#main-window[fx31="true"] #navigator-toolbox #nav-bar:-moz-locale-dir(rtl) #forward-button{
+      margin-left: 6px !important;
+	}
+	/**/
+
+	#nav-bar .toolbarbutton-1 {
+	  -moz-appearance: toolbarbutton !important;
+	  background: unset !important;
+	  box-shadow: unset !important;
+	}
+	
+	#navigator-toolbox #nav-bar:not([tabsontop="false"]) .toolbarbutton-1 > .toolbarbutton-menubutton-button,
+	#navigator-toolbox #nav-bar:not([tabsontop="false"]) .toolbarbutton-1 > .toolbarbutton-menubutton-dropmarker,
+	#navigator-toolbox #nav-bar:not([tabsontop="false"]) .toolbarbutton-1 {
+	  padding: 0px 0px !important;
+      margin: 1px 0 !important;
+	}
+	
+	#navigator-toolbox #nav-bar[tabsontop="false"] .toolbarbutton-1 > .toolbarbutton-menubutton-button,
+	#navigator-toolbox #nav-bar[tabsontop="false"] .toolbarbutton-1 > .toolbarbutton-menubutton-dropmarker,
+	#navigator-toolbox #nav-bar[tabsontop="false"] .toolbarbutton-1 {
+	  padding: 0px 0px !important;
+      margin: 1px 0 0 0 !important;
+	}
+
+	#navigator-toolbox:not([customizing]) #nav-bar-customization-target {
+      -moz-padding-end: 3px !important;
+      -moz-margin-end: -3px !important;
+	}
+	
+	#main-window[inFullscreen][tabsontop="false"] #nav-bar {
+	  margin-top: -1px !important;
+	}
+
+	@media not all and (-moz-windows-theme:aero) {
+	
+		#nav-bar .toolbarbutton-1:not([disabled]):hover {
+		  box-shadow: inset 0px 0px 2px #000000 !important;
+		  border-radius: 2.5px !important;
+		}
+
+	}
+	
+	#nav-bar .toolbarbutton-1 {
+      min-width:22px !important;
+    }
+
+    #nav-bar * .toolbarbutton-icon,
+	#nav-bar * {
+	  clip-path: none !important;
+	}
+
+	#nav-bar #urlbar-container #back-button:not([cui-areatype="menu-panel"]) {
+	  -moz-image-region: rect(0, 54px, 18px, 36px) !important;
+	}
+
+	#nav-bar #urlbar-container #forward-button[disabled]{
+	  visibility: visible !important;
+	  opacity: 1.0 !important;
+	}
+
+    #navigator-toolbox #nav-bar #back-button[disabled] > .toolbarbutton-icon,
+	#navigator-toolbox #nav-bar .toolbarbutton-menubutton-dropmarker > image,
+	#navigator-toolbox #nav-bar .toolbarbutton-menubutton-button .toolbarbutton-icon,
+	#navigator-toolbox #nav-bar toolbarbutton[type="menu-button"] > .toolbarbutton-icon,
+	#navigator-toolbox #nav-bar .toolbarbutton-1:-moz-any(:hover ,[checked],[open],[type="menu-button"]) > .toolbarbutton-icon,
+	#navigator-toolbox #nav-bar .toolbarbutton-1[type="menu-button"] > .toolbarbutton-menubutton-dropmarker::before{
+	  -moz-appearance: none !important;
+	  background: none !important;
+	  background-image: none !important;
+	  border-radius: 2.5px;
+	  border-color: transparent !important;
+	  box-shadow: none !important;
+	  transition-property: none !important;
+      transition-duration: 0ms !important;
+	}   
+
+	#nav-bar .toolbarbutton-menubutton-button > .toolbarbutton-icon,
+	#nav-bar .toolbarbutton-1:not([type="menu"]) > .toolbarbutton-icon{
+	  padding: 2px !important;
+	}
+
+	#nav-bar #back-button:not(:hover) > .toolbarbutton-icon,
+	#nav-bar #forward-button:not(:hover) > .toolbarbutton-icon,
+	#nav-bar #back-button:hover[disabled] > .toolbarbutton-icon,
+	#nav-bar #forward-button:hover[disabled] > .toolbarbutton-icon{
+	  -moz-appearance: none !important;
+	  border: 0px solid transparent !important;
+	  box-shadow: none !important;
+	  background: none !important;
+	}
+
+	
+	/* urlbar border tweaks */
+	#main-window[defaultfxtheme="true"] #nav-bar .searchbar-textbox,
+	#main-window[defaultfxtheme="true"] #nav-bar #urlbar {
+	  border: 1px solid ThreeDShadow !important;
+	}
+	@media (-moz-windows-default-theme) {
+	  #main-window[defaultfxtheme="true"] #nav-bar .searchbar-textbox,
+	  #main-window[defaultfxtheme="true"]  #nav-bar #urlbar {
+		border-color: rgba(0,0,0,.32) !important;
+	  }
+	  #main-window[defaultfxtheme="true"] #nav-bar .searchbar-textbox[focused="true"],
+	  #main-window[defaultfxtheme="true"] #nav-bar #urlbar[focused="true"] {
+		border:1px solid #72c0fe !important;
+	  }
+	}
+	#main-window[defaultfxtheme="true"] #nav-bar .searchbar-textbox:-moz-lwtheme,
+	#main-window[defaultfxtheme="true"] #nav-bar #urlbar:-moz-lwtheme {
+	  border-color: rgba(0,0,0,.32) !important;
+	}
+
+	#nav-bar #ctraddon_appbutton > .toolbarbutton-icon {
+	  padding-left: 0px !important;
+	  padding-right: 0px !important;
+	  margin-left: 0px !important;
+	  margin-right: 0px !important;
+	}
+
+	#nav-bar #ctraddon_puib_separator{
+	  margin-top: 2px !important;
+	  margin-bottom: 2px !important;
+	}
+
+	/* star button in urlbar support */
+	#navigator-toolbox  #nav-bar #urlbar-container #bookmarks-menu-button {
+      -moz-appearance: none !important;
+      background: unset !important;
+      box-shadow: unset !important;
+	  border: unset !important;
+    }
+
+	#navigator-toolbox #nav-bar #urlbar-container #bookmarks-menu-button > .toolbarbutton-menubutton-button {
+	  -moz-appearance: none !important;
+	  padding: 0px 0px !important;
+	  background: none !important;
+	  border: 0px solid !important;
+      margin-top: -7px !important;
+      margin-bottom: -8px !important;
+      -moz-margin-start: 2px !important;
+      -moz-margin-end: 2px !important;
+
+	  box-shadow: none !important;
+	}
+	#navigator-toolbox #nav-bar #urlbar-container  #bookmarks-menu-button > .toolbarbutton-menubutton-button:not(.tabs-newtab-button):not(.tab-close-button):not([disabled]):hover > .toolbarbutton-icon {
+      background-image: linear-gradient(hsla(0,0%,100%,.0), hsla(0,0%,100%,.0)) !important;
+      border-color: hsla(210,54%,20%,.0) hsla(210,54%,20%,.0) hsla(210,54%,20%,.0) !important;
+      box-shadow: none !important;
+	}
+	
+	#main-window #navigator-toolbox #nav-bar #urlbar-container #bookmarks-menu-button .toolbarbutton-icon {
+	  padding: 0px 4px !important;
+	  margin: -1px 0 0 0px !important;
+	}
+	
+	/* rss in urlbar addon */
+	#navigator-toolbox #nav-bar #urlbar-container #feed-button {
+      -moz-appearance: none !important;
+      background: unset !important;
+      box-shadow: unset !important;
+	  border: unset !important;
+      padding: unset !important;
+      margin: -8px -4px !important;
+    }
+
+
+	/* zoom page add-on */
+    #navigator-toolbox #nav-bar #zoompage-zoomdisplay-s,
+    #navigator-toolbox #nav-bar #zoompage-zoomin-s,
+    #navigator-toolbox #nav-bar #zoompage-zoomout-s,
+    #navigator-toolbox #nav-bar #zoompage-zoomdisplay-t,
+    #navigator-toolbox #nav-bar #zoompage-zoomout-t,
+    #navigator-toolbox #nav-bar #zoompage-zoomin-t {
+      -moz-appearance: none !important;
+    }
+	#nav-bar #zoompage-zoomout-s image,
+	#nav-bar #zoompage-zoomin-s image,
+	#nav-bar #zoompage-zoomout-t image,
+	#nav-bar #zoompage-zoomin-t image{
+	  padding:1px !important;
+	}
+	
+	#navigator-toolbox #nav-bar #zoompage-zoomin-c,
+	#navigator-toolbox #nav-bar #zoompage-zoomout-c,
+	#navigator-toolbox #nav-bar #zoompage-zoomin-n,
+	#navigator-toolbox #nav-bar #zoompage-zoomout-n {
+      -moz-appearance: none !important;
+      margin-left:-4px !important;
+      margin-right:-4px !important;
+    }
+	#nav-bar #zoompage-zoomin-c image,
+	#nav-bar #zoompage-zoomdisplay-c image,
+	#nav-bar #zoompage-zoomout-c image,
+	#nav-bar #zoompage-zoomin-n image,
+	#nav-bar #zoompage-zoomdisplay-n image,
+	#nav-bar #zoompage-zoomout-n image{
+	  padding:0px !important;
+	}
+
+}

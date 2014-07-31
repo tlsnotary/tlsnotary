@@ -1,0 +1,17 @@
+@namespace url(http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul);
+
+@-moz-document url(chrome://browser/content/browser.xul) {
+
+	window:not([chromehidden~="toolbar"]) #ctraddon_appbutton {
+	  visibility: visible !important;
+	}
+	
+	#ctraddon_appbutton2{
+	  visibility: collapse !important;
+	}
+	
+	#main-window[ctraddon_appbutton_on_addonbar="true"] #appmenu-popup {
+	  -moz-margin-start: 20px !important;
+	}
+
+}

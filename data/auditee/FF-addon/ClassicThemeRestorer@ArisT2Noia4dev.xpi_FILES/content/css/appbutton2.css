@@ -1,0 +1,182 @@
+@namespace url(http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul);
+
+@-moz-document url(chrome://browser/content/browser.xul) {
+
+	toolbar #ctraddon_appbutton,
+	#main-window:not([tabsintitlebar]) #ctraddon_appbutton2,
+	#main-window[customizing][sizemode="maximized"] #ctraddon_appbutton2	{
+	  visibility: collapse !important;
+	}
+	
+	window:not([chromehidden~="toolbar"]) #ctraddon_appbutton2 {
+	  visibility: visible !important;
+	}
+	
+	#main-window[tabsintitlebar][sizemode="maximized"]:not([tabsontop="false"]) #TabsToolbar {
+	  -moz-padding-start: 2px !important;
+	}
+
+	/* style appbutton*/
+	#ctraddon_appbutton2{
+	  -moz-appearance:none !important;
+	  background-clip: padding-box !important;
+	  border-radius: 0 0 4px 4px;
+	  color: white !important;
+	  text-shadow: 0 0 1px rgba(0,0,0,.7),
+				   0 1px 1.5px rgba(0,0,0,.5) !important;
+	  font-weight: bold !important;
+	  padding: 0 1.4em .05em !important;
+	  border-top: none !important;
+	  border-right: 2px solid !important;
+	  border-left: 2px solid !important;
+	  border-bottom: 2px solid !important;
+	  -moz-border-right-colors: rgba(255,255,255,.60) hsla(214,89%,21%,.5) !important;
+	  -moz-border-left-colors: rgba(255,255,255,.60) hsla(214,89%,21%,.5) !important;
+	  -moz-border-bottom-colors: rgba(255,255,255,.70) hsla(214,89%,21%,.5) !important;
+	}
+
+	#ctraddon_appbutton2 #ctraddon_appbuttonPopup{
+	  margin-top:-1px;
+	  -moz-margin-start:0px;
+	}
+	
+	#ctraddon_appbutton2:hover:active,
+	#ctraddon_appbutton2[open] {
+	  border-radius:0 0 0 0;
+	}
+
+	/* restore hidden titlebar and move it behind tabs toolbar for 
+	   'tabsintitlebar=false' */
+
+	@media all and (-moz-windows-theme:aero) {
+
+		@media all and (-moz-windows-compositor) {
+			
+			#main-window[sizemode="normal"] #ctraddon_appbutton2{
+			  margin-top:1px !important;
+			  margin: 1px 0 2px 0px !important;
+			}
+			
+			#main-window[sizemode="maximized"] #ctraddon_appbutton2{
+			  margin-top:0px !important;
+			  margin: 0px 0 2px 0px !important;
+			}
+			
+			#main-window[sizemode="normal"] > #titlebar:-moz-lwtheme #ctraddon_appbutton2{
+			  margin-top:1px !important;
+			  margin: -1px 0 2px 1px !important;
+			}
+			
+		}
+		
+		@media not all and (-moz-windows-compositor) {
+			#main-window[tabsintitlebar][sizemode="normal"]  #ctraddon_appbutton2{
+			  margin-top:0px !important;
+			  margin: 0px 0 10px 1px !important;
+			}
+			#main-window[tabsintitlebar][sizemode="maximized"]  #ctraddon_appbutton2{
+			  margin-top:-1px !important;
+			  margin: -2px 0 2px 0px !important;
+			}
+			#main-window[sizemode="normal"] > #titlebar:-moz-lwtheme #ctraddon_appbutton2{
+			  margin-top:1px !important;
+			  margin: -1px 0 8px 1px !important;
+			}
+		}
+		
+	}
+
+	@media all and (-moz-windows-classic) {
+
+		#ctraddon_appbutton2{
+		  margin-top:0px !important;
+		  margin: 0px 0 2px 0px !important;
+		}
+
+	}
+	
+	@media all and (-moz-windows-theme: luna-blue){
+
+		#main-window[tabsintitlebar][sizemode="normal"]  #ctraddon_appbutton2{
+		  margin-top:0px !important;
+		  margin: 0px 0 10px 1px !important;
+		}
+		
+		#main-window[tabsintitlebar][sizemode="maximized"]   #ctraddon_appbutton2{
+		  margin-top:-1px !important;
+		  margin: -1px 0 8px 0px !important;
+		}
+	}
+	
+	@media all and (-moz-windows-theme: luna-silver){
+	
+		#main-window[tabsintitlebar][sizemode="normal"]  #ctraddon_appbutton2{
+		  margin-top:0px !important;
+		  margin: 0px 0 10px 1px !important;
+		}
+		
+		#main-window[tabsintitlebar][sizemode="maximized"]   #ctraddon_appbutton2{
+		  margin-top:-1px !important;
+		  margin: -1px 0 8px 0px !important;
+		}
+	}
+	
+	@media all and (-moz-windows-theme: luna-olive){
+
+		#main-window[tabsintitlebar][sizemode="normal"]  #ctraddon_appbutton2{
+		  margin-top:0px !important;
+		  margin: 0px 0 10px 1px !important;
+		}
+		
+		#main-window[tabsintitlebar][sizemode="maximized"]   #ctraddon_appbutton2{
+		  margin-top:-1px !important;
+		  margin: -1px 0 8px 0px !important;
+		}
+	}
+	
+	@media all and (-moz-windows-theme: royale){
+		#main-window:not([tabsintitlebar])[sizemode="normal"] #titlebar,
+		#main-window:not([tabsintitlebar])[sizemode="maximized"] #titlebar{
+		  display: block !important;
+		  margin-bottom:-12px !important;
+		  -moz-appearance:none !important;
+		}
+	
+		#main-window[tabsintitlebar][sizemode="normal"]  #ctraddon_appbutton2{
+		  margin-top:0px !important;
+		  margin: 0px 0 13px 1px !important;
+		}
+		
+		#main-window[tabsintitlebar][sizemode="maximized"]   #ctraddon_appbutton2{
+		  margin-top:-1px !important;
+		  margin: -1px 0 8px 0px !important;
+		}
+	}
+	
+	@media all and (-moz-windows-theme: zune){
+		#main-window[tabsintitlebar][sizemode="normal"]  #ctraddon_appbutton2{
+		  margin-top:0px !important;
+		  margin: 0px 0 13px 1px !important;
+		}
+		
+		#main-window[tabsintitlebar][sizemode="maximized"]   #ctraddon_appbutton2{
+		  margin-top:-1px !important;
+		  margin: -1px 0 8px 0px !important;
+		}
+	}
+	
+	/* trigger non-default themes on Win7/8, but exclude Windows Classic theme*/
+	@media not all and (-moz-windows-classic) {
+	  @media not all and (-moz-os-version: windows-xp){
+		@media not all and (-moz-windows-default-theme) {
+			#main-window[sizemode="normal"] #titlebar #titlebar-content #ctraddon_appbutton2{
+			  margin: 0px 0 5px 0px !important;
+			}
+			#main-window[sizemode="maximized"] #titlebar #titlebar-content #ctraddon_appbutton2{
+			  margin: -2px 0 1px -1px !important;
+			}
+		}
+	  }
+	}
+
+}
