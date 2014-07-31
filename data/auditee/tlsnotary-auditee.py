@@ -49,6 +49,7 @@ rsExponent = None
 tlsnSession = None
 tshark_exepath = editcap_exepath= ''
 firefox_pid = selftest_pid = 0
+firefox_install_path = None
 
 cr_list = [] #a list of all client_randoms for recorded pages used by tshark to search for html only in audited tracefiles.
 
@@ -564,6 +565,12 @@ def peer_handshake():
        
 def start_firefox(FF_to_backend_port):    
     #sanity check
+    if OS=='linux':
+        if firefox_install_path=='/usr/lib/firefox':
+            firefox_exepath='firefox'
+        else:
+            firefox_exepath=join(firefox_install_path,'firefox')
+
     if OS=='mswin':
         path_x86 = 'C:/Program Files (x86)/Mozilla Firefox/firefox.exe'
         path_other = 'C:/Program Files/Mozilla Firefox/firefox.exe'
@@ -573,14 +580,8 @@ def start_firefox(FF_to_backend_port):
             firefox_exepath = path_other
         else:
             exit(FIREFOX_MISSING)
-    else:
-        if not check_output(['which','firefox']):
-            exit(FIREFOX_MISSING)
-        firefox_exepath = 'firefox'
-        #possibly required for some linuces?
-        #import stat
-        #os.chmod(firefox_exepath,stat.S_IRWXU)
-    firefox_exepath='/home/adam/firefox/firefox'
+    #TODO MACos
+
     logs_dir = join(datadir, 'logs')
     if not os.path.isdir(logs_dir): os.makedirs(logs_dir)
     with open(join(logs_dir, 'firefox.stdout'), 'w') as f: pass
@@ -619,7 +620,7 @@ def start_firefox(FF_to_backend_port):
                 '<RDF:Description RDF:about="chrome://browser/content/browser.xul">'
                 '<NC:persist RDF:resource="chrome://browser/content/browser.xul#addon-bar" collapsed="false"/>'
                 '</RDF:Description></RDF:RDF>')        
-    bundles_dir = os.path.join('/home/adam/firefox', 'distribution', 'bundles')
+    bundles_dir = os.path.join(firefox_install_path, 'distribution', 'bundles')
     if not os.path.exists(bundles_dir):
         os.makedirs(bundles_dir)
         shutil.copytree(os.path.join(datadir, 'FF-addon', 'tlsnotary@tlsnotary'),
@@ -738,6 +739,25 @@ if __name__ == "__main__":
     from slowaes import AESModeOfOperation        
     import shared
     shared.load_program_config()
+    global firefox_install_path
+    firefox_install_path = sys.argv[1]
+    if not firefox_install_path:
+        if OS=='linux':
+            firefox_install_path = '/usr/lib/firefox'
+        elif OS=='mswin':
+            prog64 = os.getenv('ProgramW6432')
+            prog32 = os.getenv('ProgramFiles(x86)')
+            progxp = os.getenv('ProgramFiles')
+            if prog64:
+                firefox_install_path = join(prog64,'Mozilla Firefox')
+            elif prog32:
+                firefox_install_path = join(prog64,'Mozilla Firefox')
+            elif progxp:
+                firefox_install_path = join(prog64,'Mozilla Firefox')
+            if not firefox_install_path:
+                raise Exception('Could not set firefox install path')
+        elif OS=='macos':
+            firefox_install_path = join("Applications","Firefox.app")
 
     thread = shared.ThreadWithRetval(target= http_server)
     thread.daemon = True
