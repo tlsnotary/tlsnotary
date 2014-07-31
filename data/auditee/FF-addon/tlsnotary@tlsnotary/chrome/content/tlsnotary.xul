@@ -3,7 +3,7 @@
          xmlns="http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul">
   <script type="application/x-javascript" src="script.js"/>
   <script type="application/x-javascript" src="testdriver_script.js"/>
-  <toolbar id="addon-bar">
+  <toolbar id="ctraddon_addon-bar">
     <box id="box" orient="horizontal" align="center">
 		<label id="help" value=""/>
         <button id="button_record_disabled" minheight="25" maxheight="25" width="180" hidden="false" disabled="true" image="chrome://tlsnotary/skin/record_disabled.png" style="background-color: #006ECC !important;"/>
