@@ -354,7 +354,7 @@ def stop_recording():
     commit_dir = join(current_sessiondir, 'commit')
     com_dir_files = os.listdir(commit_dir)
     for onefile in com_dir_files:
-        if not onefile.startswith(('response', 'md5hmac', 'domain','IV')): continue
+        if not onefile.startswith(('response', 'md5hmac', 'domain','IV','cs')): continue
         zipf.write(join(commit_dir, onefile), onefile)
     zipf.close()
     try: link = sendspace_getlink(join(tracedir, 'mytrace.zip'))
@@ -443,6 +443,8 @@ def audit_page(headers,pms_secret):
     with open(response_path,'wb') as f: f.write(response)
     IV_path = join(commit_dir,'IV' + sf )
     with open(IV_path,'wb') as f: f.write(tlsnSession.serverFinished[-16:])
+    cs_path = join(commit_dir,'cs' + sf )
+    with open(cs_path,'wb') as f: f.write(str(tlsnSession.chosenCipherSuite))
     md5hmac_path = join(commit_dir, 'md5hmac'+ sf )
     with open(md5hmac_path, 'wb') as f: f.write(tlsnSession.pAuditee)
     domain_path = join(commit_dir,'domain' + sf)

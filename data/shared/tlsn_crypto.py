@@ -148,7 +148,6 @@ class TLSNSSLClientSession(object):
             print ("Invalid cipher suite chosen")
             return None
         self.chosenCipherSuite = csInt
-        print ('we set the cipher suite to: ',self.cipherSuites[csInt][0])
         return csInt
 
     def processServerHello(self,sh_cert_shd):

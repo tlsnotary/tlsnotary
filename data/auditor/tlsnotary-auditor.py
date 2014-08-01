@@ -210,11 +210,12 @@ def process_messages():
                 with open(os.path.join(auditeetrace_dir, 'md5hmac'+seqno), 'rb') as f: md5hmac = f.read()
                 with open(os.path.join(auditeetrace_dir,'response'+seqno),'rb') as f: response = f.read()
                 with open(os.path.join(auditeetrace_dir,'IV'+seqno),'rb') as f: IV_data = f.read()
+                with open(os.path.join(auditeetrace_dir,'cs'+seqno),'rb') as f: cs_data = f.read()
                 with open(os.path.join(commit_dir, 'sha1hmac'+seqno), 'rb') as f: sha1hmac = f.read()
                 with open(os.path.join(commit_dir, 'cr'+seqno), 'rb') as f: cr = f.read()
                 with open(os.path.join(commit_dir, 'sr'+seqno), 'rb') as f: sr = f.read()
                 #get the expanded keys and decrypt the corresponding response file
-                decrSession = shared.TLSNSSLClientSession('dummy.com')
+                decrSession = shared.TLSNSSLClientSession('dummy.com',ccs = int(cs_data))
                 decrSession.clientRandom = cr
                 decrSession.serverRandom = sr
                 decrSession.pAuditee = md5hmac
