@@ -154,12 +154,14 @@ class TLSNSSLClientSession(object):
     def processServerHello(self,sh_cert_shd):
         #server hello always starts with 16 03 01 * * 02
         #certificate always starts with 16 03 01 * * 0b
+        #sanity check - print out the entire sh_cert_shd
+        with open("shcertshd.txt","wb") as f: f.write(binascii.hexlify(sh_cert_shd)) #overwrites so only last one
         shd = '\x16\x03\x01\x00\x04\x0e\x00\x00\x00'
-        sh_magic = re.compile(b'\x16\x03\x01..\x02')
+        sh_magic = re.compile(b'\x16\x03\x01..\x02',re.DOTALL)
         if not re.match(sh_magic, sh_cert_shd): raise Exception ('Invalid server hello')
         if not sh_cert_shd.endswith(shd): raise Exception ('invalid server hello done')
         #find the beginning of certificate message
-        cert_magic = re.compile(b'\x16\x03\x01..\x0b')
+        cert_magic = re.compile(b'\x16\x03\x01..\x0b',re.DOTALL)
         cert_match = re.search(cert_magic, sh_cert_shd)
         if not cert_match: raise Exception ('Invalid certificate message')
         cert_start_position = cert_match.start()
