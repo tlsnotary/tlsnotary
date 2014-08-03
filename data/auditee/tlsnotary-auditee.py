@@ -375,7 +375,7 @@ def audit_page(headers,pms_secret):
     tlssock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     tlssock.settimeout(10)
     server_name, headers = parse_headers(headers)
-    tlsnSession = shared.TLSNSSLClientSession(server_name,audit=True)
+    tlsnSession = shared.TLSNSSLClientSession(server_name,ccs=5,audit=True)
     tlsnSession.auditeeSecret = pms_secret
     tlssock.connect((tlsnSession.serverName, tlsnSession.sslPort))
     tlssock.send(tlsnSession.handshakeMessages[0])
@@ -447,7 +447,10 @@ def audit_page(headers,pms_secret):
     response_path = join(commit_dir, 'response'+ sf )
     with open(response_path,'wb') as f: f.write(response)
     IV_path = join(commit_dir,'IV' + sf )
-    with open(IV_path,'wb') as f: f.write(tlsnSession.serverFinished[-16:])
+    #the IV data is not actually an IV, it's the current cipher state
+    if tlsnSession.chosenCipherSuite in [47,53]: IV_data = tlsnSession.serverFinished[-16:]
+    else: IV_data = bytearray(tlsnSession.serverRC4State[0])+chr(tlsnSession.serverRC4State[1])+chr(tlsnSession.serverRC4State[2])
+    with open(IV_path,'wb') as f: f.write(IV_data)
     cs_path = join(commit_dir,'cs' + sf )
     with open(cs_path,'wb') as f: f.write(str(tlsnSession.chosenCipherSuite))
     md5hmac_path = join(commit_dir, 'md5hmac'+ sf )

@@ -228,8 +228,14 @@ def process_messages():
                 decrSession.pAuditor = sha1hmac
                 decrSession.setMasterSecretHalf()
                 decrSession.doKeyExpansion()
+                
                 decrSession.storeServerAppDataRecords(response)
-                decrSession.lastServerCiphertextBlock = IV_data
+                #set up the cipher state for decryption
+                if decrSession.chosenCipherSuite in [47,53]:
+                    decrSession.lastServerCiphertextBlock = IV_data
+                else:
+                    decrSession.serverRC4State=(map(ord,IV_data[:256]),ord(IV_data[256]),ord(IV_data[257]))
+                    
                 plaintext, bad_mac = decrSession.processServerAppDataRecords()
                 if bad_mac:
                     print ("AUDIT FAILURE - invalid mac")

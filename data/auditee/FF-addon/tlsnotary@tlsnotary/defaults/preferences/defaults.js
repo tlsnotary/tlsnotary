@@ -31,8 +31,8 @@ pref("security.ssl3.rsa_camellia_128_sha",false);
 pref("security.ssl3.rsa_camellia_256_sha",false);
 pref("security.ssl3.rsa_des_ede3_sha",false);
 pref("security.ssl3.rsa_fips_des_ede3_sha",false);
-pref("security.ssl3.rsa_rc4_128_md5",false);
-pref("security.ssl3.rsa_rc4_128_sha",false);
+pref("security.ssl3.rsa_rc4_128_md5",true);
+pref("security.ssl3.rsa_rc4_128_sha",true);
 pref("security.ssl3.rsa_seed_sha",false);
 pref("security.tls.version.max",1); // use only TLS 1.0
 

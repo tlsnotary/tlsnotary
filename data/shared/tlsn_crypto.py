@@ -47,9 +47,10 @@ class TLSNSSLClientSession(object):
         AES128-CBC-SHA: mac key 20*2, encryption key 16*2, IV 16*2 == 104bytes
         RC4128_SHA: mac key 20*2, encryption key 16*2 == 72bytes
         RC4128_MD5: mac key 16*2, encryption key 16*2 == 64 bytes'''
-        self.cipherSuites = {47:['AES128',20,20,16,16,16,16],53:['AES256',20,20,32,32,16,16]}
-        #,\
-         #               4:['RC4MD5',20,20,16,16,0,0],5:['RC4SHA',16,16,16,16,0,0]}
+        self.cipherSuites = {47:['AES128',20,20,16,16,16,16],53:['AES256',20,20,32,32,16,16]\
+         ,5:['RC4SHA',20,20,16,16,0,0],4:['RC4MD5',16,16,16,16,0,0]}
+        #{47:['AES128',20,20,16,16,16,16],53:['AES256',20,20,32,32,16,16]#}
+         #,5:['RC4SHA',16,16,16,16,0,0]} #4:['RC4MD5',20,20,16,16,0,0],}
 
         #preprocessing: add the total number of bytes in the expanded keys format
         #for each cipher suite, for ease of reference
@@ -85,8 +86,8 @@ class TLSNSSLClientSession(object):
         self.lastServerCiphertextBlock = None
 
         #needed for maintaining RC4 cipher state
-        self.clientRC4Box = None
-        self.serverRC4Box = None
+        self.clientRC4State = None
+        self.serverRC4State = None
 
         #needed for record HMAC construction
         self.clientSeqNo = 0
@@ -104,7 +105,7 @@ class TLSNSSLClientSession(object):
         #is encrypted over the wire, is also needed for
         #hashing in unencrypted form.
         self.unencryptedClientFinished = None
-
+        
         #create clientHello on instantiation
         self.setClientHello(audit)
 
@@ -133,7 +134,9 @@ class TLSNSSLClientSession(object):
         else:
             remaining += '\x00'+chr(2*len(self.cipherSuites))
             for a in self.cipherSuites:
-                remaining += '\x00'+chr(a)
+                remaining += '\x00'+chr(a)            
+            #remaining += '\x00\x02\x00'+chr(5) #HACK for RC4 testing
+            
         remaining += '\x01\x00'
         self.handshakeMessages[0] += chr(len(remaining)) + remaining
         self.handshakeMessages[0][4] = chr(len(remaining)+4)
@@ -190,6 +193,7 @@ class TLSNSSLClientSession(object):
         if sh[cs_start_byte] != '\x00' or ord(sh[cs_start_byte+1]) not in self.cipherSuites.keys():
             raise Exception("Could not locate cipher suite choice in server hello.")
         self.setCipherSuite(sh[cs_start_byte+1])
+        
         return (self.handshakeMessages[1:4], self.serverRandom)
 
     def setEncryptedPMS(self):
@@ -413,7 +417,7 @@ class TLSNSSLClientSession(object):
         record_mac = self.buildRecordMac(False,cleartext,'\x17')
         cleartext += record_mac
         if self.chosenCipherSuite in [4,5]:
-            ciphertext, self.clientRC4Box = RC4crypt(cleartext,self.clientEncKey,self.clientRC4Box)
+            ciphertext, self.clientRC4State = RC4crypt(bytearray(cleartext),self.clientEncKey,self.clientRC4State)
         elif self.chosenCipherSuite in [47,53]:
             cleartextList = map(ord,cleartext)
             #clientEncList = map(ord,self.clientEncKey)
@@ -485,7 +489,8 @@ class TLSNSSLClientSession(object):
         cleartext = '\x14\x00\x00\x0c' + verifyData + hmacVerify
         self.unencryptedClientFinished = '\x14\x00\x00\x0c' + verifyData
         if self.chosenCipherSuite in [4,5]:
-            hmacedVerifyData, self.clientRC4Box = RC4crypt(cleartext,self.clientEncKey) #first record, box is null
+            hmacedVerifyData, self.clientRC4State = RC4crypt(cleartext,self.clientEncKey) #first record, box is null
+            msgLen = '\x00\x24'
         elif self.chosenCipherSuite in [47,53]:
             cleartextList = bigint_to_list(ba2int(cleartext))
             clientEncList =  bigint_to_list(ba2int(self.clientEncKey))
@@ -495,12 +500,13 @@ class TLSNSSLClientSession(object):
             mode, origLen, hmacedVerifyData = \
             moo.encrypt( str(paddedCleartext), moo.modeOfOperation['CBC'], clientEncList, len(self.clientEncKey), clientIVList)
             self.lastClientCiphertextBlock = hmacedVerifyData[-16:]
+            msgLen='\x00\x30'
         else:
             print ("Unrecognised cipher suite in getCKECCSF")
             return None
 
         self.clientSeqNo += 1
-        self.handshakeMessages[6] = '\x16\x03\x01\x00\x30' + bytearray(hmacedVerifyData)
+        self.handshakeMessages[6] = '\x16\x03\x01' +msgLen + bytearray(hmacedVerifyData)
         return bytearray('').join(self.handshakeMessages[4:])
 
     def processServerCCSFinished(self, data, providedPValue):
@@ -522,7 +528,7 @@ class TLSNSSLClientSession(object):
         
         #decrypt:
         if self.chosenCipherSuite in [4,5]:
-            decrypted,self.serverRC4Box = RC4crypt(self.serverFinished[5:],self.serverEncKey) #box is null for first record
+            decrypted,self.serverRC4State = RC4crypt(bytearray(self.serverFinished[5:]),self.serverEncKey) #box is null for first record
         elif self.chosenCipherSuite in [47,53]:
             ciphertextList = bigint_to_list(ba2int(self.serverFinished[5:]))
             serverEncList = bigint_to_list(ba2int(self.serverEncKey))
@@ -608,13 +614,12 @@ class TLSNSSLClientSession(object):
             print ("Could not process the server response, no ciphertext found.")
             return None
         for ciphertext in self.serverResponseCiphertexts:
-            print ("Starting to process a record with ciphertext length: ",len(ciphertext))
             #need correct sequence number for macs
             self.serverSeqNo += 1
 
             if self.chosenCipherSuite in [4,5]: #RC4
-                raw_plaintext, self.serverRC4Box = RC4crypt(ciphertext,self.serverEncKey,\
-                                                            self.serverRC4Box)
+                raw_plaintext, self.serverRC4State = RC4crypt(bytearray(ciphertext),self.serverEncKey,\
+                                                            self.serverRC4State)
             elif self.chosenCipherSuite in [47,53]: #AES-CBC
                 ciphertextList = map(ord,ciphertext)
                 serverEncList =  bigint_to_list(ba2int(self.serverEncKey))
@@ -659,23 +664,26 @@ def getCBCPadding(data_length):
 #must be called "as a whole", since stream ciphers
 #in TLS use the final state of the cipher at the end
 #of one record to initialise the next record (see RFC).
-def RC4crypt(data, key, box=None):
+def RC4crypt(data, key, state=None):
     """RC4 algorithm"""
-    x = 0
-    if not box:
+    if not state:
+        x = 0
         box = range(256)
         for i in range(256):
-            x = (x + box[i] + ord(key[i % len(key)])) % 256
+            x = (x + box[i] + key[i % len(key)]) % 256
             box[i], box[x] = box[x], box[i]
-    x = y = 0
+        x = y = 0
+    else:
+        box,x,y = state
+        
     out = []
     for char in data:
         x = (x + 1) % 256
         y = (y + box[x]) % 256
         box[x], box[y] = box[y], box[x]
-        out.append(chr(ord(char) ^ box[(box[x] + box[y]) % 256]))
-
-    return (''.join(out), box )
+        out.append(chr(char ^ box[(box[x] + box[y]) % 256]))
+    out_state = (box, x, y)
+    return (''.join(out), out_state )
 
 def TLS10PRF(seed, req_bytes = 48, first_half=None,second_half=None,full_secret=None):
     '''
