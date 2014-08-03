@@ -29,8 +29,8 @@ msg_chunk_size = None
 initialized = False
 
 #valid types of tlsnotary message to be passed on the private message channel
-message_types_from_auditor = ('grsapms_ghmac', 'rsapms_hmacms_hmacek', 'verify_hmac', 'response', 'sha1hmac_for_MS')
-message_types_from_auditee =  ('cr_sr_hmac_n_e', 'gcr_gsr', 'verify_md5sha', 'zipsig', 'link', 'commit_hash')
+message_types_from_auditor = ('grsapms_ghmac', 'rsapms_hmacms_hmacek', 'verify_hmac', 'verify_hmac2','response', 'sha1hmac_for_MS')
+message_types_from_auditee =  ('cr_sr_hmac_n_e', 'gcr_gsr', 'verify_md5sha','verify_md5sha2', 'zipsig', 'link', 'commit_hash')
 
 
 def tlsn_initialise_messaging(my_nick):

@@ -409,12 +409,17 @@ def audit_page(headers,pms_secret):
     reply = send_and_recv('verify_md5sha:'+md5_digest+sha_digest)
     if reply[0] != 'success': return ('Failed to receive a reply')
     if not reply[1].startswith('verify_hmac:'): return ('bad reply. Expected verify_hmac:')
-    verify_hmac = reply[1][len('verify_hmac:'):]
+    verify_hmac= reply[1][len('verify_hmac:'):]
     data =  tlsnSession.getCKECCSF(providedPValue=verify_hmac)
     tlssock.send(data)
     time.sleep(0.5)
     response = tlssock.recv(8192)
-    tlsnSession.processServerCCSFinished(response)
+    sha_digest2,md5_digest2 = tlsnSession.getHandshakeHashes(isForServer = True)
+    reply = send_and_recv('verify_md5sha2:'+md5_digest2+sha_digest2)
+    if reply[0] != 'success':return("Failed to receive a reply")
+    if not reply[1].startswith('verify_hmac2:'):return("bad reply. Expected verify_hmac2:")
+    verify_hmac2 = reply[1][len('verify_hmac2:'):]
+    tlsnSession.processServerCCSFinished(response,providedPValue = verify_hmac2)
     headers += '\r\n'
     encrypted_request = tlsnSession.buildRequest(headers)
     tlssock.send(encrypted_request)

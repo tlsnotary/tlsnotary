@@ -116,8 +116,14 @@ def process_messages():
         #---------------------------------------------------------------------#
         elif msg.startswith('verify_md5sha:'):
             md5sha = msg[len('verify_md5sha:'):]
-            md5hmac1 = tlsnSession.getVerifyHMAC(md5sha[16:],md5sha[:16],half=1)
-            send_message('verify_hmac:'+md5hmac1)
+            md5hmac = tlsnSession.getVerifyHMAC(md5sha[16:],md5sha[:16],half=1)
+            send_message('verify_hmac:'+md5hmac)
+            continue
+        #---------------------------------------------------------------------#
+        elif msg.startswith('verify_md5sha2:'):
+            md5sha2 = msg[len('verify_md5sha2:'):]
+            md5hmac2 = tlsnSession.getVerifyHMAC(md5sha2[16:],md5sha2[:16],half=1,isForClient=False)
+            send_message('verify_hmac2:'+md5hmac2)
             continue
         #------------------------------------------------------------------------------------------------------#    
         elif msg.startswith('commit_hash:'):

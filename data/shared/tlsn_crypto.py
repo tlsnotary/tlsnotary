@@ -84,9 +84,26 @@ class TLSNSSLClientSession(object):
         self.lastClientCiphertextBlock = None
         self.lastServerCiphertextBlock = None
 
+        #needed for maintaining RC4 cipher state
+        self.clientRC4Box = None
+        self.serverRC4Box = None
+
         #needed for record HMAC construction
         self.clientSeqNo = 0
         self.serverSeqNo = 0
+
+        #array of ciphertexts from each SSL record
+        self.serverResponseCiphertexts=[]
+
+        #the HMAC required to construct the verify data
+        #for the server Finished record
+        self.verifyHMACForServerFinished = None
+        
+        #all handshake messages are stored as transferred
+        #over the wire, but the Finished message, which
+        #is encrypted over the wire, is also needed for
+        #hashing in unencrypted form.
+        self.unencryptedClientFinished = None
 
         #create clientHello on instantiation
         self.setClientHello(audit)
@@ -349,28 +366,27 @@ class TLSNSSLClientSession(object):
         self.clientMacKey,self.serverMacKey,self.clientEncKey,self.serverEncKey,self.clientIV,self.serverIV = keyAccumulator
         return bytearray('').join(filter(None,keyAccumulator))
 
-    def getVerifyHMAC(self,sha_verify=None,md5_verify=None,half=1):
-        label = 'client finished'
+    def getVerifyHMAC(self,sha_verify=None,md5_verify=None,half=1,isForClient=True):
+        label = 'client finished' if isForClient else 'server finished'
         seed = md5_verify + sha_verify
         if half==1:
             return TLS10PRF(label+seed,req_bytes=12,first_half = self.masterSecretHalfAuditor)[0]
         else:
             return TLS10PRF(label+seed,req_bytes=12,second_half = self.masterSecretHalfAuditee)[1]
 
-    def getHandshakeHashes(self):
+    def getHandshakeHashes(self, isForServer = False):
         self.handshakeMessages[4] = '\x16\x03\x01\x01\x06\x10\x00\x01\x02\x01\00' \
                                             + bigint_to_bytearray(self.encPMS)
         self.handshakeMessages[5] = '\x14\x03\01\x00\x01\x01'
         handshakeData = bytearray('').join([x[5:] for x in self.handshakeMessages[:5]])
+        if isForServer: handshakeData += self.unencryptedClientFinished
         sha_verify = sha1(handshakeData).digest()
         md5_verify = md5(handshakeData).digest()
         return (sha_verify,md5_verify)
 
     def getVerifyDataForFinished(self,sha_verify=None,md5_verify=None,half=1,providedPValue=None):
-        sha_verify, md5_verify = self.getHandshakeHashes()
         if not (sha_verify and md5_verify):
-            print ('sha or md5 verify were not set, could not calculate verify data')
-            return None
+            sha_verify, md5_verify = self.getHandshakeHashes()
 
         if not providedPValue:
             #we calculate the verify data from the raw handshake messages
@@ -393,19 +409,26 @@ class TLSNSSLClientSession(object):
         will be less than 16kB and therefore only 1 SSL record.
         This can in principle be used more than once.'''
         bytes_to_send = '\x17'+self.tlsMajorVersionNum+self.tlsMinorVersionNum #app data, tls version
-        key_size = self.cipherSuites[self.chosenCipherSuite][3]
-        moo = AESModeOfOperation()
+
         record_mac = self.buildRecordMac(False,cleartext,'\x17')
         cleartext += record_mac
-        #cleartextList,clientEncList = [map(ord,x) for x in [cleartext,self.clientEncKey]]
-        cleartextList = map(ord,cleartext)
-        #clientEncList = map(ord,self.clientEncKey)
-        clientEncList = bigint_to_bytearray(ba2int(self.clientEncKey))
-        padding = getCBCPadding(len(cleartextList))
-        paddedCleartext = bytearray(cleartextList) + padding
-        mode, origLen, ciphertext = \
-        moo.encrypt(str(paddedCleartext), moo.modeOfOperation['CBC'], \
-        clientEncList, key_size , self.lastClientCiphertextBlock)
+        if self.chosenCipherSuite in [4,5]:
+            ciphertext, self.clientRC4Box = RC4crypt(cleartext,self.clientEncKey,self.clientRC4Box)
+        elif self.chosenCipherSuite in [47,53]:
+            cleartextList = map(ord,cleartext)
+            #clientEncList = map(ord,self.clientEncKey)
+            clientEncList = bigint_to_bytearray(ba2int(self.clientEncKey))
+            padding = getCBCPadding(len(cleartextList))
+            paddedCleartext = bytearray(cleartextList) + padding
+            key_size = self.cipherSuites[self.chosenCipherSuite][3]
+            moo = AESModeOfOperation()
+            mode, origLen, ciphertext = \
+            moo.encrypt(str(paddedCleartext), moo.modeOfOperation['CBC'], \
+            clientEncList, key_size , self.lastClientCiphertextBlock)
+        else:
+            print ("Error, unrecognized cipher suite in buildRequest")
+            return None
+
         #get length bytes
         cpt_len = bigint_to_bytearray(len(ciphertext))
         #combine
@@ -426,14 +449,14 @@ class TLSNSSLClientSession(object):
         seqByteList = bigint_to_list(seqNo)
         seqByteList = [0]*(8-len(seqByteList)) + seqByteList
         seqNoBytes = ''.join(map(chr,seqByteList))
-        encKey = self.serverMacKey if isFromServer else self.clientMacKey
-        if not encKey:
+        macKey = self.serverMacKey if isFromServer else self.clientMacKey
+        if not macKey:
             print ("Failed to build mac; mac key is missing")
             return None
         fragment_len = bigint_to_bytearray(len(cleartext))
         if len(fragment_len) ==1:
             fragment_len = '\x00'+fragment_len
-        record_mac = hmac.new(encKey,seqNoBytes + recordType + \
+        record_mac = hmac.new(macKey,seqNoBytes + recordType + \
                     self.tlsMajorVersionNum + self.tlsMinorVersionNum \
                     +fragment_len + cleartext,sha1).digest()
         return record_mac
@@ -459,20 +482,28 @@ class TLSNSSLClientSession(object):
 
         #HMAC and AES-encrypt the verify_data
         hmacVerify = self.buildRecordMac(False,'\x14\x00\x00\x0c' + verifyData,'\x16')
-        moo = AESModeOfOperation()
         cleartext = '\x14\x00\x00\x0c' + verifyData + hmacVerify
-        cleartextList = bigint_to_list(ba2int(cleartext))
-        clientEncList =  bigint_to_list(ba2int(self.clientEncKey))
-        clientIVList =  bigint_to_list(ba2int(self.clientIV))
-        paddedCleartext = cleartext + getCBCPadding(len(cleartext))
-        mode, origLen, hmacedVerifyData = \
-        moo.encrypt( str(paddedCleartext), moo.modeOfOperation['CBC'], clientEncList, len(self.clientEncKey), clientIVList)
-        self.lastClientCiphertextBlock = hmacedVerifyData[-16:]
+        self.unencryptedClientFinished = '\x14\x00\x00\x0c' + verifyData
+        if self.chosenCipherSuite in [4,5]:
+            hmacedVerifyData, self.clientRC4Box = RC4crypt(cleartext,self.clientEncKey) #first record, box is null
+        elif self.chosenCipherSuite in [47,53]:
+            cleartextList = bigint_to_list(ba2int(cleartext))
+            clientEncList =  bigint_to_list(ba2int(self.clientEncKey))
+            clientIVList =  bigint_to_list(ba2int(self.clientIV))
+            paddedCleartext = cleartext + getCBCPadding(len(cleartext))
+            moo = AESModeOfOperation()
+            mode, origLen, hmacedVerifyData = \
+            moo.encrypt( str(paddedCleartext), moo.modeOfOperation['CBC'], clientEncList, len(self.clientEncKey), clientIVList)
+            self.lastClientCiphertextBlock = hmacedVerifyData[-16:]
+        else:
+            print ("Unrecognised cipher suite in getCKECCSF")
+            return None
+
         self.clientSeqNo += 1
         self.handshakeMessages[6] = '\x16\x03\x01\x00\x30' + bytearray(hmacedVerifyData)
         return bytearray('').join(self.handshakeMessages[4:])
 
-    def processServerCCSFinished(self, data):
+    def processServerCCSFinished(self, data, providedPValue):
         #check for existence of CCS:
         if data[:6] != '\x14\x03\x01\x00\x01\x01':
             print ("Server CCSFinished did not contain CCS")
@@ -482,19 +513,80 @@ class TLSNSSLClientSession(object):
             print ("Server CCSFinished does not contain Finished")
             return None
         recordLen = ba2int(self.serverFinished[3:5])
-        #because the verify data is 12 bytes and the handshake header
+        #For CBC only: because the verify data is 12 bytes and the handshake header
         #is a further 4, and the mac is another 20, we have 36 bytes, meaning
         #that the padding is 12 bytes long, making a total of 48 bytes record length
-        if recordLen != 48:
+        if recordLen != 48 and self.chosenCipherSuite in [47,53]:
             print ("Server Finished record record length should be 48, is: ",recordLen)
             return None
-        #TODO we should verify the verify data
-        #we will, for now, only extract the final ciphertext block
+        
+        #decrypt:
+        if self.chosenCipherSuite in [4,5]:
+            decrypted,self.serverRC4Box = RC4crypt(self.serverFinished[5:],self.serverEncKey) #box is null for first record
+        elif self.chosenCipherSuite in [47,53]:
+            ciphertextList = bigint_to_list(ba2int(self.serverFinished[5:]))
+            serverEncList = bigint_to_list(ba2int(self.serverEncKey))
+            serverIVList = bigint_to_list(ba2int(self.serverIV))
+            moo = AESModeOfOperation()
+            key_size = self.cipherSuites[self.chosenCipherSuite][4]
+            decrypted = moo.decrypt(ciphertextList,recordLen,moo.modeOfOperation['CBC'],serverEncList,key_size,serverIVList)
+            #for CBC, unpad
+            padLen = ba2int(decrypted[-1])
+            decrypted = decrypted[:-(padLen+1)]
+        #check the record mac
+        #mac check
+        hash_len = sha1_hash_len if self.chosenCipherSuite in [5,47,53] else md5_hash_len
+        received_mac = decrypted[-hash_len:]
+        plaintext = decrypted[:-hash_len]
+
+        #NB The mac cannot be checked, as in tlsnotary, the serverMacKey
+        #is garbage until after the commitment. TODO add the server Finished message mac check
+        #*after* the server has passed the real mac key.
+        #check_mac = self.buildRecordMac(True,plaintext,'\x16')
+        #if received_mac != check_mac:
+        #    print ("Warning, record mac check failed from server Finished message.")
+        #    return None
+
+        #check the finished message header
+        if plaintext[:4] != '\x14\x00\x00\x0c':
+            print ("The server Finished verify data is invalid")
+            return None
+        #Verify the verify data
+        verifyData = plaintext[4:]
+        sha_verify,md5_verify = self.getHandshakeHashes(isForServer=True)
+        if len(plaintext[4:]) != 12:
+            print ("Wrong length of plaintext")
+        verifyDataCheck = xor(providedPValue,\
+                            self.getVerifyHMAC(sha_verify=sha_verify,md5_verify=md5_verify,half=2,isForClient=False))
+        if not verifyData == verifyDataCheck:
+            print ("Server Finished record verify data is not valid.")
+            return None
+
+        #necessary for CBC
         self.lastServerCiphertextBlock = self.serverFinished[-16:]
 
     def storeServerAppDataRecords(self, response):
         self.serverAppDataRecords = response
-
+        #extract the ciphertext from the raw records as a list
+        #for maximum flexibility in decryption
+        while True:
+            if response[:3] != '\x17\x03\x01':
+                if response[:3] == '\x15\x03\x01':
+                    print ("Got encrypted alert, done")
+                    break
+                print ('Invalid TLS Header for App Data record')
+                return None
+            recordLen = ba2int(response[3:5])
+            if self.chosenCipherSuite in [47,53] and recordLen %16: #TODO double check this isn't needed for RC4
+                print ('Invalid ciphertext length for App Data')
+                return None
+            self.serverResponseCiphertexts.append(response[5:5+recordLen])
+            #prepare for next record, if there is one:
+            if len(response) == 5+len(self.serverResponseCiphertexts[-1]):
+                break
+            #self.lastServerCiphertextBlock = response[5+recordLen-16:5+recordLen]
+            response = response[5+recordLen:]
+        print ("We got this many record ciphertexts:",len(self.serverResponseCiphertexts))
 
     def processServerAppDataRecords(self):
         '''Given the binary array 'response', containing the response from
@@ -512,48 +604,42 @@ class TLSNSSLClientSession(object):
 
         plaintext = ''
         bad_record_mac = 0
-        response = self.serverAppDataRecords
-
-        while True:
-            if response[:3] != '\x17\x03\x01':
-                if response[:3] == '\x15\x03\x01':
-                    print ("Got encrypted alert, done")
-                    break
-                print ('Invalid TLS Header for App Data record')
-                return None
-            recordLen = ba2int(response[3:5])
-            if recordLen %16:
-                print ('Invalid ciphertext length for App Data')
-                return None
-
+        if not len(self.serverResponseCiphertexts):
+            print ("Could not process the server response, no ciphertext found.")
+            return None
+        for ciphertext in self.serverResponseCiphertexts:
+            print ("Starting to process a record with ciphertext length: ",len(ciphertext))
+            #need correct sequence number for macs
             self.serverSeqNo += 1
 
-            #decrypt, unpad and verify mac
-            #ciphertextList = bigint_to_list(ba2int(record[5:5+recordLen]))
-            ciphertextList = map(ord,response[5:5+recordLen])
-            serverEncList =  bigint_to_list(ba2int(self.serverEncKey))
-            serverIVList =  bigint_to_list(ba2int(self.lastServerCiphertextBlock))
-            moo = AESModeOfOperation()
-            key_size = self.cipherSuites[self.chosenCipherSuite][4]
-            decr_resp = moo.decrypt(ciphertextList,recordLen,moo.modeOfOperation['CBC'],serverEncList,key_size,serverIVList)
-            padLen = ba2int(decr_resp[-1])
-            decr_unpad_resp = decr_resp[:-(padLen+1)] #TODO double check the padding bytes are actually right, don't just drop them
+            if self.chosenCipherSuite in [4,5]: #RC4
+                raw_plaintext, self.serverRC4Box = RC4crypt(ciphertext,self.serverEncKey,\
+                                                            self.serverRC4Box)
+            elif self.chosenCipherSuite in [47,53]: #AES-CBC
+                ciphertextList = map(ord,ciphertext)
+                serverEncList =  bigint_to_list(ba2int(self.serverEncKey))
+                serverIVList =  bigint_to_list(ba2int(self.lastServerCiphertextBlock))
+                moo = AESModeOfOperation()
+                key_size = self.cipherSuites[self.chosenCipherSuite][4]
+                raw_plaintext = moo.decrypt(ciphertextList,len(ciphertextList),\
+                                moo.modeOfOperation['CBC'],serverEncList,key_size,serverIVList)
+                self.lastServerCiphertextBlock = ciphertext[-16:] #ready for next record
+
+            #unpad for CBC
+            if self.chosenCipherSuite in [47,53]:
+                padLen = ba2int(raw_plaintext[-1])
+                raw_plaintext = raw_plaintext[:-(padLen+1)]
 
             #mac check
-            received_mac = decr_unpad_resp[-sha1_hash_len:]
-            check_mac = self.buildRecordMac(True,decr_unpad_resp[:-sha1_hash_len],'\x17')
+            hash_len = sha1_hash_len if self.chosenCipherSuite in [5,47,53] else md5_hash_len
+            received_mac = raw_plaintext[-hash_len:]
+            check_mac = self.buildRecordMac(True,raw_plaintext[:-hash_len],'\x17')
             if received_mac != check_mac:
                 print ("Warning, record mac check failed.")
                 bad_record_mac += 1
-            plaintext += decr_unpad_resp[:-sha1_hash_len]
+            plaintext += raw_plaintext[:-hash_len]
 
-            #prepare for next record, if there is one:
-            if len(response) == 5+len(ciphertextList):
-                break
-            self.lastServerCiphertextBlock = response[5+recordLen-16:5+recordLen]
-            response = response[5+recordLen:]
-
-        return (plaintext,bad_record_mac)
+        return (plaintext, bad_record_mac)
 
     def completeHandshake(self, rsapms2):
         self.extractCertificate()
@@ -568,6 +654,28 @@ class TLSNSSLClientSession(object):
 def getCBCPadding(data_length):
     req_padding = 16 - data_length % 16
     return chr(req_padding-1) * req_padding
+
+#symmetric so performs encryption and decryption
+#must be called "as a whole", since stream ciphers
+#in TLS use the final state of the cipher at the end
+#of one record to initialise the next record (see RFC).
+def RC4crypt(data, key, box=None):
+    """RC4 algorithm"""
+    x = 0
+    if not box:
+        box = range(256)
+        for i in range(256):
+            x = (x + box[i] + ord(key[i % len(key)])) % 256
+            box[i], box[x] = box[x], box[i]
+    x = y = 0
+    out = []
+    for char in data:
+        x = (x + 1) % 256
+        y = (y + box[x]) % 256
+        box[x], box[y] = box[y], box[x]
+        out.append(chr(ord(char) ^ box[(box[x] + box[y]) % 256]))
+
+    return (''.join(out), box )
 
 def TLS10PRF(seed, req_bytes = 48, first_half=None,second_half=None,full_secret=None):
     '''
