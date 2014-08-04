@@ -249,14 +249,12 @@ def prepare_pms(headers):
                                             int(shared.config.get('SSL','reliable_site_ssl_port')))
         if not pmsSession: raise Exception("Client session construction failed in prepare_pms")
         tlssock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        tlssock.settimeout(10)
+        tlssock.settimeout(int(shared.config.get("General","tcp_socket_timeout")))
         tlssock.connect((pmsSession.serverName, pmsSession.sslPort))
         tlssock.send(pmsSession.handshakeMessages[0])
         #we must get 3 concatenated tls handshake messages in response:
         #sh --> server_hello, cert --> certificate, shd --> server_hello_done
-        time.sleep(1)
-        sh_cert_shd = tlssock.recv(8192*2)
-        if not pmsSession.processServerHello(sh_cert_shd):
+        if not pmsSession.processServerHello(shared.recv_socket(tlssock)):
             raise Exception("Failure in processing of server Hello from " + pmsSession.serverName)
         #give auditor cr&sr and get an encrypted second half of PMS,
         #and shahmac that needs to be xored with my md5hmac to get MS
@@ -270,8 +268,7 @@ def prepare_pms(headers):
         pmsSession.pAuditor = shahmac
         data = pmsSession.completeHandshake(rsapms2)
         tlssock.send(data)
-        time.sleep(1)
-        response = tlssock.recv(8192)
+        response = shared.recv_socket(tlssock)
         tlssock.close()
         if not response.count(pmsSession.handshakeMessages[5]):
             #the response did not contain ccs == error alert received
@@ -373,14 +370,13 @@ def parse_headers(headers):
 
 def audit_page(headers,pms_secret):
     tlssock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    tlssock.settimeout(10)
+    tlssock.settimeout(int(shared.config.get("General","tcp_socket_timeout")))
     server_name, headers = parse_headers(headers)
     tlsnSession = shared.TLSNSSLClientSession(server_name,ccs=5,audit=True)
     tlsnSession.auditeeSecret = pms_secret
     tlssock.connect((tlsnSession.serverName, tlsnSession.sslPort))
     tlssock.send(tlsnSession.handshakeMessages[0])
-    time.sleep(1)
-    sh_cert_shd = tlssock.recv(8192*2)
+    sh_cert_shd = shared.recv_socket(tlssock)
     if not tlsnSession.processServerHello(sh_cert_shd): #this will set the serverRandom
         raise Exception("Failure in processing of server Hello from " + tlsnSession.serverName)
     #TODO extract the cipher suite byte from the response
@@ -412,8 +408,7 @@ def audit_page(headers,pms_secret):
     verify_hmac= reply[1][len('verify_hmac:'):]
     data =  tlsnSession.getCKECCSF(providedPValue=verify_hmac)
     tlssock.send(data)
-    time.sleep(0.5)
-    response = tlssock.recv(8192)
+    response = shared.recv_socket(tlssock)
     sha_digest2,md5_digest2 = tlsnSession.getHandshakeHashes(isForServer = True)
     reply = send_and_recv('verify_md5sha2:'+md5_digest2+sha_digest2)
     if reply[0] != 'success':return("Failed to receive a reply")
@@ -423,19 +418,8 @@ def audit_page(headers,pms_secret):
     headers += '\r\n'
     encrypted_request = tlsnSession.buildRequest(headers)
     tlssock.send(encrypted_request)
-    time.sleep(0.5)
-
-    response = ''
-    while True:
-        try:
-            r = tlssock.recv(8192*8)
-        except:
-            break
-        if not r: break
-        response += r
-
+    response = shared.recv_socket(tlssock)
     tlsnSession.storeServerAppDataRecords(response)
-
     tlssock.close()
 
     #store the response in the session directory
@@ -508,13 +492,10 @@ def get_reliable_site_certificate():
                                     int(shared.config.get('SSL','reliable_site_ssl_port')))
 
     tlssock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    tlssock.settimeout(10)
+    tlssock.settimeout(int(shared.config.get("General","tcp_socket_timeout")))
     tlssock.connect((rsSession.serverName, rsSession.sslPort))
     tlssock.send(rsSession.handshakeMessages[0])
-    time.sleep(1)
-    sh_cert_shd = tlssock.recv(8192*2)    #google sends a ridiculously long cert chain of 10KB+
-
-    rsSession.processServerHello(sh_cert_shd)
+    rsSession.processServerHello(shared.recv_socket(tlssock))
 
     #TODO: fallback to alternatives if one site fails
     if not rsSession.extractCertificate(): print ("Failed to extract certificate")
@@ -540,7 +521,6 @@ def peer_handshake():
         if bIsAuditorRegistered == True: break #previous iteration successfully regd the auditor
         time_attempt_began = int(time.time())
         shared.tlsn_send_single_msg(' :client_hello:',modulus+signed_hello,auditorPubKey)
-        time.sleep(1)
         shared.tlsn_send_single_msg(' :google_pubkey:',rs_n+rs_e,auditorPubKey)
         signed_hello_message_dict = {}
         full_signed_hello = ''

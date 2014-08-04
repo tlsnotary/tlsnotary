@@ -135,7 +135,7 @@ class TLSNSSLClientSession(object):
             remaining += '\x00'+chr(2*len(self.cipherSuites))
             for a in self.cipherSuites:
                 remaining += '\x00'+chr(a)            
-            #remaining += '\x00\x02\x00'+chr(5) #HACK for RC4 testing
+            #remaining += '\x00\x02\x00'+chr(4) #HACK for RC4 testing
             
         remaining += '\x01\x00'
         self.handshakeMessages[0] += chr(len(remaining)) + remaining
@@ -433,7 +433,7 @@ class TLSNSSLClientSession(object):
             print ("Error, unrecognized cipher suite in buildRequest")
             return None
 
-        #get length bytes
+        #get length bytes TODO possible bug? length less than 256 bytes?
         cpt_len = bigint_to_bytearray(len(ciphertext))
         #combine
         bytes_to_send += cpt_len + bytearray(ciphertext)
@@ -447,7 +447,8 @@ class TLSNSSLClientSession(object):
         '''Note: the fragment should be the cleartext of the record
         before mac and pad; but for handshake messages there is a header
         to the fragment, of the form (handshake type), 24 bit length.'''
-
+        mac_algo = md5 if self.chosenCipherSuite == 4 else sha1
+        
         seqNo = self.serverSeqNo if isFromServer else self.clientSeqNo
         #build sequence number bytes; 64 bit integer
         seqByteList = bigint_to_list(seqNo)
@@ -462,7 +463,7 @@ class TLSNSSLClientSession(object):
             fragment_len = '\x00'+fragment_len
         record_mac = hmac.new(macKey,seqNoBytes + recordType + \
                     self.tlsMajorVersionNum + self.tlsMinorVersionNum \
-                    +fragment_len + cleartext,sha1).digest()
+                    +fragment_len + cleartext, mac_algo).digest()
         return record_mac
 
     #TODO currently only applies to a AES-CBC handshake;
@@ -490,7 +491,6 @@ class TLSNSSLClientSession(object):
         self.unencryptedClientFinished = '\x14\x00\x00\x0c' + verifyData
         if self.chosenCipherSuite in [4,5]:
             hmacedVerifyData, self.clientRC4State = RC4crypt(cleartext,self.clientEncKey) #first record, box is null
-            msgLen = '\x00\x24'
         elif self.chosenCipherSuite in [47,53]:
             cleartextList = bigint_to_list(ba2int(cleartext))
             clientEncList =  bigint_to_list(ba2int(self.clientEncKey))
@@ -498,15 +498,16 @@ class TLSNSSLClientSession(object):
             paddedCleartext = cleartext + getCBCPadding(len(cleartext))
             moo = AESModeOfOperation()
             mode, origLen, hmacedVerifyData = \
-            moo.encrypt( str(paddedCleartext), moo.modeOfOperation['CBC'], clientEncList, len(self.clientEncKey), clientIVList)
+            moo.encrypt( str(paddedCleartext), moo.modeOfOperation['CBC'], \
+                         clientEncList, len(self.clientEncKey), clientIVList)
             self.lastClientCiphertextBlock = hmacedVerifyData[-16:]
-            msgLen='\x00\x30'
         else:
             print ("Unrecognised cipher suite in getCKECCSF")
             return None
 
         self.clientSeqNo += 1
-        self.handshakeMessages[6] = '\x16\x03\x01' +msgLen + bytearray(hmacedVerifyData)
+        self.handshakeMessages[6] = '\x16\x03\x01' +'\x00' + \
+            chr(len(hmacedVerifyData)) + bytearray(hmacedVerifyData)
         return bytearray('').join(self.handshakeMessages[4:])
 
     def processServerCCSFinished(self, data, providedPValue):

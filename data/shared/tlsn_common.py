@@ -2,7 +2,7 @@ from __future__ import print_function
 from ConfigParser import SafeConfigParser
 import os
 import threading
-
+import select, socket, time
 #General utility objects used by both auditor and auditee.
 
 config = SafeConfigParser()
@@ -27,6 +27,38 @@ def load_program_config():
             if o not in config.options(k):
                 raise Exception("Config file does not contain the required option: "+o)
 
+
+def recv_socket(sckt):
+    bDataFromServerSeen = False
+    databuffer = ''
+    last_time_data_was_seen_from_server = 0
+    while True:
+        rlist, wlist, xlist = select.select((sckt,), (), (sckt,), 1)
+        if len(rlist) ==  len(xlist) == 0: #timeout
+            if not bDataFromServerSeen: continue
+            #TODO dont rely on a fixed timeout 
+            if int(time.time()) - last_time_data_was_seen_from_server < int(config.get("General","server_response_timeout")): continue
+            return databuffer
+        if len(xlist) > 0:
+            print ('Socket exceptional condition. Terminating connection')
+            return ''
+        if len(rlist) == 0:
+            print ('Python internal socket error: rlist should not be empty. Please investigate. Terminating connection')
+            return ''
+        #else rlist contains socket with data
+        #(actually, only one socket involved)
+        for rsocket in rlist:
+            data = rsocket.recv( 1024*1024 )
+            if not data: #socket closed
+                if not databuffer:
+                    #TODO: try ro reload the page one more time
+                    raise Exception('Server closed the socket and sent no data')
+                #else the server sent a response and closed the socket
+                return databuffer
+            bDataFromServerSeen = True
+            last_time_data_was_seen_from_server = int(time.time())
+            databuffer += data
+            
 
 #a thread which returns a value. This is achieved by passing self as the first argument to a target function
 #the target_function(parentthread, arg1, arg2) can then set, e.g parentthread.retval
