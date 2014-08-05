@@ -182,7 +182,6 @@ class HandlerClass(SimpleHTTPServer.SimpleHTTPRequestHandler):
             sha1_and_headers = b64decode(b64headers)
             #the sha1 of the pubkey in colon separated hex is snuck in at the front of the headers
             raw_pk = sha1_and_headers[:59]
-            print ("Got this pubkey hash: ",raw_pk)
             processed_pk = binascii.unhexlify(raw_pk.replace(':',''))
             
             rv = prepare_pms(sha1_and_headers[59:], processed_pk)
@@ -394,10 +393,12 @@ def audit_page(headers,pms_secret,claimed_pub_key):
     #get SHA-1 of certificate (DER format is passed over the wire) from active connection
     our_pub_key = sha1(tlsnSession.serverCertificate).digest()
     if not our_pub_key == claimed_pub_key:
-        print ("Our pubkey was:",binascii.hexlify(our_pub_key))
-        print ("Claimed pubkey was: ",binascii.hexlify(claimed_pub_key))
+        print ("Tlsnotary session certificate hash was:",binascii.hexlify(our_pub_key))
+        print ("Browser certificate hash was: ",binascii.hexlify(claimed_pub_key))
         raise Exception("WARNING! The server is presenting an invalid certificate. "+ \
                         "This is most likely an error, although it could be a hacking attempt. Audit aborted.")
+    else:
+        print ("Browser verifies that the server certificate is valid, continuing audit.")
     
     tlsnSession.setAuditeeSecret()
     md5hmac_1_for_MS = tlsnSession.pAuditee[:24]
@@ -476,7 +477,7 @@ def audit_page(headers,pms_secret,claimed_pub_key):
     tlsnSession.lastServerCiphertextBlock = tlsnSession.serverFinished[-16:]
     tlsnSession.serverSeqNo = 0
 
-    plaintext,bad_mac = tlsnSession.processServerAppDataRecords()
+    plaintext,bad_mac = tlsnSession.processServerAppDataRecords(checkFinished=True)
 
     if bad_mac: print ("WARNING! Plaintext is not authenticated.")
     #successful authenticated decryption. Commit the html to disk.

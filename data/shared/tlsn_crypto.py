@@ -122,6 +122,10 @@ class TLSNSSLClientSession(object):
         #for the server Finished record
         self.verifyHMACForServerFinished = None
         
+        #store the decrypted server finished message
+        #for later mac check in form (plaintext,mac)
+        self.decryptedServerFinished = (None,None)
+        
         #all handshake messages are stored as transferred
         #over the wire, but the Finished message, which
         #is encrypted over the wire, is also needed for
@@ -569,10 +573,6 @@ class TLSNSSLClientSession(object):
         #NB The mac cannot be checked, as in tlsnotary, the serverMacKey
         #is garbage until after the commitment. TODO add the server Finished message mac check
         #*after* the server has passed the real mac key.
-        #check_mac = self.buildRecordMac(True,plaintext,'\x16')
-        #if received_mac != check_mac:
-        #    print ("Warning, record mac check failed from server Finished message.")
-        #    return None
 
         #check the finished message header
         if plaintext[:4] != '\x14\x00\x00\x0c':
@@ -588,7 +588,10 @@ class TLSNSSLClientSession(object):
         if not verifyData == verifyDataCheck:
             print ("Server Finished record verify data is not valid.")
             return None
-
+        #now the server finished is verified (except mac), we store
+        #the plaintext of the message for later mac check 
+        #(after auditor has passed server mac key)
+        self.decryptedServerFinished = (plaintext,received_mac)
         #necessary for CBC
         self.lastServerCiphertextBlock = self.serverFinished[-16:]
 
@@ -614,7 +617,7 @@ class TLSNSSLClientSession(object):
             response = response[5+recordLen:]
         print ("We got this many record ciphertexts:",len(self.serverResponseCiphertexts))
 
-    def processServerAppDataRecords(self):
+    def processServerAppDataRecords(self,checkFinished=False):
         '''Using the encrypted records in self.serverResponseCiphertexts, 
         containing the response from
         the server to a GET or POST request (the *first* request after
@@ -628,9 +631,17 @@ class TLSNSSLClientSession(object):
         This will occur by default if the session object has not undergone
         any handshake, or if it has undergone a handshake, so no intervention
         should, in theory, be required.'''
-
-        plaintext = ''
         bad_record_mac = 0
+        if checkFinished:
+            #before beginning, we must authenticate the server finished
+            check_mac = self.buildRecordMac(True,self.decryptedServerFinished[0],'\x16')
+            if self.decryptedServerFinished[1] != check_mac:
+                print ("Warning, record mac check failed from server Finished message.")
+                bad_record_mac += 1
+                return None        #TODO - exception here?
+        
+        plaintext = ''
+        
         if not len(self.serverResponseCiphertexts):
             print ("Could not process the server response, no ciphertext found.")
             return None
