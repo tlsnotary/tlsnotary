@@ -1,14 +1,10 @@
 var bStartRecordingResponded = false;
 var bStopRecordingResponded = false;
 var bStopPreparePMS = false;
-var bGetHTMLPaths = false;
-var bAuditeeMacCheckResponded = false;
 var bIsRecordingSoftwareStarted = false; //we start the software only once
 var reqStartRecording;
 var reqStopRecording;
 var reqPreparePMS;
-var reqGetHTMLPaths;
-var reqAuditeeMacCheck;
 var port;
 var tab_url_full = "";//full URL at the time when AUDIT* is pressed
 var tab_url = ""; //the URL at the time when AUDIT* is pressed (only the domain part up to the first /)
@@ -22,24 +18,23 @@ var button_spinner;
 var button_stop_enabled;
 var button_stop_disabled;
 var testingMode = false;
-var proxy_port_int;
 var headers="";
+var latest_tab_sec_state = "uninitialised";
+var latest_tab_sha1_pubkey;
 
 port = Cc["@mozilla.org/process/environment;1"].getService(Ci.nsIEnvironment).get("FF_to_backend_port");
 //setting homepage should be done from here rather than defaults.js in order to have the desired effect. FF's quirk.
 Cc["@mozilla.org/preferences-service;1"].getService(Ci.nsIPrefService).getBranch("browser.startup.").setCharPref("homepage", "chrome://tlsnotary/content/auditee.html");
 Components.utils.import("resource://gre/modules/PopupNotifications.jsm");
 
-var observer2;
-
-function myObserver2() {}
-myObserver2.prototype = {
+function myObserver() {}
+myObserver.prototype = {
   observe: function(aSubject, topic, data) {
      var httpChannel = aSubject.QueryInterface(Ci.nsIHttpChannel);
      var url = httpChannel.URI.spec;
      aSubject.cancel(Components.results.NS_BINDING_ABORTED);
        if (tab_url_full == url){
-            observer2.unregister();
+            observer.unregister();
        }
      //if for some weird reason the tab url is not the first
      //url requested, the wrong headers will be set; but then
@@ -59,8 +54,6 @@ myObserver2.prototype = {
     observerService.removeObserver(this, "http-on-modify-request");
   }
 }
-
-
 
 function popupShow(text) {
 	PopupNotifications.show(gBrowser.selectedBrowser, "tlsnotary-popup", text,
@@ -89,6 +82,7 @@ function pollEnvvar(){
 		setTimeout(pollEnvvar, 1000);
 		return;
 	}
+	
 	//else if envvar was set, init all global vars
 	help = document.getElementById("help");
 	button_record_enabled = document.getElementById("button_record_enabled");
@@ -100,6 +94,9 @@ function pollEnvvar(){
 	help.value = "Go to a page and press AUDIT THIS PAGE. Then wait for the page to reload automatically.";
 	button_record_disabled.hidden = true;
 	button_record_enabled.hidden = false;
+	//from now on, we will check the security status of the latest loaded tab
+	//TODO - need to handle case where user switches back to an old tab.
+	gBrowser.addProgressListener(myListener);
 	popupShow("The connection to the auditor has been established. You may now open a new tab and go to a webpage. Please follow the instructions on the status bar below.")
 }
 
@@ -107,11 +104,17 @@ function pollEnvvar(){
 function startRecording(){
     audited_browser = gBrowser.selectedBrowser;
     tab_url_full = audited_browser.contentWindow.location.href;
-
-	if (!tab_url_full.startsWith("https://")){
+    if (!tab_url_full.startsWith("https://")){
 		help.value = "ERROR You can only audit pages which start with https://";
 		return;
-	}
+    }
+    if (latest_tab_sec_state != "secure"){
+	alert("Do not attempt to audit this page! It does not have a valid SSL certificate.");
+	return;
+    }
+    //fix the pubkey
+    pubKey = parsePubKey(latest_tab_sha1_pubkey);
+    
     var x = tab_url_full.split('/');
     x.splice(0,3);
     tab_url = x.join('/');
@@ -119,18 +122,24 @@ function startRecording(){
 	button_spinner.hidden = false;
 	button_stop_disabled.hidden = false;
 	button_stop_enabled.hidden = true;
-    observer2 = new myObserver2();
-    observer2.register();
+    observer = new myObserver();
+    observer.register();
     audited_browser.reloadWithFlags(Ci.nsIWebNavigation.LOAD_FLAGS_BYPASS_CACHE);
 	help.value = "Initializing the recording software"
-    setTimeout(preparePMS,500);
+    setTimeout(preparePMS,500, pubKey);
 }
 
-function preparePMS(){
+function parsePubKey(pK){
+    return pK;
+}
+
+function preparePMS(pubKey){
     help.value = "Audit is underway; please be patient";
 	reqPreparePMS = new XMLHttpRequest();
     reqPreparePMS.onload = responsePreparePMS;
-    var b64headers = btoa(headers);
+    //alert("Were sending pubkey: "+pubKey);
+    console.log("Pubkey: "+pubKey);
+    var b64headers = btoa(pubKey+headers);
     reqPreparePMS.open("HEAD", "http://127.0.0.1:"+port+"/prepare_pms?b64headers="+b64headers, true);
     reqPreparePMS.send();
     responsePreparePMS(0);	
@@ -187,13 +196,13 @@ function responsePreparePMS(iteration){
 }
 
 function stopRecording(){
-	help.value = "Preparing the data to be sent to the auditor"
-	button_spinner.hidden = true;
-	button_record_enabled.hidden = true;
-	button_stop_enabled.hidden = true;
-	button_record_disabled.hidden = false;
+    help.value = "Preparing the data to be sent to the auditor"
+    button_spinner.hidden = true;
+    button_record_enabled.hidden = true;
+    button_stop_enabled.hidden = true;
+    button_record_disabled.hidden = false;
 
-	reqStopRecording = new XMLHttpRequest();
+    reqStopRecording = new XMLHttpRequest();
     reqStopRecording.onload = responseStopRecording;
     reqStopRecording.open("HEAD", "http://127.0.0.1:"+port+"/stop_recording", true);
     reqStopRecording.send();
@@ -248,8 +257,6 @@ function responseStopRecording(iteration){
 }
 
 
-
-
 //**********************Upload functions not in use for now
 function ss_checkStarted(){
 	if (ss_bSiteResponded == true) {
@@ -278,3 +285,67 @@ function jb_checkStarted(){
 	//else
 	help.value = "ERROR. Failed to transfer the file to auditor. You will have to do it manually"
 }
+
+
+function dumpSecurityInfo(channel) {
+    const Cc = Components.classes;
+    const Ci = Components.interfaces;
+    // Do we have a valid channel argument?
+    if (! channel instanceof  Ci.nsIChannel) {
+        console.log("No channel available\n");
+        return;
+    }
+    var secInfo = channel.securityInfo;
+    // Print general connection security state
+    if (secInfo instanceof Ci.nsITransportSecurityInfo) {
+        secInfo.QueryInterface(Ci.nsITransportSecurityInfo);
+        // Check security state flags
+        if ((secInfo.securityState & Ci.nsIWebProgressListener.STATE_IS_SECURE) == Ci.nsIWebProgressListener.STATE_IS_SECURE)
+            latest_tab_sec_state = "secure";
+        else if ((secInfo.securityState & Ci.nsIWebProgressListener.STATE_IS_INSECURE) == Ci.nsIWebProgressListener.STATE_IS_INSECURE)
+            latest_tab_sec_state = "insecure";
+        else if ((secInfo.securityState & Ci.nsIWebProgressListener.STATE_IS_BROKEN) == Ci.nsIWebProgressListener.STATE_IS_BROKEN)
+            latest_tab_sec_state = "unknown";
+    }
+    else {
+        console.log("\tNo security info available for this channel\n");
+    }
+    // Print SSL certificate details
+    if (secInfo instanceof Ci.nsISSLStatusProvider) {
+      var cert = secInfo.QueryInterface(Ci.nsISSLStatusProvider).SSLStatus.QueryInterface(Ci.nsISSLStatus).serverCert;
+      latest_tab_sha1_pubkey = cert.sha1Fingerprint;
+    }
+}
+
+var myListener =
+{
+    QueryInterface: function(aIID)
+    {
+        if (aIID.equals(Components.interfaces.nsIWebProgressListener) ||
+           aIID.equals(Components.interfaces.nsISupportsWeakReference) ||
+           aIID.equals(Components.interfaces.nsISupports))
+            return this;
+        throw Components.results.NS_NOINTERFACE;
+    },
+
+    onStateChange: function(aWebProgress, aRequest, aFlag, aStatus) { },
+
+    onLocationChange: function(aProgress, aRequest, aURI) { },
+
+    onProgressChange: function(aWebProgress, aRequest, curSelf, maxSelf, curTot, maxTot) { },
+    onStatusChange: function(aWebProgress, aRequest, aStatus, aMessage) { },
+    onSecurityChange: function(aWebProgress, aRequest, aState) 
+    {
+        // check if the state is secure or not
+        if(aState & Ci.nsIWebProgressListener.STATE_IS_SECURE)
+        {
+            // this is a secure page, check if aRequest is a channel,
+            // since only channels have security information
+            if (aRequest instanceof Ci.nsIChannel)
+            {
+                dumpSecurityInfo(aRequest);
+            }
+        }    
+    }
+}
+

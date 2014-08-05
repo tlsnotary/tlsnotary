@@ -179,8 +179,13 @@ class HandlerClass(SimpleHTTPServer.SimpleHTTPRequestHandler):
                 self.respond({'response':'prepare_pms', 'status':'wrong HEAD parameter'})
                 return
             b64headers = arg_str[len('b64headers='):]
-            in_headers = b64decode(b64headers)
-            rv = prepare_pms(in_headers)
+            sha1_and_headers = b64decode(b64headers)
+            #the sha1 of the pubkey in colon separated hex is snuck in at the front of the headers
+            raw_pk = sha1_and_headers[:59]
+            print ("Got this pubkey hash: ",raw_pk)
+            processed_pk = binascii.unhexlify(raw_pk.replace(':',''))
+            
+            rv = prepare_pms(sha1_and_headers[59:], processed_pk)
             if rv[0] == 'success': html_paths = b64encode(rv[1])
             self.respond({'response':'prepare_pms', 'status':rv[0],'html_paths':html_paths})
             return             
@@ -242,7 +247,7 @@ def send_link(filelink):
 #Because there is a 1 in 6 chance that the encrypted PMS will contain zero bytes in its
 #padding, we first try the encrypted PMS with google.com and see if it gets rejected.
 #return my first half of PMS which will be used in the actual audited connection to the server
-def prepare_pms(headers):
+def prepare_pms(headers,claimed_pub_key):
     for i in range(5): #try 5 times until reliable site check succeeds
         #first 4 bytes of client random are unix time
         pmsSession = shared.TLSNSSLClientSession(shared.config.get('SSL','reliable_site'),\
@@ -276,7 +281,7 @@ def prepare_pms(headers):
             print (binascii.hexlify(response))
             continue
         #else ccs was in the response
-        html_path = audit_page(headers,pmsSession.auditeeSecret)
+        html_path = audit_page(headers,pmsSession.auditeeSecret,claimed_pub_key)
         return ('success',html_path) #successfull pms check
     #no dice after 5 tries
     raise Exception ('Could not prepare PMS with ', shared.config.get('SSL','reliable_site'), ' after 5 tries')
@@ -368,7 +373,7 @@ def parse_headers(headers):
     return (server,modified_headers)
 
 
-def audit_page(headers,pms_secret):
+def audit_page(headers,pms_secret,claimed_pub_key):
     tlssock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     tlssock.settimeout(int(shared.config.get("General","tcp_socket_timeout")))
     server_name, headers = parse_headers(headers)
@@ -383,6 +388,17 @@ def audit_page(headers,pms_secret):
     cr_list.append(tlsnSession.clientRandom)
     tlsnSession.extractCertificate()
     tlsnSession.extractModAndExp()
+    #before going further, verify that we're getting the same pubkey as
+    #firefox; if so, we leverage their cert checking functions. If not, we
+    #abort.
+    #get SHA-1 of certificate (DER format is passed over the wire) from active connection
+    our_pub_key = sha1(tlsnSession.serverCertificate).digest()
+    if not our_pub_key == claimed_pub_key:
+        print ("Our pubkey was:",binascii.hexlify(our_pub_key))
+        print ("Claimed pubkey was: ",binascii.hexlify(claimed_pub_key))
+        raise Exception("WARNING! The server is presenting an invalid certificate. "+ \
+                        "This is most likely an error, although it could be a hacking attempt. Audit aborted.")
+    
     tlsnSession.setAuditeeSecret()
     md5hmac_1_for_MS = tlsnSession.pAuditee[:24]
     cr_sr_hmac_n_e= chr(tlsnSession.chosenCipherSuite)+tlsnSession.clientRandom+tlsnSession.serverRandom+ \

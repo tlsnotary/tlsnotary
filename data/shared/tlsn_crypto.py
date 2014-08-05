@@ -8,6 +8,7 @@ from pyasn1.codec.der import encoder, decoder
 from slowaes import AESModeOfOperation
 from slowaes import AES
 
+#*********CODE FOR ENCRYPTION OF PEER TO PEER MESSAGING*******
 #encrypt and base64 encode
 def ee(msg,pubkey):
     return b64encode(rsa.encrypt(str(msg),pubkey))
@@ -20,8 +21,29 @@ def dd(cipher,privkey):
 md5_hash_len = 16
 sha1_hash_len = 20
 
+#********END CODE FOR ENCRYPTION OF PEER TO PEER MESSAGING***
 
-#*********** TLS CODE ********************
+
+#*********** TLS CODE ***************************************
+#This is a *heavily* restricted, and modified
+#implementation of client-side TLS 1.0.
+#Restrictions:
+#-only for RSA key exchange
+#-only for AES-CBC and RC4 ciphers
+#-only implements one client request and one server response
+# after the handshake is complete.
+#-certificate is extracted but not checked using any PKI; the
+# certificate check must be implemented in the browser and 
+# passed into this code.
+#-does not support record level compression.
+#Modifications:
+#The master secret and key generation is based on the
+#tlsnotary algorithm as explained in TLSNotary.pdf as found
+#in the documentation folder of the repo.
+#This is achieved by creating a separate TLSNSSLClientSession
+#object for each of auditor and auditee, containing separate
+#subsets of the required information(in particular, secrets.)
+#************************************************************
 class TLSNSSLClientSession(object):
     def __init__(self,server,port=443,ccs=53,audit=False):
         self.serverName = server
@@ -35,7 +57,8 @@ class TLSNSSLClientSession(object):
         self.encFirstHalfPMS = None
         self.encSecondHalfPMS = None
         self.encPMS = None
-        #client hello, server hello, certificate, server hello done, client key exchange, change cipher spec, finished
+        #client hello, server hello, certificate, server hello done,
+        #client key exchange, change cipher spec, finished
         self.handshakeMessages = [None] * 7
         #client random can be created immediately on instantiation
         cr_time = bigint_to_bytearray(int(time.time()))
@@ -47,11 +70,10 @@ class TLSNSSLClientSession(object):
         AES128-CBC-SHA: mac key 20*2, encryption key 16*2, IV 16*2 == 104bytes
         RC4128_SHA: mac key 20*2, encryption key 16*2 == 72bytes
         RC4128_MD5: mac key 16*2, encryption key 16*2 == 64 bytes'''
-        self.cipherSuites = {47:['AES128',20,20,16,16,16,16],53:['AES256',20,20,32,32,16,16]\
-         ,5:['RC4SHA',20,20,16,16,0,0],4:['RC4MD5',16,16,16,16,0,0]}
-        #{47:['AES128',20,20,16,16,16,16],53:['AES256',20,20,32,32,16,16]#}
-         #,5:['RC4SHA',16,16,16,16,0,0]} #4:['RC4MD5',20,20,16,16,0,0],}
-
+        self.cipherSuites = {47:['AES128',20,20,16,16,16,16],\
+                             53:['AES256',20,20,32,32,16,16],\
+                             5:['RC4SHA',20,20,16,16,0,0],\
+                             4:['RC4MD5',16,16,16,16,0,0]}
         #preprocessing: add the total number of bytes in the expanded keys format
         #for each cipher suite, for ease of reference
         for k,v in self.cipherSuites.iteritems():
@@ -466,7 +488,6 @@ class TLSNSSLClientSession(object):
                     +fragment_len + cleartext, mac_algo).digest()
         return record_mac
 
-    #TODO currently only applies to a AES-CBC handshake;
     def getCKECCSF(self,providedPValue = None):
         '''sets the handshake messages change cipher spec and finished,
         and returns the three final handshake messages client key exchange,
@@ -485,12 +506,12 @@ class TLSNSSLClientSession(object):
             print ('Verify data was null')
             return None
 
-        #HMAC and AES-encrypt the verify_data
+        #HMAC and encrypt the verify_data
         hmacVerify = self.buildRecordMac(False,'\x14\x00\x00\x0c' + verifyData,'\x16')
         cleartext = '\x14\x00\x00\x0c' + verifyData + hmacVerify
         self.unencryptedClientFinished = '\x14\x00\x00\x0c' + verifyData
         if self.chosenCipherSuite in [4,5]:
-            hmacedVerifyData, self.clientRC4State = RC4crypt(cleartext,self.clientEncKey) #first record, box is null
+            hmacedVerifyData, self.clientRC4State = RC4crypt(cleartext,self.clientEncKey)
         elif self.chosenCipherSuite in [47,53]:
             cleartextList = bigint_to_list(ba2int(cleartext))
             clientEncList =  bigint_to_list(ba2int(self.clientEncKey))
@@ -511,7 +532,6 @@ class TLSNSSLClientSession(object):
         return bytearray('').join(self.handshakeMessages[4:])
 
     def processServerCCSFinished(self, data, providedPValue):
-        #check for existence of CCS:
         if data[:6] != '\x14\x03\x01\x00\x01\x01':
             print ("Server CCSFinished did not contain CCS")
             return None
@@ -584,19 +604,19 @@ class TLSNSSLClientSession(object):
                 print ('Invalid TLS Header for App Data record')
                 return None
             recordLen = ba2int(response[3:5])
-            if self.chosenCipherSuite in [47,53] and recordLen %16: #TODO double check this isn't needed for RC4
+            if self.chosenCipherSuite in [47,53] and recordLen %16: 
                 print ('Invalid ciphertext length for App Data')
                 return None
             self.serverResponseCiphertexts.append(response[5:5+recordLen])
             #prepare for next record, if there is one:
             if len(response) == 5+len(self.serverResponseCiphertexts[-1]):
                 break
-            #self.lastServerCiphertextBlock = response[5+recordLen-16:5+recordLen]
             response = response[5+recordLen:]
         print ("We got this many record ciphertexts:",len(self.serverResponseCiphertexts))
 
     def processServerAppDataRecords(self):
-        '''Given the binary array 'response', containing the response from
+        '''Using the encrypted records in self.serverResponseCiphertexts, 
+        containing the response from
         the server to a GET or POST request (the *first* request after
         the handshake), this function will process the response one record
         at a time. Each of these records is decrypted and reassembled
@@ -648,6 +668,9 @@ class TLSNSSLClientSession(object):
         return (plaintext, bad_record_mac)
 
     def completeHandshake(self, rsapms2):
+        '''wrapper function for auditee only,
+        who passes the second half of the encrypted
+        PMS product (see TLSNotary.pdf under documentation).'''
         self.extractCertificate()
         self.extractModAndExp()
         self.setAuditeeSecret()
@@ -661,12 +684,15 @@ def getCBCPadding(data_length):
     req_padding = 16 - data_length % 16
     return chr(req_padding-1) * req_padding
 
-#symmetric so performs encryption and decryption
-#must be called "as a whole", since stream ciphers
-#in TLS use the final state of the cipher at the end
-#of one record to initialise the next record (see RFC).
 def RC4crypt(data, key, state=None):
-    """RC4 algorithm"""
+    """RC4 algorithm.
+    Symmetric, so performs encryption and decryption
+    'state', if passed, is a tuple of three values,
+    box (a bytearray), x and y (integers), allowing
+    restart of the algorithm from an intermediate point.
+    This is necessary since stream ciphers
+    in TLS use the final state of the cipher at the end
+    of one record to initialise the next record (see RFC 2246)."""
     if not state:
         x = 0
         box = range(256)
@@ -754,6 +780,9 @@ def TLS10PRF(seed, req_bytes = 48, first_half=None,second_half=None,full_secret=
 
     return (P_MD5, P_SHA_1, PRF)
 
+#*********************END TLS CODE***************************************************
+
+#Not currently in use; useful in any future 'dark mode' implementation
 def aes_decrypt_section(ciphertext,server_encryption_key,key_size=16):
     '''Given ciphertext, an array of integers forming a whole number multiple
 of blocks (so len(ciphertext) is a multiple of 16),and key server_encryption_key,
