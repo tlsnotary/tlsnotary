@@ -543,7 +543,9 @@ def peer_handshake():
         full_signed_hello = ''
         while not bIsAuditorRegistered:
             if int(time.time()) - time_attempt_began > 20: break
-            x = shared.tlsn_receive_single_msg('server_hello:',myPrvKey,my_nick)
+            #ignore decryption errors here, as above, the message may be
+            #from someone else's handshake
+            x = shared.tlsn_receive_single_msg('server_hello:',myPrvKey,my_nick,iDE=True)
             if not x: continue
             returned_msg,returned_auditor_nick = x
             hdr, seq, signed_hello, ending = returned_msg
@@ -758,9 +760,9 @@ if __name__ == "__main__":
             if prog64:
                 firefox_install_path = join(prog64,'Mozilla Firefox')
             elif prog32:
-                firefox_install_path = join(prog64,'Mozilla Firefox')
+                firefox_install_path = join(prog32,'Mozilla Firefox')
             elif progxp:
-                firefox_install_path = join(prog64,'Mozilla Firefox')
+                firefox_install_path = join(progxp,'Mozilla Firefox')
             if not firefox_install_path:
                 raise Exception('Could not set firefox install path')
         elif OS=='macos':

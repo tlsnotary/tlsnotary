@@ -125,7 +125,7 @@ def tlsn_send_msg(data,pk,ackQ,recipient,seq_init=100000,raw=False):
 
 
 
-def tlsn_receive_single_msg(header, pk, my_nick=None):
+def tlsn_receive_single_msg(header, pk, my_nick=None,iDE=False):
     '''Non blocking receipt of a single message statelessly
     filtered on a message header, optionally prefixed by a username
     NB This is for handshake messages. All other messaging is handled
@@ -136,6 +136,9 @@ def tlsn_receive_single_msg(header, pk, my_nick=None):
     Messages are decrypted using private key pk and base64 decoded
     Sequence number, plaintext message, ending and (if relevant) nick of sending party
     are returned.
+    If iDE (ignore decryption errors) is true, we return False on a decryption 
+    error, treating the failure as receiving a handshake message from the wrong
+    counterparty.
     '''
     if not initialized:
         raise Exception("TLSN Messaging not yet instantiated")
@@ -155,6 +158,8 @@ def tlsn_receive_single_msg(header, pk, my_nick=None):
         seq = msg[0]
         msg = ''.join(msg[1:])
     except:
+        if iDE:
+            return False #means we got a message from the wrong counterparty
         raise Exception ("Failure in decryption or decoding of message: ", encrypted_encoded_msg)
 
     return ((header,int(seq),msg,ending),ctrprty_nick)

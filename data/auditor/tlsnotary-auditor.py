@@ -398,7 +398,9 @@ def registerAuditeeThread():
     full_hello = ''
     full_google_pubkey   = ''
     while not (bIsAuditeeRegistered or bTerminateAllThreads):
-        x = shared.tlsn_receive_single_msg((':google_pubkey:',':client_hello:'),myPrivateKey)
+        #NB we must allow decryption errors for this message, since another
+        #handshake might be going on at the same time.
+        x = shared.tlsn_receive_single_msg((':google_pubkey:',':client_hello:'),myPrivateKey,iDE=True)
         if not x: continue
         msg_array,nick = x
         header, seq, msg, ending = msg_array
