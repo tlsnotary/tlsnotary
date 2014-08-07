@@ -50,7 +50,7 @@ class TLSNSSLClientSession(object):
         self.sslPort = port
         self.tlsMajorVersionNum = '\x03'
         self.tlsMinorVersionNum = '\x01'
-        self.nAuditeeEntropy = 11
+        self.nAuditeeEntropy = 13
         self.nAuditorEntropy = 8
         self.auditorSecret = None
         self.auditeeSecret = None
@@ -160,9 +160,8 @@ class TLSNSSLClientSession(object):
         else:
             remaining += '\x00'+chr(2*len(self.cipherSuites))
             for a in self.cipherSuites:
-                remaining += '\x00'+chr(a)            
-            #remaining += '\x00\x02\x00'+chr(4) #HACK for RC4 testing
-            
+                remaining += '\x00'+chr(a)                        
+            #remaining += '\x00\x02\x00'+chr(5) #HACK for RC4 testing
         remaining += '\x01\x00'
         self.handshakeMessages[0] += chr(len(remaining)) + remaining
         self.handshakeMessages[0][4] = chr(len(remaining)+4)
@@ -219,7 +218,7 @@ class TLSNSSLClientSession(object):
         if sh[cs_start_byte] != '\x00' or ord(sh[cs_start_byte+1]) not in self.cipherSuites.keys():
             raise Exception("Could not locate cipher suite choice in server hello.")
         self.setCipherSuite(sh[cs_start_byte+1])
-        
+        print ("Set cipher suite to ",binascii.hexlify(sh[cs_start_byte+1]))
         return (self.handshakeMessages[1:4], self.serverRandom)
 
     def setEncryptedPMS(self):
@@ -245,9 +244,13 @@ class TLSNSSLClientSession(object):
 
         #we can construct the encrypted form if pubkey is known
         if (self.serverModulus):
-            padding = '\x01'*15 #TODO this is intended to be random, but needs testing
-            self.encFirstHalfPMS = pow(ba2int('\x02'+('\x01'*63)+padding+'\x00'+\
-            pms1+('\x00'*24)) + 1, self.serverExponent, self.serverModulus)
+            print ("Using server mod length:",ba2int(self.serverModLength))
+            self.encFirstHalfPMS = pow(ba2int(('\x02'+('\x01'*(ba2int(self.serverModLength) - 100))\
+                +'\x00'+pms1+('\x00'*24))) + 1, self.serverExponent, self.serverModulus)
+            #TODO this is intended to be random; non-working code below
+            #padding = '\x01'*15 
+            #self.encFirstHalfPMS = pow(ba2int('\x02'+('\x01'*63)+padding+'\x00'+\
+            #pms1+('\x00'*24)) + 1, self.serverExponent, self.serverModulus)
 
         #can construct the full encrypted pre master secret if
         #the auditor's half is already calculated
@@ -269,18 +272,18 @@ class TLSNSSLClientSession(object):
         seed = self.clientRandom + self.serverRandom
         pms2 =  self.auditorSecret + ('\x00' * (24-self.nAuditorEntropy-1)) + '\x01'
         self.pAuditor = TLS10PRF(label+seed,second_half = pms2)[1]
-
+        
         #we can construct the encrypted form if pubkey is known
         if (self.serverModulus):
-            padding = '\x01'*15 #TODO this is intended to be random but needs testing
-            self.encSecondHalfPMS = pow( int(('\x01'+('\x01'*63)+padding+ \
-            ('\x00'*25)+pms2).encode('hex'),16), self.serverExponent, self.serverModulus )
+            self.encSecondHalfPMS = pow( int(('\x01'+('\x00'*25)+pms2).encode('hex'),16),\
+                                         self.serverExponent, self.serverModulus )
+            #TODO this is intended to be random but needs testing
+            #padding = '\x01'*15 
+            #self.encSecondHalfPMS = pow( int(('\x01'+('\x01'*63)+padding+ \
+            #('\x00'*25)+pms2).encode('hex'),16), self.serverExponent, self.serverModulus )
 
         return (self.pAuditor,self.encSecondHalfPMS)
 
-    #this is only called for sessions that are hand-crafting the handshake
-    #for the other type of session, the certificate is passed in in DER format
-    #from NSS
     def extractCertificate(self):
         if not self.handshakeMessages[2]: return None
         cert_len = ba2int(self.handshakeMessages[2][12:15])
@@ -361,7 +364,7 @@ class TLSNSSLClientSession(object):
             return None
         label = 'key expansion'
         seed = self.serverRandom + self.clientRandom
-        #for maximum flexibility, we will compute the sha1 or hmac
+        #for maximum flexibility, we will compute the sha1 or md5 hmac
         #or the full keys, based on what secrets currently exist in this object
         if self.masterSecretHalfAuditee:
             self.pMasterSecretAuditee = TLS10PRF(label+seed,req_bytes=140,second_half=self.masterSecretHalfAuditee)[1]
@@ -405,9 +408,21 @@ class TLSNSSLClientSession(object):
             return TLS10PRF(label+seed,req_bytes=12,second_half = self.masterSecretHalfAuditee)[1]
 
     def getHandshakeHashes(self, isForServer = False):
-        self.handshakeMessages[4] = '\x16\x03\x01\x01\x06\x10\x00\x01\x02\x01\00' \
-                                            + bigint_to_bytearray(self.encPMS)
+        #TODO: This is a repetition of getCKECCSF. Obviously it should be got rid of.
+        #I can't remember why it's necessary.
+        #construct correct length bytes for CKE
+        epms_len = len(bigint_to_bytearray(self.encPMS))
+        b_epms_len = bigint_to_bytearray(epms_len,fixed=2)
+        hs_len = 2 + epms_len
+        b_hs_len = bigint_to_bytearray(hs_len,fixed=3)
+        record_len = 6+epms_len
+        b_record_len = bigint_to_bytearray(record_len,fixed=2)
+        #construct CKE
+        self.handshakeMessages[4] = '\x16' + self.tlsMajorVersionNum + self.tlsMinorVersionNum + \
+            b_record_len+'\x10' + b_hs_len + b_epms_len + bigint_to_bytearray(self.encPMS)
+        #Change cipher spec
         self.handshakeMessages[5] = '\x14\x03\01\x00\x01\x01'
+        
         handshakeData = bytearray('').join([x[5:] for x in self.handshakeMessages[:5]])
         if isForServer: handshakeData += self.unencryptedClientFinished
         sha_verify = sha1(handshakeData).digest()
@@ -459,9 +474,7 @@ class TLSNSSLClientSession(object):
             print ("Error, unrecognized cipher suite in buildRequest")
             return None
 
-        #get length bytes TODO possible bug? length less than 256 bytes?
-        cpt_len = bigint_to_bytearray(len(ciphertext))
-        #combine
+        cpt_len = bigint_to_bytearray(len(ciphertext),fixed=2)
         bytes_to_send += cpt_len + bytearray(ciphertext)
         #just in case we plan to send more data,
         #update the client ssl state
@@ -476,7 +489,7 @@ class TLSNSSLClientSession(object):
         mac_algo = md5 if self.chosenCipherSuite == 4 else sha1
         
         seqNo = self.serverSeqNo if isFromServer else self.clientSeqNo
-        #build sequence number bytes; 64 bit integer
+        #build sequence number bytes; 64 bit integer #TODO make this tidier
         seqByteList = bigint_to_list(seqNo)
         seqByteList = [0]*(8-len(seqByteList)) + seqByteList
         seqNoBytes = ''.join(map(chr,seqByteList))
@@ -487,6 +500,7 @@ class TLSNSSLClientSession(object):
         fragment_len = bigint_to_bytearray(len(cleartext))
         if len(fragment_len) ==1:
             fragment_len = '\x00'+fragment_len
+            
         record_mac = hmac.new(macKey,seqNoBytes + recordType + \
                     self.tlsMajorVersionNum + self.tlsMinorVersionNum \
                     +fragment_len + cleartext, mac_algo).digest()
@@ -499,9 +513,20 @@ class TLSNSSLClientSession(object):
         If providedPValue is non null, it means the caller does not have
         access to the full master secret, and is providing the pvalue to be
         passed into getVerifyDataForFinished.'''
-        self.handshakeMessages[4] = '\x16\x03\x01\x01\x06\x10\x00\x01\x02\x01\00' \
-                                                + bigint_to_bytearray(self.encPMS)
+        #construct correct length bytes for CKE #TODO tidy up
+        epms_len = len(bigint_to_bytearray(self.encPMS))
+        b_epms_len = bigint_to_bytearray(epms_len,fixed=2)
+        hs_len = 2 + epms_len
+        b_hs_len = bigint_to_bytearray(hs_len,fixed=3)
+        record_len = 6+epms_len
+        b_record_len = bigint_to_bytearray(record_len,fixed=2)
+        #construct CKE
+        self.handshakeMessages[4] = '\x16' + self.tlsMajorVersionNum + self.tlsMinorVersionNum + \
+            b_record_len+'\x10' + b_hs_len + b_epms_len + bigint_to_bytearray(self.encPMS)
+        #Change cipher spec
         self.handshakeMessages[5] = '\x14\x03\01\x00\x01\x01'
+        
+        #start processing for Finished
         if providedPValue:
             verifyData = self.getVerifyDataForFinished(providedPValue=providedPValue,half=2)
         else:
@@ -538,6 +563,7 @@ class TLSNSSLClientSession(object):
     def processServerCCSFinished(self, data, providedPValue):
         if data[:6] != '\x14\x03\x01\x00\x01\x01':
             print ("Server CCSFinished did not contain CCS")
+            print ("Got response:",binascii.hexlify(data))
             return None
         self.serverFinished = data[6:]
         if self.serverFinished[:3] != '\x16\x03\x01':
@@ -594,14 +620,20 @@ class TLSNSSLClientSession(object):
         self.decryptedServerFinished = (plaintext,received_mac)
         #necessary for CBC
         self.lastServerCiphertextBlock = self.serverFinished[-16:]
+        return True
 
     def storeServerAppDataRecords(self, response):
+        #print ("Got this server response: ", binascii.hexlify(response))
         self.serverAppDataRecords = response
         #extract the ciphertext from the raw records as a list
         #for maximum flexibility in decryption
         while True:
             if response[:3] != '\x17\x03\x01':
                 if response[:3] == '\x15\x03\x01':
+                    #print ("Server response was: ",binascii.hexlify(response))
+                    #raw_plaintext, self.serverRC4State = RC4crypt(bytearray(response[5:]),\
+                    #                                self.serverEncKey,self.serverRC4State)                    
+                    #print ("Decrypted server response:",binascii.hexlify(raw_plaintext))
                     print ("Got encrypted alert, done")
                     break
                 print ('Invalid TLS Header for App Data record')
@@ -661,7 +693,9 @@ class TLSNSSLClientSession(object):
                 raw_plaintext = moo.decrypt(ciphertextList,len(ciphertextList),\
                                 moo.modeOfOperation['CBC'],serverEncList,key_size,serverIVList)
                 self.lastServerCiphertextBlock = ciphertext[-16:] #ready for next record
-
+            else:
+                raise Exception("Unrecognized cipher suite.")
+            
             #unpad for CBC
             if self.chosenCipherSuite in [47,53]:
                 padLen = ba2int(raw_plaintext[-1])

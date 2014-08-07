@@ -274,6 +274,9 @@ def prepare_pms(headers,claimed_pub_key):
         tlssock.send(data)
         response = shared.recv_socket(tlssock)
         tlssock.close()
+        if not response:
+            print ("PMS trial failed")
+            continue
         if not response.count(pmsSession.handshakeMessages[5]):
             #the response did not contain ccs == error alert received
             print ("PMS trial failed, server response was: ")
@@ -431,11 +434,13 @@ def audit_page(headers,pms_secret,claimed_pub_key):
     if reply[0] != 'success':return("Failed to receive a reply")
     if not reply[1].startswith('verify_hmac2:'):return("bad reply. Expected verify_hmac2:")
     verify_hmac2 = reply[1][len('verify_hmac2:'):]
-    tlsnSession.processServerCCSFinished(response,providedPValue = verify_hmac2)
+    if not tlsnSession.processServerCCSFinished(response,providedPValue = verify_hmac2):
+        raise Exception ("Could not finish handshake with server successfully. Audit aborted")
     headers += '\r\n'
     encrypted_request = tlsnSession.buildRequest(headers)
     tlssock.send(encrypted_request)
     response = shared.recv_socket(tlssock)
+    if not response: raise Exception ("Received no response to request, cannot continue audit.")
     tlsnSession.storeServerAppDataRecords(response)
     tlssock.close()
 
