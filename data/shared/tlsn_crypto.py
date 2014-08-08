@@ -201,24 +201,51 @@ class TLSNSSLClientSession(object):
         shd = '\x16\x03\x01\x00\x04\x0e\x00\x00\x00'
         sh_magic = re.compile(b'\x16\x03\x01..\x02',re.DOTALL)
         if not re.match(sh_magic, sh_cert_shd): raise Exception ('Invalid server hello')
-        if not sh_cert_shd.endswith(shd): raise Exception ('invalid server hello done')
+        if not sh_cert_shd.endswith(shd[-4:]): raise Exception ('invalid server hello done')
         #find the beginning of certificate message
         cert_magic = re.compile(b'\x16\x03\x01..\x0b',re.DOTALL)
         cert_match = re.search(cert_magic, sh_cert_shd)
-        if not cert_match: raise Exception ('Invalid certificate message')
-        cert_start_position = cert_match.start()
-        sh = sh_cert_shd[:cert_start_position]
-        self.handshakeMessages[2] = sh_cert_shd[cert_start_position : -len(shd)]
-        self.handshakeMessages[1] = sh
-        self.handshakeMessages[3] = shd
-        self.serverRandom = sh[11:43]
+        if not cert_match: 
+            #fallback: the certificate and shd may have been packed
+            #into the same record.
+            #We expect that all three messages are in a single record
+            #TODO consider if some annoying website decides to send two in one.
+            tls_header = '\x16\x03\x01'
+            assert sh_cert_shd[5] == '\x02', "Failed to find server hello"
+            record_len = ba2int(sh_cert_shd[3:5])
+            
+            assert len(sh_cert_shd)-5 == record_len, "Failed to parse sh_cert_shd"
+            #we know not to expect record headers for Cert and SHD
+            sh_length = ba2int(sh_cert_shd[6:9])
+            #build server hello
+            self.handshakeMessages[1]=tls_header+str(bigint_to_bytearray(4+sh_length,fixed=2))+ \
+            sh_cert_shd[5:9]+sh_cert_shd[9:9+sh_length]
+            
+            assert sh_cert_shd[9+sh_length] == '\x0b', "Failed to find certificate, server hello length was: "+str(sh_length)
+            cert_len = ba2int(sh_cert_shd[9+sh_length+1:9+sh_length+4])
+            #certificate
+            self.handshakeMessages[2] = tls_header+str(bigint_to_bytearray(4+cert_len,fixed=2))+\
+                sh_cert_shd[9+sh_length:9+sh_length+4+cert_len]
+            #server hello done
+            self.handshakeMessages[3] = shd
+
+        else:
+            cert_start_position = cert_match.start()
+            sh = sh_cert_shd[:cert_start_position]
+            self.handshakeMessages[2] = sh_cert_shd[cert_start_position : -len(shd)]
+            self.handshakeMessages[1] = sh
+            self.handshakeMessages[3] = shd
+            
+        self.serverRandom = self.handshakeMessages[1][11:43]
         #extract the cipher suite
         #if a session id was provided, it will be preceded by its length 32:
-        cs_start_byte = 43 if sh[43] != '\x20' else 43+1+32
-        if sh[cs_start_byte] != '\x00' or ord(sh[cs_start_byte+1]) not in self.cipherSuites.keys():
+        cs_start_byte = 43 if self.handshakeMessages[1][43] != '\x20' else 43+1+32
+        if self.handshakeMessages[1][cs_start_byte] != '\x00' or \
+           ord(self.handshakeMessages[1][cs_start_byte+1]) not in self.cipherSuites.keys():
             raise Exception("Could not locate cipher suite choice in server hello.")
-        self.setCipherSuite(sh[cs_start_byte+1])
-        print ("Set cipher suite to ",binascii.hexlify(sh[cs_start_byte+1]))
+        self.setCipherSuite(self.handshakeMessages[1][cs_start_byte+1])
+        print ("Set cipher suite to ",binascii.hexlify(self.handshakeMessages[1][cs_start_byte+1]))
+            
         return (self.handshakeMessages[1:4], self.serverRandom)
 
     def setEncryptedPMS(self):
