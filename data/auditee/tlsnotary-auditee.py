@@ -591,7 +591,9 @@ def start_firefox(FF_to_backend_port):
         firefox_exepath = join(firefox_install_path,'firefox.exe')
     
     elif OS=='macos':
-        firefox_exepath='open'
+        if not os.path.isfile(join('Applications','Firefox.app','Contents','MacOS')):
+            exit(FIREFOX_MISSING)
+        firefox_exepath=join('Applications','Firefox.app','Contents','MacOS')
 
     logs_dir = join(datadir, 'logs')
     if not os.path.isdir(logs_dir): os.makedirs(logs_dir)
@@ -757,6 +759,8 @@ if __name__ == "__main__":
     if len(sys.argv) > 1: firefox_install_path = sys.argv[1]
     if not firefox_install_path:
         if OS=='linux':
+            if not os.path.exists('/usr/lib/firefox'):
+                raise Exception ("Could not set firefox install path")
             firefox_install_path = '/usr/lib/firefox'
         elif OS=='mswin':
             prog64 = os.getenv('ProgramW6432')
@@ -772,7 +776,12 @@ if __name__ == "__main__":
             if not firefox_install_path:
                 raise Exception('Could not set firefox install path')
         elif OS=='macos':
-            firefox_install_path = join("Applications","Firefox.app")
+            if not os.path.exists(join("Applications","Firefox.app","Contents","MacOS")):
+                raise Exception("Could not set firefox install path")
+            firefox_install_path = join("Applications","Firefox.app","Contents","MacOS")
+        else:
+            raise Exception("Unrecognised operating system.")
+        
     print ("Firefox install path is: ",firefox_install_path)
     if not os.path.exists(firefox_install_path): raise Exception ("Could not find Firefox installation")
     
