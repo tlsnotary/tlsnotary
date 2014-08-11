@@ -586,14 +586,9 @@ def start_firefox(FF_to_backend_port):
             firefox_exepath=join(firefox_install_path,'firefox')
 
     elif OS=='mswin':
-        path_x86 = 'C:/Program Files (x86)/Mozilla Firefox/firefox.exe'
-        path_other = 'C:/Program Files/Mozilla Firefox/firefox.exe'
-        if os.path.exists(path_x86):
-            firefox_exepath = pathx86
-        elif os.path.exists(path_other):
-            firefox_exepath = path_other
-        else:
+        if not os.path.isfile(join(firefox_install_path,'firefox.exe')):
             exit(FIREFOX_MISSING)
+        firefox_exepath = join(firefox_install_path,'firefox.exe')
     
     elif OS=='macos':
         firefox_exepath='open'
@@ -759,7 +754,7 @@ if __name__ == "__main__":
     import shared
     shared.load_program_config()
     global firefox_install_path
-    firefox_install_path = sys.argv[1]
+    if len(sys.argv) > 1: firefox_install_path = sys.argv[1]
     if not firefox_install_path:
         if OS=='linux':
             firefox_install_path = '/usr/lib/firefox'
@@ -767,17 +762,18 @@ if __name__ == "__main__":
             prog64 = os.getenv('ProgramW6432')
             prog32 = os.getenv('ProgramFiles(x86)')
             progxp = os.getenv('ProgramFiles')
-            if prog64:
+            print ("Env vars:",prog64,prog32,progxp)
+            if os.path.exists(join(prog64,'Mozilla Firefox')):
                 firefox_install_path = join(prog64,'Mozilla Firefox')
-            elif prog32:
+            elif os.path.exists(join(prog32,'Mozilla Firefox')):
                 firefox_install_path = join(prog32,'Mozilla Firefox')
-            elif progxp:
+            elif os.path.exists(join(progxp,'Mozilla Firefox')):
                 firefox_install_path = join(progxp,'Mozilla Firefox')
             if not firefox_install_path:
                 raise Exception('Could not set firefox install path')
         elif OS=='macos':
             firefox_install_path = join("Applications","Firefox.app")
-            
+    print ("Firefox install path is: ",firefox_install_path)
     if not os.path.exists(firefox_install_path): raise Exception ("Could not find Firefox installation")
     
     thread = shared.ThreadWithRetval(target= http_server)
