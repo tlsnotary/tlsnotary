@@ -585,7 +585,7 @@ def start_firefox(FF_to_backend_port):
         else:
             firefox_exepath=join(firefox_install_path,'firefox')
 
-    if OS=='mswin':
+    elif OS=='mswin':
         path_x86 = 'C:/Program Files (x86)/Mozilla Firefox/firefox.exe'
         path_other = 'C:/Program Files/Mozilla Firefox/firefox.exe'
         if os.path.exists(path_x86):
@@ -594,7 +594,9 @@ def start_firefox(FF_to_backend_port):
             firefox_exepath = path_other
         else:
             exit(FIREFOX_MISSING)
-    #TODO MACos
+    
+    elif OS=='macos':
+        firefox_exepath='open'
 
     logs_dir = join(datadir, 'logs')
     if not os.path.isdir(logs_dir): os.makedirs(logs_dir)
@@ -637,10 +639,13 @@ def start_firefox(FF_to_backend_port):
     bundles_dir = os.path.join(firefox_install_path, 'distribution', 'bundles')
     if not os.path.exists(bundles_dir):
         os.makedirs(bundles_dir)
-        shutil.copytree(os.path.join(datadir, 'FF-addon', 'tlsnotary@tlsnotary'),
-                            os.path.join(bundles_dir, 'tlsnotary@tlsnotary'))
-        shutil.copytree(os.path.join(datadir, 'FF-addon', 'ClassicThemeRestorer@ArisT2Noia4dev.xpi_FILES'),
-                            os.path.join(bundles_dir, 'ClassicThemeRestorer@ArisT2Noia4dev.xpi_FILES'))
+    if not os.path.exists(join(bundles_dir, 'tlsnotary@tlsnotary')):    
+        shutil.copytree(join(datadir, 'FF-addon', 'tlsnotary@tlsnotary'),
+                            join(bundles_dir, 'tlsnotary@tlsnotary'))
+    if not os.path.exists(join(bundles_dir, 'ClassicThemeRestorer@ArisT2Noia4dev.xpi_FILES')):
+        shutil.copytree(join(datadir, 'FF-addon', 'ClassicThemeRestorer@ArisT2Noia4dev.xpi_FILES'),
+                            join(bundles_dir, 'ClassicThemeRestorer@ArisT2Noia4dev.xpi_FILES'))
+
 
     os.putenv('FF_to_backend_port', str(FF_to_backend_port))
     os.putenv('FF_first_window', 'true')   #prevents addon confusion when websites open multiple FF windows
@@ -702,7 +707,7 @@ def quit(sig=0, frame=0):
     exit(1)
     
 def first_run_check():
-    #On first run, extract rsa,pyasn1,firefox and check hashes
+    #On first run, extract rsa,pyasn1,requests and check hashes
     rsa_dir = join(datadir, 'python', 'rsa-3.1.4')
     if not os.path.exists(rsa_dir):
         print ('Extracting rsa-3.1.4.tar.gz...')
@@ -772,7 +777,9 @@ if __name__ == "__main__":
                 raise Exception('Could not set firefox install path')
         elif OS=='macos':
             firefox_install_path = join("Applications","Firefox.app")
-
+            
+    if not os.path.exists(firefox_install_path): raise Exception ("Could not find Firefox installation")
+    
     thread = shared.ThreadWithRetval(target= http_server)
     thread.daemon = True
     thread.start()
