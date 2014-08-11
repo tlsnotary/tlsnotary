@@ -370,8 +370,12 @@ def stop_recording():
 def parse_headers(headers):
     header_lines = headers.split('\r\n') #no new line issues; it was constructed like that
     server = header_lines[1].split(':')[1].strip()
-    #gzip is disabled; TODO this can be configurable
-    modified_headers = '\r\n'.join([x for x in header_lines if 'gzip' not in x])
+    #gzip is optionally disabled
+    if int(shared.config.get("General","gzip_disabled")) != 0:
+        modified_headers = '\r\n'.join([x for x in header_lines if 'gzip' not in x])
+    else:
+        modified_headers = '\r\n'.join(header_lines)
+        
     return (server,modified_headers)
 
 
