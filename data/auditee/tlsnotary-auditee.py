@@ -84,7 +84,7 @@ def newkeys():
     if not os.path.exists(join(datadir, 'recentkeys')): os.makedirs(join(datadir, 'recentkeys'))
     with open(join(datadir, 'recentkeys', 'myprivkey'), 'wb') as f: f.write(my_pem_privkey)
     with open(join(datadir, 'recentkeys', 'mypubkey'), 'wb') as f: f.write(my_pem_pubkey)
-    pubkey_export = b64encode(shared.bigint_to_bytearray(myPubKey.n))
+    pubkey_export = b64encode(shared.bi2ba(myPubKey.n))
     return pubkey_export
 
 #Receive HTTP HEAD requests from FF addon
@@ -126,9 +126,9 @@ class HandlerClass(SimpleHTTPServer.SimpleHTTPRequestHandler):
                     auditorPubKey = rsa.PublicKey.load_pkcs1(auditor_pubkey_pem)
                 global myPubKey
                 myPubKey = rsa.PublicKey.load_pkcs1(my_pubkey_pem)
-                my_pubkey_export = b64encode(shared.bigint_to_bytearray(myPubKey.n))
+                my_pubkey_export = b64encode(shared.bi2ba(myPubKey.n))
                 if auditor_pubkey_pem == '': auditor_pubkey_export = ''
-                else: auditor_pubkey_export = b64encode(shared.bigint_to_bytearray(auditorPubKey.n))
+                else: auditor_pubkey_export = b64encode(shared.bi2ba(auditorPubKey.n))
                 self.respond({'response':'get_recent_keys', 'mypubkey':my_pubkey_export,
                          'auditorpubkey':auditor_pubkey_export})
             else:
@@ -411,8 +411,8 @@ def audit_page(headers,pms_secret,claimed_pub_key):
     md5hmac_1_for_MS = tlsnSession.pAuditee[:24]
     cr_sr_hmac_n_e= chr(tlsnSession.chosenCipherSuite)+tlsnSession.clientRandom+tlsnSession.serverRandom+ \
                 md5hmac_1_for_MS+tlsnSession.serverModLength+\
-                shared.bigint_to_bytearray(tlsnSession.serverModulus)+\
-                shared.bigint_to_bytearray(tlsnSession.serverExponent)
+                shared.bi2ba(tlsnSession.serverModulus)+\
+                shared.bi2ba(tlsnSession.serverExponent)
     reply = send_and_recv('cr_sr_hmac_n_e:'+cr_sr_hmac_n_e)
     if reply[0] != 'success': return ('Failed to receive a reply for cr_sr_hmac_n_e:')
     if not reply[1].startswith('rsapms_hmacms_hmacek:'):
@@ -421,7 +421,7 @@ def audit_page(headers,pms_secret,claimed_pub_key):
     ml = shared.ba2int(tlsnSession.serverModLength)
     RSA_PMS2 = rsapms_hmacms_hmacek[:ml]
     tlsnSession.encSecondHalfPMS = shared.ba2int(RSA_PMS2)
-    enc_pms = shared.bigint_to_bytearray(tlsnSession.setEncryptedPMS())
+    enc_pms = shared.bi2ba(tlsnSession.setEncryptedPMS())
     tlsnSession.setMasterSecretHalf(half=2,providedPValue = rsapms_hmacms_hmacek[ml:ml+24])
     tlsnSession.pMasterSecretAuditor = rsapms_hmacms_hmacek[ml+24:ml+24+tlsnSession.cipherSuites[tlsnSession.chosenCipherSuite][-1]]
     tlsnSession.doKeyExpansion() #we don't bother to record expanded_keys here, no longer needed for NSS patch
@@ -433,13 +433,11 @@ def audit_page(headers,pms_secret,claimed_pub_key):
     data =  tlsnSession.getCKECCSF(providedPValue=verify_hmac)
     tlssock.send(data)
     response = shared.recv_socket(tlssock)
-    print ("Response to ckeccsf was: ",binascii.hexlify(response))
     sha_digest2,md5_digest2 = tlsnSession.getHandshakeHashes(isForServer = True)
     reply = send_and_recv('verify_md5sha2:'+md5_digest2+sha_digest2)
     if reply[0] != 'success':return("Failed to receive a reply")
     if not reply[1].startswith('verify_hmac2:'):return("bad reply. Expected verify_hmac2:")
     verify_hmac2 = reply[1][len('verify_hmac2:'):]
-    print ("Using headers: ",headers)
     if not tlsnSession.processServerCCSFinished(response,providedPValue = verify_hmac2):
         raise Exception ("Could not finish handshake with server successfully. Audit aborted")
     headers += '\r\n'
@@ -539,11 +537,11 @@ def peer_handshake():
 
     #hello contains the first 10 bytes of modulus of the auditor's pubkey
     #this is how the auditor knows that we are addressing him.
-    modulus = shared.bigint_to_bytearray(auditorPubKey.n)[:10]
+    modulus = shared.bi2ba(auditorPubKey.n)[:10]
     signed_hello = rsa.sign('client_hello', myPrvKey, 'SHA-1')
     #format the 'reliable site' pubkey
-    rs_n = shared.bigint_to_bytearray(rsModulus)
-    rs_e = shared.bigint_to_bytearray(rsExponent)
+    rs_n = shared.bi2ba(rsModulus)
+    rs_e = shared.bi2ba(rsExponent)
 
     bIsAuditorRegistered = False
     for attempt in range(6): #try for 6*10 secs to find the auditor

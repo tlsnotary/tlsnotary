@@ -88,7 +88,7 @@ def process_messages():
             googleSession.serverModulus = rsModulus
             googleSession.serverExponent = rsExponent
             googleSession.setAuditorSecret()
-            grsapms = shared.bigint_to_bytearray(googleSession.encSecondHalfPMS)
+            grsapms = shared.bi2ba(googleSession.encSecondHalfPMS)
             send_message('grsapms_ghmac:'+ grsapms+googleSession.pAuditor)
             #we keep resetting so that the final, successful choice is stored
             tlsnSession.auditorSecret = googleSession.auditorSecret
@@ -110,7 +110,7 @@ def process_messages():
             tlsnSession.setAuditorSecret() #will set the enc PMS second half
             tlsnSession.setMasterSecretHalf(half=1,providedPValue=md5hmac1_for_MS)
             garbageizedHMAC = tlsnSession.getPValueMS('auditor',[2]) #withhold the server mac
-            rsapms_hmacms_hmacek = shared.bigint_to_bytearray(tlsnSession.encSecondHalfPMS)+tlsnSession.pAuditor[24:]+garbageizedHMAC
+            rsapms_hmacms_hmacek = shared.bi2ba(tlsnSession.encSecondHalfPMS)+tlsnSession.pAuditor[24:]+garbageizedHMAC
             send_message('rsapms_hmacms_hmacek:'+ rsapms_hmacms_hmacek)
             continue
         #---------------------------------------------------------------------#
@@ -358,13 +358,13 @@ def get_recent_keys():
             with open(os.path.join(current_sessiondir, 'mypubkey'), 'w') as f: f.write(my_pubkey_pem)
             myPrivateKey = rsa.PrivateKey.load_pkcs1(my_privkey_pem)
             myPubKey = rsa.PublicKey.load_pkcs1(my_pubkey_pem)
-            my_pubkey_export = base64.b64encode(shared.bigint_to_bytearray(myPubKey.n))
+            my_pubkey_export = base64.b64encode(shared.bi2ba(myPubKey.n))
         if os.path.exists(os.path.join(datadir, 'recentkeys', 'auditeepubkey')):
             with open(os.path.join(datadir, 'recentkeys', 'auditeepubkey'), 'r') as f: auditee_pubkey_pem = f.read()
             with open(os.path.join(current_sessiondir, 'auditorpubkey'), 'w') as f: f.write(auditee_pubkey_pem)
             auditeePublicKey = rsa.PublicKey.load_pkcs1(auditee_pubkey_pem)
             auditee_pubkey = rsa.PublicKey.load_pkcs1(auditee_pubkey_pem)
-            auditee_pubkey_export = base64.b64encode(shared.bigint_to_bytearray(auditee_pubkey.n))
+            auditee_pubkey_export = base64.b64encode(shared.bi2ba(auditee_pubkey.n))
     return my_pubkey_export, auditee_pubkey_export
       
 def new_keypair():
@@ -381,7 +381,7 @@ def new_keypair():
     with open(os.path.join(datadir, 'recentkeys' , 'myprivkey'), 'w') as f: f.write(my_privkey_pem)
     with open(os.path.join(datadir, 'recentkeys', 'mypubkey'), 'w') as f: f.write(my_pubkey_pem)
     my_pubkey = rsa.PublicKey.load_pkcs1(my_pubkey_pem)
-    my_pubkey_export = base64.b64encode(shared.bigint_to_bytearray(myPubKey.n))
+    my_pubkey_export = base64.b64encode(shared.bi2ba(myPubKey.n))
     return my_pubkey_export
 
 def registerAuditeeThread():
@@ -391,7 +391,7 @@ def registerAuditeeThread():
     global myPubKey
     with open(os.path.join(current_sessiondir, 'mypubkey'), 'r') as f: my_pubkey_pem =f.read()
     myPubKey = rsa.PublicKey.load_pkcs1(my_pubkey_pem)
-    myModulus = shared.bigint_to_bytearray(myPubKey.n)[:10]
+    myModulus = shared.bi2ba(myPubKey.n)[:10]
     bIsAuditeeRegistered = False
     hello_message_dict = {}
     google_pubkey_message_dict = {}

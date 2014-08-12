@@ -44,12 +44,25 @@ sha1_hash_len = 20
 #object for each of auditor and auditee, containing separate
 #subsets of the required information(in particular, secrets.)
 #************************************************************
+#constants
+tlsver='\x03\x01'
+#record types
+appd = '\x17' #Application Data
+hs = '\x16' #Handshake
+chcis = '\x14' #Change Cipher Spec
+alrt = '\x15' #Alert
+#handshake types
+h_ch = '\x01' #Client Hello
+h_sh = '\x02' #Server Hello
+h_cert = '\x0b' #Certificate
+h_shd = '\x0e' #Server Hello Done
+h_cke = '\x10' #Client Key Exchange
+h_fin = '\x14' #Finished
+
 class TLSNSSLClientSession(object):
     def __init__(self,server,port=443,ccs=53,audit=False):
         self.serverName = server
         self.sslPort = port
-        self.tlsMajorVersionNum = '\x03'
-        self.tlsMinorVersionNum = '\x01'
         self.nAuditeeEntropy = 13
         self.nAuditorEntropy = 8
         self.auditorSecret = None
@@ -61,7 +74,7 @@ class TLSNSSLClientSession(object):
         #client key exchange, change cipher spec, finished
         self.handshakeMessages = [None] * 7
         #client random can be created immediately on instantiation
-        cr_time = bigint_to_bytearray(int(time.time()))
+        cr_time = bi2ba(int(time.time()))
         self.clientRandom = cr_time + os.urandom(28)
         self.serverRandom = None
 
@@ -152,19 +165,17 @@ class TLSNSSLClientSession(object):
     def setClientHello(self,audit):
         if not self.clientRandom: return None
         if not self.chosenCipherSuite: return None
-        # 2d is the length; this byte is edited on completion
-        self.handshakeMessages[0] = '\x16\x03\x01\x00\x2d\x01\x00\x00'
-        remaining = '\x03\x01' + self.clientRandom + '\x00' #last byte is session id length
+        remaining = tlsver + self.clientRandom + '\x00' #last byte is session id length
         if not audit:
-            remaining  += '\x00\x02\x00'+chr(self.chosenCipherSuite)
+            #hard coded cipher suite for preparing pms
+            remaining  += '\x00\x02\x00'+chr(self.chosenCipherSuite) 
         else:
             remaining += '\x00'+chr(2*len(self.cipherSuites))
             for a in self.cipherSuites:
                 remaining += '\x00'+chr(a)                        
-            #remaining += '\x00\x02\x00'+chr(5) #HACK for RC4 testing
-        remaining += '\x01\x00'
-        self.handshakeMessages[0] += chr(len(remaining)) + remaining
-        self.handshakeMessages[0][4] = chr(len(remaining)+4)
+        remaining += '\x01\x00' #compression methods
+        self.handshakeMessages[0] = hs + tlsver + bi2ba(len(remaining)+4,fixed=2) + \
+        h_ch + bi2ba(len(remaining),fixed=3) + remaining
         return self.handshakeMessages[0]
 
     def setMasterSecretHalf(self,half=1,providedPValue=None):
@@ -198,33 +209,33 @@ class TLSNSSLClientSession(object):
     def processServerHello(self,sh_cert_shd):
         #server hello always starts with 16 03 01 * * 02
         #certificate always starts with 16 03 01 * * 0b
-        shd = '\x16\x03\x01\x00\x04\x0e\x00\x00\x00'
-        sh_magic = re.compile(b'\x16\x03\x01..\x02',re.DOTALL)
+        shd = hs + tlsver + bi2ba(4,fixed=2) + h_shd + bi2ba(0,fixed=3)
+        sh_magic = re.compile(hs + tlsver + '..' + h_sh,re.DOTALL)
         if not re.match(sh_magic, sh_cert_shd): raise Exception ('Invalid server hello')
         if not sh_cert_shd.endswith(shd[-4:]): raise Exception ('invalid server hello done')
         #find the beginning of certificate message
-        cert_magic = re.compile(b'\x16\x03\x01..\x0b',re.DOTALL)
+        cert_magic = re.compile(hs + tlsver + '..' + h_cert,re.DOTALL)
         cert_match = re.search(cert_magic, sh_cert_shd)
         if not cert_match: 
             #fallback: the certificate and shd may have been packed
             #into the same record.
             #We expect that all three messages are in a single record
             #TODO consider if some annoying website decides to send two in one.
-            tls_header = '\x16\x03\x01'
-            assert sh_cert_shd[5] == '\x02', "Failed to find server hello"
+            tls_header = hs + tlsver
+            assert sh_cert_shd[5] == h_sh, "Failed to find server hello"
             record_len = ba2int(sh_cert_shd[3:5])
             
             assert len(sh_cert_shd)-5 == record_len, "Failed to parse sh_cert_shd"
             #we know not to expect record headers for Cert and SHD
             sh_length = ba2int(sh_cert_shd[6:9])
             #build server hello
-            self.handshakeMessages[1]=tls_header+str(bigint_to_bytearray(4+sh_length,fixed=2))+ \
+            self.handshakeMessages[1]=tls_header+str(bi2ba(4+sh_length,fixed=2))+ \
             sh_cert_shd[5:9]+sh_cert_shd[9:9+sh_length]
             
-            assert sh_cert_shd[9+sh_length] == '\x0b', "Failed to find certificate, server hello length was: "+str(sh_length)
+            assert sh_cert_shd[9+sh_length] == h_cert, "Failed to find certificate, server hello length was: "+str(sh_length)
             cert_len = ba2int(sh_cert_shd[9+sh_length+1:9+sh_length+4])
             #certificate
-            self.handshakeMessages[2] = tls_header+str(bigint_to_bytearray(4+cert_len,fixed=2))+\
+            self.handshakeMessages[2] = tls_header+str(bi2ba(4+cert_len,fixed=2))+\
                 sh_cert_shd[9+sh_length:9+sh_length+4+cert_len]
             #server hello done
             self.handshakeMessages[3] = shd
@@ -266,7 +277,7 @@ class TLSNSSLClientSession(object):
             self.auditeeSecret = os.urandom(self.nAuditeeEntropy)
         label = 'master secret'
         seed = self.clientRandom + self.serverRandom
-        pms1 = '\x03\x01'+self.auditeeSecret + ('\x00' * (24-2-self.nAuditeeEntropy))
+        pms1 = tlsver+self.auditeeSecret + ('\x00' * (24-2-self.nAuditeeEntropy))
         self.pAuditee = TLS10PRF(label+seed,first_half = pms1)[0]
 
         #we can construct the encrypted form if pubkey is known
@@ -345,10 +356,10 @@ class TLSNSSLClientSession(object):
         modulus = rv[0].getComponentByPosition(0)
         self.serverModulus = int(modulus)
         self.serverExponent = int(exponent)
-        n = bigint_to_bytearray(self.serverModulus)
-        e = bigint_to_bytearray(self.serverExponent)
+        n = bi2ba(self.serverModulus)
+        e = bi2ba(self.serverExponent)
         modulus_len_int = len(n)
-        self.serverModLength = bigint_to_bytearray(modulus_len_int)
+        self.serverModLength = bi2ba(modulus_len_int)
         if len(self.serverModLength) == 1: self.serverModLength.insert(0,0)  #zero-pad to 2 bytes
 
         return (self.serverModulus,self.serverExponent)
@@ -438,17 +449,17 @@ class TLSNSSLClientSession(object):
         #TODO: This is a repetition of getCKECCSF. Obviously it should be got rid of.
         #I can't remember why it's necessary.
         #construct correct length bytes for CKE
-        epms_len = len(bigint_to_bytearray(self.encPMS))
-        b_epms_len = bigint_to_bytearray(epms_len,fixed=2)
+        epms_len = len(bi2ba(self.encPMS))
+        b_epms_len = bi2ba(epms_len,fixed=2)
         hs_len = 2 + epms_len
-        b_hs_len = bigint_to_bytearray(hs_len,fixed=3)
+        b_hs_len = bi2ba(hs_len,fixed=3)
         record_len = 6+epms_len
-        b_record_len = bigint_to_bytearray(record_len,fixed=2)
+        b_record_len = bi2ba(record_len,fixed=2)
         #construct CKE
-        self.handshakeMessages[4] = '\x16' + self.tlsMajorVersionNum + self.tlsMinorVersionNum + \
-            b_record_len+'\x10' + b_hs_len + b_epms_len + bigint_to_bytearray(self.encPMS)
-        #Change cipher spec
-        self.handshakeMessages[5] = '\x14\x03\01\x00\x01\x01'
+        self.handshakeMessages[4] = hs + tlsver + b_record_len + h_cke + \
+            b_hs_len + b_epms_len + bi2ba(self.encPMS)
+        #Change cipher spec NB, not a handshake message
+        self.handshakeMessages[5] = chcis + tlsver + bi2ba(1,fixed=2)+'\x01'
         
         handshakeData = bytearray('').join([x[5:] for x in self.handshakeMessages[:5]])
         if isForServer: handshakeData += self.unencryptedClientFinished
@@ -480,16 +491,16 @@ class TLSNSSLClientSession(object):
         for a given client request. Implicitly the request
         will be less than 16kB and therefore only 1 SSL record.
         This can in principle be used more than once.'''
-        bytes_to_send = '\x17'+self.tlsMajorVersionNum+self.tlsMinorVersionNum #app data, tls version
+        bytes_to_send = appd+tlsver #app data, tls version
 
-        record_mac = self.buildRecordMac(False,cleartext,'\x17')
+        record_mac = self.buildRecordMac(False,cleartext,appd)
         cleartext += record_mac
         if self.chosenCipherSuite in [4,5]:
             ciphertext, self.clientRC4State = RC4crypt(bytearray(cleartext),self.clientEncKey,self.clientRC4State)
         elif self.chosenCipherSuite in [47,53]:
             cleartextList = map(ord,cleartext)
             #clientEncList = map(ord,self.clientEncKey)
-            clientEncList = bigint_to_bytearray(ba2int(self.clientEncKey))
+            clientEncList = bi2ba(ba2int(self.clientEncKey))
             padding = getCBCPadding(len(cleartextList))
             paddedCleartext = bytearray(cleartextList) + padding
             key_size = self.cipherSuites[self.chosenCipherSuite][3]
@@ -501,7 +512,7 @@ class TLSNSSLClientSession(object):
             print ("Error, unrecognized cipher suite in buildRequest")
             return None
 
-        cpt_len = bigint_to_bytearray(len(ciphertext),fixed=2)
+        cpt_len = bi2ba(len(ciphertext),fixed=2)
         bytes_to_send += cpt_len + bytearray(ciphertext)
         #just in case we plan to send more data,
         #update the client ssl state
@@ -524,13 +535,9 @@ class TLSNSSLClientSession(object):
         if not macKey:
             print ("Failed to build mac; mac key is missing")
             return None
-        fragment_len = bigint_to_bytearray(len(cleartext))
-        if len(fragment_len) ==1:
-            fragment_len = '\x00'+fragment_len
-            
+        fragment_len = bi2ba(len(cleartext),fixed=2)    
         record_mac = hmac.new(macKey,seqNoBytes + recordType + \
-                    self.tlsMajorVersionNum + self.tlsMinorVersionNum \
-                    +fragment_len + cleartext, mac_algo).digest()
+                    tlsver+fragment_len + cleartext, mac_algo).digest()
         return record_mac
 
     def getCKECCSF(self,providedPValue = None):
@@ -540,18 +547,18 @@ class TLSNSSLClientSession(object):
         If providedPValue is non null, it means the caller does not have
         access to the full master secret, and is providing the pvalue to be
         passed into getVerifyDataForFinished.'''
-        #construct correct length bytes for CKE #TODO tidy up
-        epms_len = len(bigint_to_bytearray(self.encPMS))
-        b_epms_len = bigint_to_bytearray(epms_len,fixed=2)
+        #construct correct length bytes for CKE
+        epms_len = len(bi2ba(self.encPMS))
+        b_epms_len = bi2ba(epms_len,fixed=2)
         hs_len = 2 + epms_len
-        b_hs_len = bigint_to_bytearray(hs_len,fixed=3)
+        b_hs_len = bi2ba(hs_len,fixed=3)
         record_len = 6+epms_len
-        b_record_len = bigint_to_bytearray(record_len,fixed=2)
+        b_record_len = bi2ba(record_len,fixed=2)
         #construct CKE
-        self.handshakeMessages[4] = '\x16' + self.tlsMajorVersionNum + self.tlsMinorVersionNum + \
-            b_record_len+'\x10' + b_hs_len + b_epms_len + bigint_to_bytearray(self.encPMS)
-        #Change cipher spec
-        self.handshakeMessages[5] = '\x14\x03\01\x00\x01\x01'
+        self.handshakeMessages[4] = hs + tlsver + b_record_len + h_cke + \
+            b_hs_len + b_epms_len + bi2ba(self.encPMS)
+        #Change cipher spec NB, not a handshake message
+        self.handshakeMessages[5] = chcis + tlsver + bi2ba(1,fixed=2)+'\x01'
         
         #start processing for Finished
         if providedPValue:
@@ -563,9 +570,10 @@ class TLSNSSLClientSession(object):
             return None
 
         #HMAC and encrypt the verify_data
-        hmacVerify = self.buildRecordMac(False,'\x14\x00\x00\x0c' + verifyData,'\x16')
-        cleartext = '\x14\x00\x00\x0c' + verifyData + hmacVerify
-        self.unencryptedClientFinished = '\x14\x00\x00\x0c' + verifyData
+        hs_header = h_fin + bi2ba(12,fixed=3)
+        hmacVerify = self.buildRecordMac(False,hs_header + verifyData,hs)
+        cleartext = hs_header + verifyData + hmacVerify
+        self.unencryptedClientFinished = hs_header + verifyData
         if self.chosenCipherSuite in [4,5]:
             hmacedVerifyData, self.clientRC4State = RC4crypt(cleartext,self.clientEncKey)
         elif self.chosenCipherSuite in [47,53]:
@@ -583,17 +591,17 @@ class TLSNSSLClientSession(object):
             return None
 
         self.clientSeqNo += 1
-        self.handshakeMessages[6] = '\x16\x03\x01' +'\x00' + \
-            chr(len(hmacedVerifyData)) + bytearray(hmacedVerifyData)
+        self.handshakeMessages[6] = hs + tlsver + bi2ba(len(hmacedVerifyData),fixed=2) \
+            + bytearray(hmacedVerifyData)
         return bytearray('').join(self.handshakeMessages[4:])
 
     def processServerCCSFinished(self, data, providedPValue):
-        if data[:6] != '\x14\x03\x01\x00\x01\x01':
+        if data[:6] != chcis + tlsver + bi2ba(1,fixed=2)+'\x01':
             print ("Server CCSFinished did not contain CCS")
             print ("Got response:",binascii.hexlify(data))
             return None
         self.serverFinished = data[6:]
-        if self.serverFinished[:3] != '\x16\x03\x01':
+        if self.serverFinished[:3] != hs+tlsver:
             print ("Server CCSFinished does not contain Finished")
             return None
         recordLen = ba2int(self.serverFinished[3:5])
@@ -628,7 +636,7 @@ class TLSNSSLClientSession(object):
         #*after* the server has passed the real mac key.
 
         #check the finished message header
-        if plaintext[:4] != '\x14\x00\x00\x0c':
+        if plaintext[:4] != h_fin+bi2ba(12,fixed=3):
             print ("The server Finished verify data is invalid")
             return None
         #Verify the verify data
@@ -650,13 +658,12 @@ class TLSNSSLClientSession(object):
         return True
 
     def storeServerAppDataRecords(self, response):
-        #print ("Got this server response: ", binascii.hexlify(response))
         self.serverAppDataRecords = response
         #extract the ciphertext from the raw records as a list
         #for maximum flexibility in decryption
         while True:
-            if response[:3] != '\x17\x03\x01':
-                if response[:3] == '\x15\x03\x01':
+            if response[:3] != appd+tlsver:
+                if response[:3] == alrt + tlsver:
                     #print ("Server response was: ",binascii.hexlify(response))
                     #raw_plaintext, self.serverRC4State = RC4crypt(bytearray(response[5:]),\
                     #                                self.serverEncKey,self.serverRC4State)                    
@@ -693,7 +700,7 @@ class TLSNSSLClientSession(object):
         bad_record_mac = 0
         if checkFinished:
             #before beginning, we must authenticate the server finished
-            check_mac = self.buildRecordMac(True,self.decryptedServerFinished[0],'\x16')
+            check_mac = self.buildRecordMac(True,self.decryptedServerFinished[0],hs)
             if self.decryptedServerFinished[1] != check_mac:
                 print ("Warning, record mac check failed from server Finished message.")
                 bad_record_mac += 1
@@ -731,7 +738,7 @@ class TLSNSSLClientSession(object):
             #mac check
             hash_len = sha1_hash_len if self.chosenCipherSuite in [5,47,53] else md5_hash_len
             received_mac = raw_plaintext[-hash_len:]
-            check_mac = self.buildRecordMac(True,raw_plaintext[:-hash_len],'\x17')
+            check_mac = self.buildRecordMac(True,raw_plaintext[:-hash_len],appd)
             if received_mac != check_mac:
                 print ("Warning, record mac check failed.")
                 bad_record_mac += 1

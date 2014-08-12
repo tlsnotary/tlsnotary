@@ -67,7 +67,7 @@ class ThreadWithRetval(threading.Thread):
         super(ThreadWithRetval, self).__init__(target=target, args = (self,)+args )
     retval = ''
 
-def bigint_to_bytearray(bigint,fixed=None):
+def bi2ba(bigint,fixed=None):
     m_bytes = []
     while bigint != 0:
         b = bigint%256
