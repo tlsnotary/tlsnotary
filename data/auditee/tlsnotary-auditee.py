@@ -433,14 +433,17 @@ def audit_page(headers,pms_secret,claimed_pub_key):
     data =  tlsnSession.getCKECCSF(providedPValue=verify_hmac)
     tlssock.send(data)
     response = shared.recv_socket(tlssock)
+    print ("Response to ckeccsf was: ",binascii.hexlify(response))
     sha_digest2,md5_digest2 = tlsnSession.getHandshakeHashes(isForServer = True)
     reply = send_and_recv('verify_md5sha2:'+md5_digest2+sha_digest2)
     if reply[0] != 'success':return("Failed to receive a reply")
     if not reply[1].startswith('verify_hmac2:'):return("bad reply. Expected verify_hmac2:")
     verify_hmac2 = reply[1][len('verify_hmac2:'):]
+    print ("Using headers: ",headers)
     if not tlsnSession.processServerCCSFinished(response,providedPValue = verify_hmac2):
         raise Exception ("Could not finish handshake with server successfully. Audit aborted")
     headers += '\r\n'
+    
     encrypted_request = tlsnSession.buildRequest(headers)
     tlssock.send(encrypted_request)
     response = shared.recv_socket(tlssock)
@@ -638,16 +641,19 @@ def start_firefox(FF_to_backend_port):
                 '<NC:persist RDF:resource="chrome://browser/content/browser.xul#addon-bar" collapsed="false"/>'
                 '</RDF:Description></RDF:RDF>')        
     bundles_dir = os.path.join(firefox_install_path, 'distribution', 'bundles')
-    if not os.path.exists(bundles_dir):
-        os.makedirs(bundles_dir)
-    if not os.path.exists(join(bundles_dir, 'tlsnotary@tlsnotary')):    
-        shutil.copytree(join(datadir, 'FF-addon', 'tlsnotary@tlsnotary'),
-                            join(bundles_dir, 'tlsnotary@tlsnotary'))
-    if not os.path.exists(join(bundles_dir, 'ClassicThemeRestorer@ArisT2Noia4dev.xpi_FILES')):
-        shutil.copytree(join(datadir, 'FF-addon', 'ClassicThemeRestorer@ArisT2Noia4dev.xpi_FILES'),
-                            join(bundles_dir, 'ClassicThemeRestorer@ArisT2Noia4dev.xpi_FILES'))
-
-
+    #if not os.path.exists(bundles_dir):
+    #    os.makedirs(bundles_dir)    
+    #for ext_dir in ['tlsnotary@tlsnotary','ClassicThemeRestorer@ArisT2Noia4dev.xpi_FILES']:
+    #    if not os.path.exists(join(bundles_dir, ext_dir)):    
+    #        shutil.copytree(join(datadir, 'FF-addon', ext_dir),
+    #                            join(bundles_dir, ext_dir))    
+    if not os.path.exists(join(ffprof_dir,'extensions')):
+        os.makedirs(join(ffprof_dir,'extensions'))
+    for ext_dir in ['tlsnotary@tlsnotary','ClassicThemeRestorer@ArisT2Noia4dev']:
+        if not os.path.exists(join(ffprof_dir,'extensions', ext_dir)):    
+            shutil.copytree(join(datadir, 'FF-addon', ext_dir),
+                                join(ffprof_dir, 'extensions', ext_dir))
+                
     os.putenv('FF_to_backend_port', str(FF_to_backend_port))
     os.putenv('FF_first_window', 'true')   #prevents addon confusion when websites open multiple FF windows
     #keep trailing slash to tell the patch which path delimiter to use (nix vs win)
@@ -707,50 +713,29 @@ def quit(sig=0, frame=0):
         except: pass #selftest not runnng    
     exit(1)
     
-def first_run_check():
-    #On first run, extract rsa,pyasn1,requests and check hashes
-    rsa_dir = join(datadir, 'python', 'rsa-3.1.4')
+def first_run_check(modname,modhash):
+    if not modhash: return
+    rsa_dir = join(datadir, 'python', modname)
     if not os.path.exists(rsa_dir):
-        print ('Extracting rsa-3.1.4.tar.gz...')
-        with open(join(datadir, 'python', 'rsa-3.1.4.tar.gz'), 'rb') as f: tarfile_data = f.read()
-        #for md5 hash, see https://pypi.python.org/pypi/rsa/3.1.4
-        if md5(tarfile_data).hexdigest() != 'b6b1c80e1931d4eba8538fd5d4de1355':
+        print ('Extracting '+modname + '.tar.gz...')
+        with open(join(datadir, 'python', modname+'.tar.gz'), 'rb') as f: tarfile_data = f.read()
+        #for md5 hash, see https://pypi.python.org/pypi/<module name>/<module version>
+        if md5(tarfile_data).hexdigest() !=  modhash:
             raise Exception ('Wrong hash')
         os.chdir(join(datadir, 'python'))
-        tar = tarfile.open(join(datadir, 'python', 'rsa-3.1.4.tar.gz'), 'r:gz')
+        tar = tarfile.open(join(datadir, 'python', modname+'.tar.gz'), 'r:gz')
         tar.extractall()
         tar.close()
-      
-    pyasn1_dir = join(datadir, 'python', 'pyasn1-0.1.7')
-    if not os.path.exists(pyasn1_dir):
-        print ('Extracting pyasn1-0.1.7.tar.gz...')
-        with open(join(datadir, 'python', 'pyasn1-0.1.7.tar.gz'), 'rb') as f: tarfile_data = f.read()
-        #for md5 hash, see https://pypi.python.org/pypi/pyasn1/0.1.7
-        if md5(tarfile_data).hexdigest() != '2cbd80fcd4c7b1c82180d3d76fee18c8':
-            raise Exception ('Wrong hash')
-        os.chdir(join(datadir, 'python'))
-        tar = tarfile.open(join(datadir, 'python', 'pyasn1-0.1.7.tar.gz'), 'r:gz')
-        tar.extractall()
-        tar.close()
-        
-    requests_dir = join(datadir, 'python', 'requests-2.3.0')
-    if not os.path.exists(requests_dir):
-        print ('Extracting requests-2.3.0.tar.gz...')
-        with open(join(datadir, 'python', 'requests-2.3.0.tar.gz'), 'rb') as f: tarfile_data = f.read()
-        #for md5 hash, see https://pypi.python.org/pypi/requests/2.3.0
-        if md5(tarfile_data).hexdigest() != '7449ffdc8ec9ac37bbcd286003c80f00':
-            raise Exception ('Wrong hash')
-        os.chdir(join(datadir, 'python'))
-        tar = tarfile.open(join(datadir, 'python', 'requests-2.3.0.tar.gz'), 'r:gz')
-        tar.extractall()
-        tar.close()    
     
 if __name__ == "__main__":
-    first_run_check()
-    sys.path.append(join(datadir, 'python', 'rsa-3.1.4'))
-    sys.path.append(join(datadir, 'python', 'pyasn1-0.1.7'))
-    sys.path.append(join(datadir, 'python', 'slowaes'))
-    sys.path.append(join(datadir, 'python', 'requests-2.3.0'))    
+    modules_to_load = {'rsa-3.1.4':'b6b1c80e1931d4eba8538fd5d4de1355',\
+                       'pyasn1-0.1.7':'2cbd80fcd4c7b1c82180d3d76fee18c8',\
+                       'slowaes':'','requests-2.3.0':'7449ffdc8ec9ac37bbcd286003c80f00'}
+    for x,h in modules_to_load.iteritems():
+        first_run_check(x,h)
+    for modl in modules_to_load.keys():
+        sys.path.append(join(datadir, 'python', modl))
+        
     import rsa
     import pyasn1
     import requests
