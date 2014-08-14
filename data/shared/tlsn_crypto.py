@@ -577,9 +577,11 @@ class TLSNSSLClientSession(object):
         if self.chosenCipherSuite in [4,5]:
             hmacedVerifyData, self.clientRC4State = RC4crypt(cleartext,self.clientEncKey)
         elif self.chosenCipherSuite in [47,53]:
-            cleartextList = bigint_to_list(ba2int(cleartext))
-            clientEncList =  bigint_to_list(ba2int(self.clientEncKey))
-            clientIVList =  bigint_to_list(ba2int(self.clientIV))
+            cleartextList,clientEncList,clientIVList = \
+                [map(ord,str(x)) for x in [cleartext,self.clientEncKey,self.clientIV]]
+            #cleartextList = bigint_to_list(ba2int(cleartext))
+            #clientEncList =  bigint_to_list(ba2int(self.clientEncKey))
+            #clientIVList =  bigint_to_list(ba2int(self.clientIV))
             paddedCleartext = cleartext + getCBCPadding(len(cleartext))
             moo = AESModeOfOperation()
             mode, origLen, hmacedVerifyData = \
@@ -616,9 +618,11 @@ class TLSNSSLClientSession(object):
         if self.chosenCipherSuite in [4,5]:
             decrypted,self.serverRC4State = RC4crypt(bytearray(self.serverFinished[5:]),self.serverEncKey) #box is null for first record
         elif self.chosenCipherSuite in [47,53]:
-            ciphertextList = bigint_to_list(ba2int(self.serverFinished[5:]))
-            serverEncList = bigint_to_list(ba2int(self.serverEncKey))
-            serverIVList = bigint_to_list(ba2int(self.serverIV))
+            ciphertextList,serverEncList,serverIVList = \
+                [map(ord,x) for x in [self.serverFinished[5:],str(self.serverEncKey),str(self.serverIV)]]
+            #ciphertextList = bigint_to_list(ba2int(self.serverFinished[5:]))
+            #serverEncList = bigint_to_list(ba2int(self.serverEncKey))
+            #serverIVList = bigint_to_list(ba2int(self.serverIV))
             moo = AESModeOfOperation()
             key_size = self.cipherSuites[self.chosenCipherSuite][4]
             decrypted = moo.decrypt(ciphertextList,recordLen,moo.modeOfOperation['CBC'],serverEncList,key_size,serverIVList)
@@ -714,14 +718,12 @@ class TLSNSSLClientSession(object):
         for ciphertext in self.serverResponseCiphertexts:
             #need correct sequence number for macs
             self.serverSeqNo += 1
-
             if self.chosenCipherSuite in [4,5]: #RC4
                 raw_plaintext, self.serverRC4State = RC4crypt(bytearray(ciphertext),self.serverEncKey,\
                                                             self.serverRC4State)
             elif self.chosenCipherSuite in [47,53]: #AES-CBC
-                ciphertextList = map(ord,ciphertext)
-                serverEncList =  bigint_to_list(ba2int(self.serverEncKey))
-                serverIVList =  bigint_to_list(ba2int(self.lastServerCiphertextBlock))
+                ciphertextList,serverEncList,serverIVList = \
+                    [map(ord,x) for x in [ciphertext,str(self.serverEncKey),self.lastServerCiphertextBlock]]
                 moo = AESModeOfOperation()
                 key_size = self.cipherSuites[self.chosenCipherSuite][4]
                 raw_plaintext = moo.decrypt(ciphertextList,len(ciphertextList),\
@@ -729,7 +731,7 @@ class TLSNSSLClientSession(object):
                 self.lastServerCiphertextBlock = ciphertext[-16:] #ready for next record
             else:
                 raise Exception("Unrecognized cipher suite.")
-            
+
             #unpad for CBC
             if self.chosenCipherSuite in [47,53]:
                 padLen = ba2int(raw_plaintext[-1])
