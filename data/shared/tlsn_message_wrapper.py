@@ -176,7 +176,7 @@ def tlsn_msg_receiver(my_nick,counterparty_nick,ackQueue,recvQueue,message_heade
     '''
     if not initialized:
         raise Exception("TLSN Messaging not yet instantiated")
-    #TODO this can be changed now
+    
     if not hasattr(tlsn_msg_receiver, 'last_seq_which_i_acked'):
         if not seq_init: seq_init=0
         tlsn_msg_receiver.last_seq_which_i_acked = seq_init #static variable. Initialized only on first function's run

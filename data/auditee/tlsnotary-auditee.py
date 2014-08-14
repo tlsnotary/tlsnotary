@@ -390,7 +390,6 @@ def audit_page(headers,pms_secret,claimed_pub_key):
     sh_cert_shd = shared.recv_socket(tlssock)
     if not tlsnSession.processServerHello(sh_cert_shd): #this will set the serverRandom
         raise Exception("Failure in processing of server Hello from " + tlsnSession.serverName)
-    #TODO extract the cipher suite byte from the response
     cr_list.append(tlsnSession.clientRandom)
     tlsnSession.extractCertificate()
     tlsnSession.extractModAndExp()
@@ -481,14 +480,11 @@ def audit_page(headers,pms_secret,claimed_pub_key):
     tlsnSession.pAuditor = sha1hmac_for_MS
     tlsnSession.setMasterSecretHalf() #without arguments sets the whole MS
     tlsnSession.doKeyExpansion()
-    #do mac verification
-    #TODO currently little hack to reset the last ciphertext block to the IV
-    #should not be needed when remove the above unnecessary decryption
+    
+    #do decryption and mac verification
     tlsnSession.lastServerCiphertextBlock = tlsnSession.serverFinished[-16:]
     tlsnSession.serverSeqNo = 0
-
     plaintext,bad_mac = tlsnSession.processServerAppDataRecords(checkFinished=True)
-
     if bad_mac: print ("WARNING! Plaintext is not authenticated.")
     #successful authenticated decryption. Commit the html to disk.
     #TODO strip the headers from the html?
@@ -582,7 +578,13 @@ def peer_handshake():
     thread.start()
     return 'success'
        
-def start_firefox(FF_to_backend_port):    
+def start_firefox(FF_to_backend_port):
+    #copy the user's firefox locally for better installation of extensions
+    global firefox_install_path
+    if not os.path.exists(join(datadir,'firefoxcopy')):
+        shutil.copytree(firefox_install_path,join(datadir,'firefoxcopy'))
+    firefox_install_path = join(datadir,'firefoxcopy') 
+    
     #sanity check
     if OS=='linux':
         if firefox_install_path=='/usr/lib/firefox':
@@ -599,7 +601,7 @@ def start_firefox(FF_to_backend_port):
         if not os.path.isfile(join(firefox_install_path,'firefox')):
             exit(FIREFOX_MISSING)
         firefox_exepath=join(firefox_install_path,'firefox')
-
+        
     logs_dir = join(datadir, 'logs')
     if not os.path.isdir(logs_dir): os.makedirs(logs_dir)
     with open(join(logs_dir, 'firefox.stdout'), 'w') as f: pass
@@ -637,20 +639,21 @@ def start_firefox(FF_to_backend_port):
                 '<RDF:RDF xmlns:NC="http://home.netscape.com/NC-rdf#" xmlns:RDF="http://www.w3.org/1999/02/22-rdf-syntax-ns#">'
                 '<RDF:Description RDF:about="chrome://browser/content/browser.xul">'
                 '<NC:persist RDF:resource="chrome://browser/content/browser.xul#addon-bar" collapsed="false"/>'
-                '</RDF:Description></RDF:RDF>')        
+                '</RDF:Description></RDF:RDF>')
+    
     bundles_dir = os.path.join(firefox_install_path, 'distribution', 'bundles')
-    #if not os.path.exists(bundles_dir):
-    #    os.makedirs(bundles_dir)    
-    #for ext_dir in ['tlsnotary@tlsnotary','ClassicThemeRestorer@ArisT2Noia4dev.xpi_FILES']:
-    #    if not os.path.exists(join(bundles_dir, ext_dir)):    
-    #        shutil.copytree(join(datadir, 'FF-addon', ext_dir),
-    #                            join(bundles_dir, ext_dir))    
-    if not os.path.exists(join(ffprof_dir,'extensions')):
-        os.makedirs(join(ffprof_dir,'extensions'))
+    if not os.path.exists(bundles_dir):
+        os.makedirs(bundles_dir)    
     for ext_dir in ['tlsnotary@tlsnotary','ClassicThemeRestorer@ArisT2Noia4dev']:
-        if not os.path.exists(join(ffprof_dir,'extensions', ext_dir)):    
+        if not os.path.exists(join(bundles_dir, ext_dir)):    
             shutil.copytree(join(datadir, 'FF-addon', ext_dir),
-                                join(ffprof_dir, 'extensions', ext_dir))
+                                join(bundles_dir, ext_dir))    
+    #if not os.path.exists(join(ffprof_dir,'extensions')):
+    #    os.makedirs(join(ffprof_dir,'extensions'))
+    #for ext_dir in ['tlsnotary@tlsnotary','ClassicThemeRestorer@ArisT2Noia4dev']:
+    #    if not os.path.exists(join(ffprof_dir,'extensions', ext_dir)):    
+    #        shutil.copytree(join(datadir, 'FF-addon', ext_dir),
+    #                            join(ffprof_dir, 'extensions', ext_dir))
                 
     os.putenv('FF_to_backend_port', str(FF_to_backend_port))
     os.putenv('FF_first_window', 'true')   #prevents addon confusion when websites open multiple FF windows
@@ -742,8 +745,11 @@ if __name__ == "__main__":
     from slowaes import AESModeOfOperation        
     import shared
     shared.load_program_config()
+    
     global firefox_install_path
     if len(sys.argv) > 1: firefox_install_path = sys.argv[1]
+    if firefox_install_path == 'test': firefox_install_path = None
+    
     if not firefox_install_path:
         if OS=='linux':
             if not os.path.exists('/usr/lib/firefox'):

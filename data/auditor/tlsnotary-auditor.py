@@ -240,7 +240,7 @@ def process_messages():
                 if bad_mac:
                     print ("AUDIT FAILURE - invalid mac")
                     link_response = 'false'
-                path = os.path.join(decr_dir, 'html-'+seqno) #todo - more than one?
+                path = os.path.join(decr_dir, 'html-'+seqno)
                 with open(path, 'wb') as f: f.write(plaintext) #todo maybe strip headers?
                 #also create a file where the auditor can see the domain and pubkey
                 with open (os.path.join(auditeetrace_dir, 'domain'+seqno), 'rb') as f: domain_data = f.read()
