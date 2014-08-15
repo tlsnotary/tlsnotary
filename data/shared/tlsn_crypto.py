@@ -579,9 +579,6 @@ class TLSNSSLClientSession(object):
         elif self.chosenCipherSuite in [47,53]:
             cleartextList,clientEncList,clientIVList = \
                 [map(ord,str(x)) for x in [cleartext,self.clientEncKey,self.clientIV]]
-            #cleartextList = bigint_to_list(ba2int(cleartext))
-            #clientEncList =  bigint_to_list(ba2int(self.clientEncKey))
-            #clientIVList =  bigint_to_list(ba2int(self.clientIV))
             paddedCleartext = cleartext + getCBCPadding(len(cleartext))
             moo = AESModeOfOperation()
             mode, origLen, hmacedVerifyData = \
@@ -620,9 +617,6 @@ class TLSNSSLClientSession(object):
         elif self.chosenCipherSuite in [47,53]:
             ciphertextList,serverEncList,serverIVList = \
                 [map(ord,x) for x in [self.serverFinished[5:],str(self.serverEncKey),str(self.serverIV)]]
-            #ciphertextList = bigint_to_list(ba2int(self.serverFinished[5:]))
-            #serverEncList = bigint_to_list(ba2int(self.serverEncKey))
-            #serverIVList = bigint_to_list(ba2int(self.serverIV))
             moo = AESModeOfOperation()
             key_size = self.cipherSuites[self.chosenCipherSuite][4]
             decrypted = moo.decrypt(ciphertextList,recordLen,moo.modeOfOperation['CBC'],serverEncList,key_size,serverIVList)

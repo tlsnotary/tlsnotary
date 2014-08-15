@@ -19,8 +19,8 @@ var button_stop_enabled;
 var button_stop_disabled;
 var testingMode = false;
 var headers="";
-var latest_tab_sec_state = "uninitialised";
-var latest_tab_sha1_pubkey;
+var dict_of_certs = {};
+var dict_of_status = {};
 
 port = Cc["@mozilla.org/process/environment;1"].getService(Ci.nsIEnvironment).get("FF_to_backend_port");
 //setting homepage should be done from here rather than defaults.js in order to have the desired effect. FF's quirk.
@@ -41,9 +41,10 @@ myObserver.prototype = {
      //they will be overridden because we do not unregister
      console.log("allowed url: " + url);
      headers = "";
+     //TODO: handle POST here
      headers += "GET /" + tab_url + " HTTP/1.1" + "\r\n";
      aSubject.visitRequestHeaders(function(header,value){
-                                  headers += header +": " + value + "\r\n";})
+                                  headers += header +": " + value + "\r\n";});
   },
   register: function() {
     var observerService = Cc["@mozilla.org/observer-service;1"].getService(Ci.nsIObserverService);
@@ -70,6 +71,7 @@ function popupShow(text) {
 //poll the env var to see if IRC started so that we can display a help message on the addon toolbar
 //We do this from here rather than from auditee.html to make it easier to debug
 var prevMsg = "";
+setTimeout(startListening,500);
 pollEnvvar();
 function pollEnvvar(){
 	var msg = Cc["@mozilla.org/process/environment;1"].getService(Ci.nsIEnvironment).get("TLSNOTARY_MSG");
@@ -94,12 +96,16 @@ function pollEnvvar(){
 	help.value = "Go to a page and press AUDIT THIS PAGE. Then wait for the page to reload automatically.";
 	button_record_disabled.hidden = true;
 	button_record_enabled.hidden = false;
-	//from now on, we will check the security status of the latest loaded tab
-	//TODO - need to handle case where user switches back to an old tab.
-	gBrowser.addProgressListener(myListener);
 	popupShow("The connection to the auditor has been established. You may now open a new tab and go to a webpage. Please follow the instructions on the status bar below.")
 }
 
+function startListening(){
+//from now on, we will check the security status of all loaded tabs
+//and store the security status and certificate fingerprint in a lookup table
+//indexed by the url. Doing this immediately allows the user to start
+//loading tabs before the peer negotiation is finished.
+    gBrowser.addProgressListener(myListener);
+}
 
 function startRecording(){
     audited_browser = gBrowser.selectedBrowser;
@@ -108,12 +114,10 @@ function startRecording(){
 		help.value = "ERROR You can only audit pages which start with https://";
 		return;
     }
-    if (latest_tab_sec_state != "secure"){
+    if (dict_of_status[tab_url_full] != "secure"){
 	alert("Do not attempt to audit this page! It does not have a valid SSL certificate.");
 	return;
     }
-    //fix the pubkey
-    pubKey = parsePubKey(latest_tab_sha1_pubkey);
     
     var x = tab_url_full.split('/');
     x.splice(0,3);
@@ -126,20 +130,16 @@ function startRecording(){
     observer.register();
     audited_browser.reloadWithFlags(Ci.nsIWebNavigation.LOAD_FLAGS_BYPASS_CACHE);
 	help.value = "Initializing the recording software"
-    setTimeout(preparePMS,500, pubKey);
+    setTimeout(preparePMS,500, tab_url_full);
 }
 
-function parsePubKey(pK){
-    return pK;
-}
 
-function preparePMS(pubKey){
+function preparePMS(urldata){
     help.value = "Audit is underway; please be patient";
 	reqPreparePMS = new XMLHttpRequest();
     reqPreparePMS.onload = responsePreparePMS;
-    //alert("Were sending pubkey: "+pubKey);
-    console.log("Pubkey: "+pubKey);
-    var b64headers = btoa(pubKey+headers);
+    console.log("Cert fingerprint: "+dict_of_certs[urldata]);
+    var b64headers = btoa(dict_of_certs[urldata]+headers); //headers is a global variable
     reqPreparePMS.open("HEAD", "http://127.0.0.1:"+port+"/prepare_pms?b64headers="+b64headers, true);
     reqPreparePMS.send();
     responsePreparePMS(0);	
@@ -209,7 +209,6 @@ function stopRecording(){
     responseStopRecording(0);
 }
 
-
 function responseStopRecording(iteration){
     if (typeof iteration == "number"){
         if (iteration > 100){
@@ -238,56 +237,9 @@ function responseStopRecording(iteration){
 	popupShow("Congratulations. The auditor has acknowledged successful receipt of your audit data. You may now close the browser");
 	help.value = "Auditing session ended successfully";
 	return;
-	//The code below will have to be used again if sending file via
-	//sendspace using the pure python method becomes broken
-	
-	////set a dir which will open up to in "choose file" dialog
-	//var ioSvc = Cc["@mozilla.org/network/io-service;1"].getService(Ci.nsIIOService);
-	//var prefService = Cc["@mozilla.org/content-pref/service;1"].getService(Ci.nsIContentPrefService);
-	//var uri = ioSvc.newURI("http://www.sendspace.com", null, null);
-	//prefService.setPref(uri, "browser.upload.lastDir", session_path, null);
-	//var uri2 = ioSvc.newURI("http://host03.pipebytes.com", null, null);
-	//prefService.setPref(uri2, "browser.upload.lastDir", session_path, null);
-	//var uri3 = ioSvc.newURI("http://www.jetbytes.com", null, null);
-	//prefService.setPref(uri3, "browser.upload.lastDir", session_path, null);
-	
-	//ss_start(); //from sendspace.js
-	//setTimeout(ss_checkStarted, 20000)
-	//help.value = "Preparing the data to be sent to auditor using sendspace.com..."
 }
 
-
-//**********************Upload functions not in use for now
-function ss_checkStarted(){
-	if (ss_bSiteResponded == true) {
-		return;
-	}
-	//else
-	pb_start(); //from pipebytes.js
-	setTimeout(pb_checkStarted, 20000)
-	help.value = "Preparing the data to be sent to auditor using pipebytes.com..."
-}
-
-function pb_checkStarted(){
-	if (pb_bSiteResponded == true){
-		return;
-	}
-	//else
-	jb_start(); //from jetbytes.js
-	setTimeout(jb_checkStarted, 20000)
-	help.value = "Preparing the data to be sent to auditor using jetbytes.com..."
-}
-
-function jb_checkStarted(){
-	if (jb_bSiteResponded == true){
-		 return;
-	 }
-	//else
-	help.value = "ERROR. Failed to transfer the file to auditor. You will have to do it manually"
-}
-
-
-function dumpSecurityInfo(channel) {
+function dumpSecurityInfo(channel,urldata) {
     const Cc = Components.classes;
     const Ci = Components.interfaces;
     // Do we have a valid channel argument?
@@ -300,12 +252,16 @@ function dumpSecurityInfo(channel) {
     if (secInfo instanceof Ci.nsITransportSecurityInfo) {
         secInfo.QueryInterface(Ci.nsITransportSecurityInfo);
         // Check security state flags
+	latest_tab_sec_state = "uninitialised";
         if ((secInfo.securityState & Ci.nsIWebProgressListener.STATE_IS_SECURE) == Ci.nsIWebProgressListener.STATE_IS_SECURE)
             latest_tab_sec_state = "secure";
         else if ((secInfo.securityState & Ci.nsIWebProgressListener.STATE_IS_INSECURE) == Ci.nsIWebProgressListener.STATE_IS_INSECURE)
             latest_tab_sec_state = "insecure";
         else if ((secInfo.securityState & Ci.nsIWebProgressListener.STATE_IS_BROKEN) == Ci.nsIWebProgressListener.STATE_IS_BROKEN)
             latest_tab_sec_state = "unknown";
+	    
+	dict_of_status[urldata] = latest_tab_sec_state;
+	
     }
     else {
         console.log("\tNo security info available for this channel\n");
@@ -313,7 +269,7 @@ function dumpSecurityInfo(channel) {
     // Print SSL certificate details
     if (secInfo instanceof Ci.nsISSLStatusProvider) {
       var cert = secInfo.QueryInterface(Ci.nsISSLStatusProvider).SSLStatus.QueryInterface(Ci.nsISSLStatus).serverCert;
-      latest_tab_sha1_pubkey = cert.sha1Fingerprint;
+      dict_of_certs[urldata] = cert.sha1Fingerprint;
     }
 }
 
@@ -343,9 +299,54 @@ var myListener =
             // since only channels have security information
             if (aRequest instanceof Ci.nsIChannel)
             {
-                dumpSecurityInfo(aRequest);
+                dumpSecurityInfo(aRequest,gBrowser.selectedBrowser.contentWindow.location.href);
             }
         }    
     }
 }
 
+//The code below will have to be used again if sending file via
+//sendspace using the pure python method becomes broken
+
+////set a dir which will open up to in "choose file" dialog
+//var ioSvc = Cc["@mozilla.org/network/io-service;1"].getService(Ci.nsIIOService);
+//var prefService = Cc["@mozilla.org/content-pref/service;1"].getService(Ci.nsIContentPrefService);
+//var uri = ioSvc.newURI("http://www.sendspace.com", null, null);
+//prefService.setPref(uri, "browser.upload.lastDir", session_path, null);
+//var uri2 = ioSvc.newURI("http://host03.pipebytes.com", null, null);
+//prefService.setPref(uri2, "browser.upload.lastDir", session_path, null);
+//var uri3 = ioSvc.newURI("http://www.jetbytes.com", null, null);
+//prefService.setPref(uri3, "browser.upload.lastDir", session_path, null);
+
+//ss_start(); //from sendspace.js
+//setTimeout(ss_checkStarted, 20000)
+//help.value = "Preparing the data to be sent to auditor using sendspace.com..."
+	
+//**********************Upload functions not in use for now
+function ss_checkStarted(){
+	if (ss_bSiteResponded == true) {
+		return;
+	}
+	//else
+	pb_start(); //from pipebytes.js
+	setTimeout(pb_checkStarted, 20000)
+	help.value = "Preparing the data to be sent to auditor using pipebytes.com..."
+}
+
+function pb_checkStarted(){
+	if (pb_bSiteResponded == true){
+		return;
+	}
+	//else
+	jb_start(); //from jetbytes.js
+	setTimeout(jb_checkStarted, 20000)
+	help.value = "Preparing the data to be sent to auditor using jetbytes.com..."
+}
+
+function jb_checkStarted(){
+	if (jb_bSiteResponded == true){
+		 return;
+	 }
+	//else
+	help.value = "ERROR. Failed to transfer the file to auditor. You will have to do it manually"
+}
