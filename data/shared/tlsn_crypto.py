@@ -621,10 +621,9 @@ class TLSNSSLClientSession(object):
             key_size = self.cipherSuites[self.chosenCipherSuite][4]
             decrypted = moo.decrypt(ciphertextList,recordLen,moo.modeOfOperation['CBC'],serverEncList,key_size,serverIVList)
             #for CBC, unpad
-            padLen = ba2int(decrypted[-1])
-            decrypted = decrypted[:-(padLen+1)]
+            decrypted = cbcUnpad(decrypted)
+            
         #check the record mac
-        #mac check
         hash_len = sha1_hash_len if self.chosenCipherSuite in [5,47,53] else md5_hash_len
         received_mac = decrypted[-hash_len:]
         plaintext = decrypted[:-hash_len]
@@ -722,14 +721,11 @@ class TLSNSSLClientSession(object):
                 key_size = self.cipherSuites[self.chosenCipherSuite][4]
                 raw_plaintext = moo.decrypt(ciphertextList,len(ciphertextList),\
                                 moo.modeOfOperation['CBC'],serverEncList,key_size,serverIVList)
+                #unpad (and verify padding)
+                raw_plaintext = cbcUnpad(raw_plaintext)
                 self.lastServerCiphertextBlock = ciphertext[-16:] #ready for next record
             else:
                 raise Exception("Unrecognized cipher suite.")
-
-            #unpad for CBC
-            if self.chosenCipherSuite in [47,53]:
-                padLen = ba2int(raw_plaintext[-1])
-                raw_plaintext = raw_plaintext[:-(padLen+1)]
 
             #mac check
             hash_len = sha1_hash_len if self.chosenCipherSuite in [5,47,53] else md5_hash_len
@@ -759,6 +755,16 @@ def getCBCPadding(data_length):
     req_padding = 16 - data_length % 16
     return chr(req_padding-1) * req_padding
 
+def cbcUnpad(pt):
+    '''Given binary string pt, return
+    unpadded string, raise fatal exception
+    if padding format is not valid'''
+    padLen = ba2int(pt[-1])
+    #verify the padding
+    if not all(padLen == x for x in map(ord,pt[-padLen-1:-1])):
+        raise Exception ("Invalid CBC padding.")
+    return pt[:-(padLen+1)]    
+                    
 def RC4crypt(data, key, state=None):
     """RC4 algorithm.
     Symmetric, so performs encryption and decryption
