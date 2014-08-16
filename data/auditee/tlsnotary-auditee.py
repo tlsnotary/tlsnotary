@@ -1,31 +1,26 @@
 #!/usr/bin/env python
 from __future__ import print_function
 
+#Main auditee script.
+#This script acts as 
+#1. An installer, setting up keys, browser and browser extensions.
+#2. A marshaller, passing messages between (a) the javascript/html
+#   front end, (b) the Python back-end, including crypto functions
+#   and (c) the peer messaging between auditor and auditee.
+#3. Performs actual crypto audit functions in prepare_pms() and 
+#   audit_page().
+
 from base64 import b64decode, b64encode
-import BaseHTTPServer
-import binascii
-import codecs
 from hashlib import md5, sha1, sha256
-import hmac
-import os
 from os.path import join
-import platform
-import Queue
-import random
-import re
-import select
-import shutil
-import signal
-import SimpleHTTPServer
-import socket
 from subprocess import Popen, check_output
-import sys
-import tarfile
-import threading
-import time
-import zipfile
+import binascii, codecs, hmac, os, platform
+import Queue, random, re, select, shutil, signal, sys, time
+import SimpleHTTPServer, socket, tarfile, threading, zipfile
 try: import wingdbstub
 except: pass
+
+#file system setup.
 datadir = os.path.dirname(os.path.realpath(__file__))
 sys.path.append(os.path.dirname(datadir))
 installdir = os.path.dirname(os.path.dirname(datadir))
@@ -34,11 +29,13 @@ time_str = time.strftime('%d-%b-%Y-%H-%M-%S', time.gmtime())
 current_sessiondir = join(sessionsdir, time_str)
 os.makedirs(current_sessiondir)
 
+#OS detection
 m_platform = platform.system()
 if m_platform == 'Windows': OS = 'mswin'
 elif m_platform == 'Linux': OS = 'linux'
 elif m_platform == 'Darwin': OS = 'macos'
 
+#Globals
 recvQueue = Queue.Queue() #all messages from the auditor are placed here by receivingThread
 ackQueue = Queue.Queue() #ack numbers are placed here
 auditor_nick = '' #we learn auditor's nick as soon as we get a hello_server signed by the auditor
@@ -50,10 +47,9 @@ tlsnSession = None
 tshark_exepath = editcap_exepath= ''
 firefox_pid = selftest_pid = 0
 firefox_install_path = None
+cr_list = [] #a list of all client_randoms used to index html files audited.
 
-cr_list = [] #a list of all client_randoms for recorded pages used by tshark to search for html only in audited tracefiles.
-
-
+#RSA key management for peer messaging
 def import_auditor_pubkey(auditor_pubkey_b64modulus):
     global auditorPubKey                      
     try:
@@ -158,15 +154,6 @@ class HandlerClass(SimpleHTTPServer.SimpleHTTPRequestHandler):
             self.respond({'response':'start_peer_connection', 'status':rv,'pms_status':rv2})
             return       
         #----------------------------------------------------------------------#
-        if self.path.startswith('/start_recording'):
-            rv = start_recording()
-            if rv[0] != 'success':
-                self.respond({'response':'start_recording', 'status':rv[0]})
-                return
-            else:
-                self.respond({'response':'start_recording', 'status':rv[0], 'proxy_port':rv[1]})
-                return        
-        #----------------------------------------------------------------------#
         if self.path.startswith('/stop_recording'):
             rv = stop_recording()
             self.respond({'response':'stop_recording', 'status':rv,
@@ -180,7 +167,8 @@ class HandlerClass(SimpleHTTPServer.SimpleHTTPRequestHandler):
                 return
             b64headers = arg_str[len('b64headers='):]
             sha1_and_headers = b64decode(b64headers)
-            #the sha1 of the pubkey in colon separated hex is snuck in at the front of the headers
+            #the sha1 of the cert, in colon separated hex, (DE:AD:BE:EF etc.)
+            #is snuck in at the front of the headers
             raw_pk = sha1_and_headers[:59]
             processed_pk = binascii.unhexlify(raw_pk.replace(':',''))
             
@@ -224,8 +212,6 @@ class HandlerClass(SimpleHTTPServer.SimpleHTTPRequestHandler):
                 print ('Failed to reset the irc config. Server was:',args[0].split('=')[1], \
                 ' and channel was: ', args[1].split('=')[1])
                 return
-                #to consider: front end is not listening anyway, so no point responding.
-                #raise Exception("Invalid format of advanced update request")
             shared.config.set('IRC','irc_server',args[0].split('=')[1])
             shared.config.set('IRC','channel_name',args[1].split('=')[1])
             shared.config.set('IRC','irc_port',args[2].split('=')[1])
@@ -236,16 +222,8 @@ class HandlerClass(SimpleHTTPServer.SimpleHTTPRequestHandler):
             self.respond({'response':'unknown command'})
             return
 
-def send_link(filelink):
-    reply = send_and_recv('link:'+filelink)
-    if not reply[0] == 'success' : return 'failure'
-    if not reply[1].startswith('response:') : return 'failure'
-    response = reply[1][len('response:'):]
-    return response
-
 #Because there is a 1 in 6 chance that the encrypted PMS will contain zero bytes in its
-#padding, we first try the encrypted PMS with google.com and see if it gets rejected.
-#return my first half of PMS which will be used in the actual audited connection to the server
+#padding, we first try the encrypted PMS with a reliable site and see if it gets rejected.
 def prepare_pms(headers,claimed_pub_key):
     for i in range(5): #try 5 times until reliable site check succeeds
         #first 4 bytes of client random are unix time
@@ -289,69 +267,20 @@ def prepare_pms(headers,claimed_pub_key):
     raise Exception ('Could not prepare PMS with ', shared.config.get('SSL','reliable_site'), ' after 5 tries')
 
     
-#send a message and return the response received
+#peer messaging protocol
 def send_and_recv (data):
     if not ('success' == shared.tlsn_send_msg(data,auditorPubKey,ackQueue,auditor_nick,seq_init=None)):
         return ('failure','')
     #receive a response (these are collected into the recvQueue by the receiving thread)
     for i in range(3):
         try: onemsg = recvQueue.get(block=True, timeout=5)
-        except:  continue #try to receive again
+        except:  continue 
         return ('success', onemsg)
     return ('failure', '')
 
-def sendspace_getlink(mfile):
-    reply = requests.get('https://www.sendspace.com/', timeout=5)
-    url_start = reply.text.find('<form method="post" action="https://') + len('<form method="post" action="')
-    url_len = reply.text[url_start:].find('"')
-    url = reply.text[url_start:url_start+url_len]
-    
-    sig_start = reply.text.find('name="signature" value="') + len('name="signature" value="')
-    sig_len = reply.text[sig_start:].find('"')
-    sig = reply.text[sig_start:sig_start+sig_len]
-    
-    progr_start = reply.text.find('name="PROGRESS_URL" value="') + len('name="PROGRESS_URL" value="')
-    progr_len = reply.text[progr_start:].find('"')
-    progr = reply.text[progr_start:progr_start+progr_len]
-    
-    r=requests.post(url, files={'upload_file[]': open(mfile, 'rb')}, data={
-        'signature':sig, 'PROGRESS_URL':progr, 'js_enabled':'0', 
-        'upload_files':'', 'terms':'1', 'file[]':'', 'description[]':'',
-        'recpemail_fcbkinput':'recipient@email.com', 'ownemail':'', 'recpemail':''}, timeout=5)
-    
-    link_start = r.text.find('"share link">') + len('"share link">')
-    link_len = r.text[link_start:].find('</a>')
-    link = r.text[link_start:link_start+link_len]
-    
-    dl_req = requests.get(link)
-    dl_start = dl_req.text.find('"download_button" href="') + len('"download_button" href="')
-    dl_len = dl_req.text[dl_start:].find('"')
-    dl_link = dl_req.text[dl_start:dl_start+dl_len]
-    return dl_link
 
-
-def pipebytes_post(key, mfile):
-    #the server responds only when the recepient picks up the file
-    requests.post('http://host03.pipebytes.com/put.py?key='+key+'&r='+
-                  ('%.16f' % random.uniform(0,1)), files={'file': open(mfile, 'rb')})    
-
-
-def pipebytes_getlink(mfile):
-    reply1 = requests.get('http://host03.pipebytes.com/getkey.php?r='+
-                          ('%.16f' % random.uniform(0,1)), timeout=5)
-    key = reply1.text
-    reply2 = requests.post('http://host03.pipebytes.com/setmessage.php?r='+
-                           ('%.16f' % random.uniform(0,1))+'&key='+key, {'message':''}, timeout=5)
-    thread = threading.Thread(target= pipebytes_post, args=(key, mfile))
-    thread.daemon = True
-    thread.start()
-    time.sleep(1)               
-    reply4 = requests.get('http://host03.pipebytes.com/status.py?key='+key+
-                          '&touch=yes&r='+('%.16f' % random.uniform(0,1)), timeout=5)
-    return ('http://host03.pipebytes.com/get.py?key='+key)
-
+#complete audit function
 def stop_recording():
-    #trace* files in committed dir is what auditor needs
     tracedir = join(current_sessiondir, 'mytrace')
     os.makedirs(tracedir)
     zipf = zipfile.ZipFile(join(tracedir, 'mytrace.zip'), 'w')
@@ -361,16 +290,17 @@ def stop_recording():
         if not onefile.startswith(('response', 'md5hmac', 'domain','IV','cs')): continue
         zipf.write(join(commit_dir, onefile), onefile)
     zipf.close()
-    try: link = sendspace_getlink(join(tracedir, 'mytrace.zip'))
+    try: link = shared.sendspace_getlink(join(tracedir, 'mytrace.zip'))
     except:
-        try: link = pipebytes_getlink(join(tracedir, 'mytrace.zip'))
+        try: link = shared.pipebytes_getlink(join(tracedir, 'mytrace.zip'))
         except: return 'failure'
     return send_link(link)
 
+#reconstruct correct http headers
+#for passing to TLSNotary custom ssl session
 def parse_headers(headers):
     header_lines = headers.split('\r\n') #no new line issues; it was constructed like that
     server = header_lines[1].split(':')[1].strip()
-    #gzip is optionally disabled
     if int(shared.config.get("General","gzip_disabled")) != 0:
         modified_headers = '\r\n'.join([x for x in header_lines if 'gzip' not in x])
     else:
@@ -379,7 +309,23 @@ def parse_headers(headers):
     return (server,modified_headers)
 
 
+#The main auditing function occurs here.
+#Phases:
+#1 - Construct ssl client session object and do
+#    client hello, server hello, server hello one, certificate
+#    initial phase of handshake.
+#2 - Verify the server certificate by comparing that provided
+#    with the one that firefox already verified.
+#3 - Negotiate with auditor in order to create valid session keys
+#    (except server mac is garbage as auditor withholds it)
+#4 - Complete handshake (includes negotiation of verify data 
+#    with auditor).
+#5 - Send TLS request including http headers and receive server response.
+#6 - Commit the encrypted server response and other data to auditor
+#7 - Receive correct server mac key and then decrypt server response (html),
+#    (includes authentication of response).
 def audit_page(headers,pms_secret,claimed_pub_key):
+    #PHASE 1
     tlssock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     tlssock.settimeout(int(shared.config.get("General","tcp_socket_timeout")))
     server_name, headers = parse_headers(headers)
@@ -393,10 +339,8 @@ def audit_page(headers,pms_secret,claimed_pub_key):
     cr_list.append(tlsnSession.clientRandom)
     tlsnSession.extractCertificate()
     tlsnSession.extractModAndExp()
-    #before going further, verify that we're getting the same pubkey as
-    #firefox; if so, we leverage their cert checking functions. If not, we
-    #abort.
-    #get SHA-1 of certificate (DER format is passed over the wire) from active connection
+    
+    #PHASE 2
     our_pub_key = sha1(tlsnSession.serverCertificate).digest()
     if not our_pub_key == claimed_pub_key:
         print ("Tlsnotary session certificate hash was:",binascii.hexlify(our_pub_key))
@@ -406,10 +350,10 @@ def audit_page(headers,pms_secret,claimed_pub_key):
     else:
         print ("Browser verifies that the server certificate is valid, continuing audit.")
     
+    #PHASE 3
     tlsnSession.setAuditeeSecret()
-    md5hmac_1_for_MS = tlsnSession.pAuditee[:24]
     cr_sr_hmac_n_e= chr(tlsnSession.chosenCipherSuite)+tlsnSession.clientRandom+tlsnSession.serverRandom+ \
-                md5hmac_1_for_MS+tlsnSession.serverModLength+\
+                tlsnSession.pAuditee[:24]+tlsnSession.serverModLength+\
                 shared.bi2ba(tlsnSession.serverModulus)+\
                 shared.bi2ba(tlsnSession.serverExponent)
     reply = send_and_recv('cr_sr_hmac_n_e:'+cr_sr_hmac_n_e)
@@ -420,38 +364,36 @@ def audit_page(headers,pms_secret,claimed_pub_key):
     ml = shared.ba2int(tlsnSession.serverModLength)
     RSA_PMS2 = rsapms_hmacms_hmacek[:ml]
     tlsnSession.encSecondHalfPMS = shared.ba2int(RSA_PMS2)
-    enc_pms = shared.bi2ba(tlsnSession.setEncryptedPMS())
+    enc_pms = shared.bi2ba(tlsnSession.setEncryptedPMS()) #TODO: length? fixed argument
     tlsnSession.setMasterSecretHalf(half=2,providedPValue = rsapms_hmacms_hmacek[ml:ml+24])
     tlsnSession.pMasterSecretAuditor = rsapms_hmacms_hmacek[ml+24:ml+24+tlsnSession.cipherSuites[tlsnSession.chosenCipherSuite][-1]]
-    tlsnSession.doKeyExpansion() #we don't bother to record expanded_keys here, no longer needed for NSS patch
+    tlsnSession.doKeyExpansion() 
+    
+    #PHASE 4
     sha_digest,md5_digest = tlsnSession.getHandshakeHashes()
     reply = send_and_recv('verify_md5sha:'+md5_digest+sha_digest)
     if reply[0] != 'success': return ('Failed to receive a reply')
     if not reply[1].startswith('verify_hmac:'): return ('bad reply. Expected verify_hmac:')
-    verify_hmac= reply[1][len('verify_hmac:'):]
-    data =  tlsnSession.getCKECCSF(providedPValue=verify_hmac)
+    data =  tlsnSession.getCKECCSF(providedPValue=reply[1][len('verify_hmac:'):])
     tlssock.send(data)
     response = shared.recv_socket(tlssock)
     sha_digest2,md5_digest2 = tlsnSession.getHandshakeHashes(isForServer = True)
     reply = send_and_recv('verify_md5sha2:'+md5_digest2+sha_digest2)
     if reply[0] != 'success':return("Failed to receive a reply")
     if not reply[1].startswith('verify_hmac2:'):return("bad reply. Expected verify_hmac2:")
-    verify_hmac2 = reply[1][len('verify_hmac2:'):]
-    if not tlsnSession.processServerCCSFinished(response,providedPValue = verify_hmac2):
+    if not tlsnSession.processServerCCSFinished(response,providedPValue = reply[1][len('verify_hmac2:'):]):
         raise Exception ("Could not finish handshake with server successfully. Audit aborted")
-    headers += '\r\n'
     
-    encrypted_request = tlsnSession.buildRequest(headers)
-    tlssock.send(encrypted_request)
+    #PHASE 5
+    headers += '\r\n'
+    tlssock.send(tlsnSession.buildRequest(headers))
     response = shared.recv_socket(tlssock)
     if not response: raise Exception ("Received no response to request, cannot continue audit.")
     tlsnSession.storeServerAppDataRecords(response)
     tlssock.close()
-
-    #store the response in the session directory
+    
+    #PHASE 6
     sf = str(len(cr_list))
-
-    #send a commitment of the response (and md5hmac?)
     commit_dir = join(current_sessiondir, 'commit')
     if not os.path.exists(commit_dir): os.makedirs(commit_dir)
     response_path = join(commit_dir, 'response'+ sf )
@@ -473,33 +415,26 @@ def audit_page(headers,pms_secret,claimed_pub_key):
     md5hmac_hash = sha256(tlsnSession.pAuditee).digest()
     reply = send_and_recv('commit_hash:'+commit_hash+md5hmac_hash)
     if reply[0] != 'success': raise Exception ('Failed to receive a reply')
+    
+    #PHASE 7
     if not reply[1].startswith('sha1hmac_for_MS:'):
         raise Exception ('bad reply. Expected sha1hmac_for_MS')
-    sha1hmac_for_MS = reply[1][len('sha1hmac_for_MS:'):]
-    #re-populate the session with valid secrets
-    tlsnSession.pAuditor = sha1hmac_for_MS
+    tlsnSession.pAuditor = reply[1][len('sha1hmac_for_MS:'):]
     tlsnSession.setMasterSecretHalf() #without arguments sets the whole MS
     tlsnSession.doKeyExpansion()
-    
-    #do decryption and mac verification
-    tlsnSession.lastServerCiphertextBlock = tlsnSession.serverFinished[-16:]
-    tlsnSession.serverSeqNo = 0
     plaintext,bad_mac = tlsnSession.processServerAppDataRecords(checkFinished=True)
     if bad_mac: print ("WARNING! Plaintext is not authenticated.")
-    #successful authenticated decryption. Commit the html to disk.
+    #Commit the html to disk and return it.
     #TODO strip the headers from the html?
     with open(join(commit_dir,'html-'+sf),'wb') as f: f.write(plaintext)
     with open(join(current_sessiondir,'session_dump'+sf),'wb') as f: f.write(tlsnSession.dump())
-    #send back a html path to the browser (only one)
     return join(commit_dir,'html-'+sf)
 
-def start_recording():
-    return ('success')
-
-#respond to PING messages and put all the other messages onto the recvQueue
+#peer messaging receive thread
 def receivingThread(my_nick, auditor_nick):
     shared.tlsn_msg_receiver(my_nick,auditor_nick,ackQueue,recvQueue,shared.message_types_from_auditor,myPrvKey)
-               
+
+#set up temporary user id and initialise peer messaging
 def start_peer_messaging():
     global my_nick
     my_nick= 'user' + ''.join(random.choice('0123456789') for x in range(10))
@@ -507,35 +442,35 @@ def start_peer_messaging():
     #if we got here, no exceptions were thrown, which counts as success.
     return 'success'
 
+#do truncated handshake with reliable site in order to grab
+#its certificate in advance (because we want the reliable site's
+#server modulus in order to perform RSA homomorphism, and we need
+#to pass it to the auditor in the peer handshake in preparation).
 def get_reliable_site_certificate():
     global rsModulus
     global rsExponent
-
     rsSession = shared.TLSNSSLClientSession(shared.config.get('SSL','reliable_site'),\
                                     int(shared.config.get('SSL','reliable_site_ssl_port')))
-
     tlssock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     tlssock.settimeout(int(shared.config.get("General","tcp_socket_timeout")))
     tlssock.connect((rsSession.serverName, rsSession.sslPort))
     tlssock.send(rsSession.handshakeMessages[0])
     rsSession.processServerHello(shared.recv_socket(tlssock))
-
-    #TODO: fallback to alternatives if one site fails
+    #TODO: fallback to alternatives if one site fails?
     if not rsSession.extractCertificate(): print ("Failed to extract certificate")
     rsModulus, rsExponent = rsSession.extractModAndExp()
     if not rsModulus: print ("Failed to extract pubkey")
 
+#perform handshake with auditor over peer messaging channel.
 def peer_handshake():
     global my_nick
     global auditor_nick
     global auditorPubKey
     get_reliable_site_certificate()
-
     #hello contains the first 10 bytes of modulus of the auditor's pubkey
     #this is how the auditor knows that we are addressing him.
     modulus = shared.bi2ba(auditorPubKey.n)[:10]
     signed_hello = rsa.sign('client_hello', myPrvKey, 'SHA-1')
-    #format the 'reliable site' pubkey
     rs_n = shared.bi2ba(rsModulus)
     rs_e = shared.bi2ba(rsExponent)
 
@@ -577,15 +512,16 @@ def peer_handshake():
     thread.daemon = True
     thread.start()
     return 'success'
-       
+
+#Find the firefox binary, install the new firefox profile
+#and start up firefox with that profile.
 def start_firefox(FF_to_backend_port):
-    #copy the user's firefox locally for better installation of extensions
     global firefox_install_path
     if not os.path.exists(join(datadir,'firefoxcopy')):
         shutil.copytree(firefox_install_path,join(datadir,'firefoxcopy'))
     firefox_install_path = join(datadir,'firefoxcopy') 
     
-    #sanity check
+    #find the binary
     if OS=='linux':
         if firefox_install_path=='/usr/lib/firefox':
             firefox_exepath='firefox'
@@ -647,17 +583,9 @@ def start_firefox(FF_to_backend_port):
     for ext_dir in ['tlsnotary@tlsnotary','ClassicThemeRestorer@ArisT2Noia4dev']:
         if not os.path.exists(join(bundles_dir, ext_dir)):    
             shutil.copytree(join(datadir, 'FF-addon', ext_dir),
-                                join(bundles_dir, ext_dir))    
-    #if not os.path.exists(join(ffprof_dir,'extensions')):
-    #    os.makedirs(join(ffprof_dir,'extensions'))
-    #for ext_dir in ['tlsnotary@tlsnotary','ClassicThemeRestorer@ArisT2Noia4dev']:
-    #    if not os.path.exists(join(ffprof_dir,'extensions', ext_dir)):    
-    #        shutil.copytree(join(datadir, 'FF-addon', ext_dir),
-    #                            join(ffprof_dir, 'extensions', ext_dir))
-                
+                                join(bundles_dir, ext_dir))                  
     os.putenv('FF_to_backend_port', str(FF_to_backend_port))
     os.putenv('FF_first_window', 'true')   #prevents addon confusion when websites open multiple FF windows
-    #keep trailing slash to tell the patch which path delimiter to use (nix vs win)
 
     if ('test' in sys.argv): 
         print ('****************************TESTING MODE********************************')
@@ -669,16 +597,6 @@ def start_firefox(FF_to_backend_port):
                                    stderr=open(join(logs_dir, 'firefox.stderr'), 'w'))
     except Exception,e: return ('Error starting Firefox: %s' %e,)
     return ('success', ff_proc)
-
-class StoppableHttpServer (BaseHTTPServer.HTTPServer):
-    """http server that reacts to self.stop flag"""
-    retval = ''
-    def serve_forever (self):
-        """Handle one request at a time until stopped. Optionally return a value"""
-        self.stop = False
-        while not self.stop:
-                self.handle_request()
-        return self.retval;
     
 #HTTP server to talk with Firefox addon
 def http_server(parentthread):    
@@ -688,7 +606,7 @@ def http_server(parentthread):
         FF_to_backend_port = random.randint(1025,65535)
         print ('Starting http server to communicate with Firefox addon')
         try:
-            httpd = StoppableHttpServer(('127.0.0.1', FF_to_backend_port), HandlerClass)
+            httpd = shared.StoppableHttpServer(('127.0.0.1', FF_to_backend_port), HandlerClass)
             bWasStarted = True
             break
         except Exception, e:
@@ -704,7 +622,17 @@ def http_server(parentthread):
     print ('Serving HTTP on', sa[0], 'port', sa[1], '...',end='\r\n')
     httpd.serve_forever()
     return
-           
+
+#Sending links (urls) to files passed from auditee to
+#auditor over peer messaging
+def send_link(filelink):
+    reply = send_and_recv('link:'+filelink)
+    if not reply[0] == 'success' : return 'failure'
+    if not reply[1].startswith('response:') : return 'failure'
+    response = reply[1][len('response:'):]
+    return response
+
+#cleanup
 def quit(sig=0, frame=0):
     if firefox_pid != 0:
         try: os.kill(firefox_pid, signal.SIGTERM)
@@ -713,7 +641,8 @@ def quit(sig=0, frame=0):
         try: os.kill(selftest_pid, signal.SIGTERM)
         except: pass #selftest not runnng    
     exit(1)
-    
+
+#unpack and check validity of Python modules
 def first_run_check(modname,modhash):
     if not modhash: return
     rsa_dir = join(datadir, 'python', modname)
@@ -734,8 +663,7 @@ if __name__ == "__main__":
                        'slowaes':'','requests-2.3.0':'7449ffdc8ec9ac37bbcd286003c80f00'}
     for x,h in modules_to_load.iteritems():
         first_run_check(x,h)
-    for modl in modules_to_load.keys():
-        sys.path.append(join(datadir, 'python', modl))
+        sys.path.append(join(datadir, 'python', x))
         
     import rsa
     import pyasn1

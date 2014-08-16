@@ -1,7 +1,7 @@
 from __future__ import print_function
 from ConfigParser import SafeConfigParser
 import os
-import threading
+import threading, BaseHTTPServer
 import select, socket, time
 #General utility objects used by both auditor and auditee.
 
@@ -67,6 +67,16 @@ class ThreadWithRetval(threading.Thread):
         super(ThreadWithRetval, self).__init__(target=target, args = (self,)+args )
     retval = ''
 
+class StoppableHttpServer (BaseHTTPServer.HTTPServer):
+    """http server that reacts to self.stop flag"""
+    retval = ''
+    def serve_forever (self):
+        """Handle one request at a time until stopped. Optionally return a value"""
+        self.stop = False
+        while not self.stop:
+                self.handle_request()
+        return self.retval;
+    
 def bi2ba(bigint,fixed=None):
     m_bytes = []
     while bigint != 0:
@@ -93,3 +103,56 @@ def bigint_to_list(bigint):
 #convert bytearray into int
 def ba2int(byte_array):
     return int(str(byte_array).encode('hex'), 16)
+
+#file transfer - currently only used for sending
+#ciphertext to auditor
+def sendspace_getlink(mfile):
+    reply = requests.get('https://www.sendspace.com/', timeout=5)
+    url_start = reply.text.find('<form method="post" action="https://') + len('<form method="post" action="')
+    url_len = reply.text[url_start:].find('"')
+    url = reply.text[url_start:url_start+url_len]
+    
+    sig_start = reply.text.find('name="signature" value="') + len('name="signature" value="')
+    sig_len = reply.text[sig_start:].find('"')
+    sig = reply.text[sig_start:sig_start+sig_len]
+    
+    progr_start = reply.text.find('name="PROGRESS_URL" value="') + len('name="PROGRESS_URL" value="')
+    progr_len = reply.text[progr_start:].find('"')
+    progr = reply.text[progr_start:progr_start+progr_len]
+    
+    r=requests.post(url, files={'upload_file[]': open(mfile, 'rb')}, data={
+        'signature':sig, 'PROGRESS_URL':progr, 'js_enabled':'0', 
+        'upload_files':'', 'terms':'1', 'file[]':'', 'description[]':'',
+        'recpemail_fcbkinput':'recipient@email.com', 'ownemail':'', 'recpemail':''}, timeout=5)
+    
+    link_start = r.text.find('"share link">') + len('"share link">')
+    link_len = r.text[link_start:].find('</a>')
+    link = r.text[link_start:link_start+link_len]
+    
+    dl_req = requests.get(link)
+    dl_start = dl_req.text.find('"download_button" href="') + len('"download_button" href="')
+    dl_len = dl_req.text[dl_start:].find('"')
+    dl_link = dl_req.text[dl_start:dl_start+dl_len]
+    return dl_link
+
+#pipebytes is not currently used; a backup for failure of sendspace.
+def pipebytes_post(key, mfile):
+    #the server responds only when the recepient picks up the file
+    requests.post('http://host03.pipebytes.com/put.py?key='+key+'&r='+
+                  ('%.16f' % random.uniform(0,1)), files={'file': open(mfile, 'rb')})    
+
+
+def pipebytes_getlink(mfile):
+    reply1 = requests.get('http://host03.pipebytes.com/getkey.php?r='+
+                          ('%.16f' % random.uniform(0,1)), timeout=5)
+    key = reply1.text
+    reply2 = requests.post('http://host03.pipebytes.com/setmessage.php?r='+
+                           ('%.16f' % random.uniform(0,1))+'&key='+key, {'message':''}, timeout=5)
+    thread = threading.Thread(target= pipebytes_post, args=(key, mfile))
+    thread.daemon = True
+    thread.start()
+    time.sleep(1)               
+    reply4 = requests.get('http://host03.pipebytes.com/status.py?key='+key+
+                          '&touch=yes&r='+('%.16f' % random.uniform(0,1)), timeout=5)
+    return ('http://host03.pipebytes.com/get.py?key='+key)
+
