@@ -346,11 +346,10 @@ def stop_recording():
         if not onefile.startswith(('response', 'md5hmac', 'domain','IV','cs')): continue
         zipf.write(join(commit_dir, onefile), onefile)
     zipf.close()
-    #try: 
-    link = sendspace_getlink(join(tracedir, 'mytrace.zip'))
-    #except:
-    #    try: link = pipebytes_getlink(join(tracedir, 'mytrace.zip'))
-    #    except: return 'failure'
+    try: link = sendspace_getlink(join(tracedir, 'mytrace.zip'))
+    except:
+        try: link = pipebytes_getlink(join(tracedir, 'mytrace.zip'))
+        except: return 'failure'
     return send_link(link)
 
 #reconstruct correct http headers
