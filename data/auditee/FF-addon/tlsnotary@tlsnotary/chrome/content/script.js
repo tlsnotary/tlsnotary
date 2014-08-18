@@ -41,8 +41,7 @@ myObserver.prototype = {
      //they will be overridden because we do not unregister
      console.log("allowed url: " + url);
      headers = "";
-     //TODO: handle POST here
-     headers += "GET /" + tab_url + " HTTP/1.1" + "\r\n";
+     headers += httpChannel.requestMethod + " /" + tab_url + " HTTP/1.1" + "\r\n";
      aSubject.visitRequestHeaders(function(header,value){
                                   headers += header +": " + value + "\r\n";});
   },
