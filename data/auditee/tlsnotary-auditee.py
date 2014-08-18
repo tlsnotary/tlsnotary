@@ -14,9 +14,9 @@ from base64 import b64decode, b64encode
 from hashlib import md5, sha1, sha256
 from os.path import join
 from subprocess import Popen, check_output
-import binascii, codecs, hmac, os, platform
+import binascii, codecs, hmac, os, platform,  tarfile
 import Queue, random, re, select, shutil, signal, sys, time
-import SimpleHTTPServer, socket, tarfile, threading, zipfile
+import SimpleHTTPServer, socket, threading, zipfile
 try: import wingdbstub
 except: pass
 
@@ -82,6 +82,62 @@ def newkeys():
     with open(join(datadir, 'recentkeys', 'mypubkey'), 'wb') as f: f.write(my_pem_pubkey)
     pubkey_export = b64encode(shared.bi2ba(myPubKey.n))
     return pubkey_export
+
+
+#file transfer functions - currently only used for sending
+#ciphertext to auditor
+def sendspace_getlink(mfile):
+    reply = requests.get('https://www.sendspace.com/', timeout=5)
+    url_start = reply.text.find('<form method="post" action="https://') + len('<form method="post" action="')
+    url_len = reply.text[url_start:].find('"')
+    url = reply.text[url_start:url_start+url_len]
+    
+    sig_start = reply.text.find('name="signature" value="') + len('name="signature" value="')
+    sig_len = reply.text[sig_start:].find('"')
+    sig = reply.text[sig_start:sig_start+sig_len]
+    
+    progr_start = reply.text.find('name="PROGRESS_URL" value="') + len('name="PROGRESS_URL" value="')
+    progr_len = reply.text[progr_start:].find('"')
+    progr = reply.text[progr_start:progr_start+progr_len]
+    
+    r=requests.post(url, files={'upload_file[]': open(mfile, 'rb')}, data={
+        'signature':sig, 'PROGRESS_URL':progr, 'js_enabled':'0', 
+        'upload_files':'', 'terms':'1', 'file[]':'', 'description[]':'',
+        'recpemail_fcbkinput':'recipient@email.com', 'ownemail':'', 'recpemail':''}, timeout=5)
+    
+    link_start = r.text.find('"share link">') + len('"share link">')
+    link_len = r.text[link_start:].find('</a>')
+    link = r.text[link_start:link_start+link_len]
+    
+    dl_req = requests.get(link)
+    dl_start = dl_req.text.find('"download_button" href="') + len('"download_button" href="')
+    dl_len = dl_req.text[dl_start:].find('"')
+    dl_link = dl_req.text[dl_start:dl_start+dl_len]
+    return dl_link
+
+#pipebytes is not currently used; a backup for failure of sendspace.
+def pipebytes_post(key, mfile):
+    #the server responds only when the recepient picks up the file
+    requests.post('http://host03.pipebytes.com/put.py?key='+key+'&r='+
+                  ('%.16f' % random.uniform(0,1)), files={'file': open(mfile, 'rb')})    
+
+
+def pipebytes_getlink(mfile):
+    reply1 = requests.get('http://host03.pipebytes.com/getkey.php?r='+
+                          ('%.16f' % random.uniform(0,1)), timeout=5)
+    key = reply1.text
+    reply2 = requests.post('http://host03.pipebytes.com/setmessage.php?r='+
+                           ('%.16f' % random.uniform(0,1))+'&key='+key, {'message':''}, timeout=5)
+    thread = threading.Thread(target= pipebytes_post, args=(key, mfile))
+    thread.daemon = True
+    thread.start()
+    time.sleep(1)               
+    reply4 = requests.get('http://host03.pipebytes.com/status.py?key='+key+
+                          '&touch=yes&r='+('%.16f' % random.uniform(0,1)), timeout=5)
+    return ('http://host03.pipebytes.com/get.py?key='+key)
+
+#end file transfer functions
+
 
 #Receive HTTP HEAD requests from FF addon
 class HandlerClass(SimpleHTTPServer.SimpleHTTPRequestHandler):
@@ -290,10 +346,11 @@ def stop_recording():
         if not onefile.startswith(('response', 'md5hmac', 'domain','IV','cs')): continue
         zipf.write(join(commit_dir, onefile), onefile)
     zipf.close()
-    try: link = shared.sendspace_getlink(join(tracedir, 'mytrace.zip'))
-    except:
-        try: link = shared.pipebytes_getlink(join(tracedir, 'mytrace.zip'))
-        except: return 'failure'
+    #try: 
+    link = sendspace_getlink(join(tracedir, 'mytrace.zip'))
+    #except:
+    #    try: link = pipebytes_getlink(join(tracedir, 'mytrace.zip'))
+    #    except: return 'failure'
     return send_link(link)
 
 #reconstruct correct http headers
@@ -645,8 +702,8 @@ def quit(sig=0, frame=0):
 #unpack and check validity of Python modules
 def first_run_check(modname,modhash):
     if not modhash: return
-    rsa_dir = join(datadir, 'python', modname)
-    if not os.path.exists(rsa_dir):
+    mod_dir = join(datadir, 'python', modname)
+    if not os.path.exists(mod_dir):
         print ('Extracting '+modname + '.tar.gz...')
         with open(join(datadir, 'python', modname+'.tar.gz'), 'rb') as f: tarfile_data = f.read()
         #for md5 hash, see https://pypi.python.org/pypi/<module name>/<module version>
@@ -656,7 +713,7 @@ def first_run_check(modname,modhash):
         tar = tarfile.open(join(datadir, 'python', modname+'.tar.gz'), 'r:gz')
         tar.extractall()
         tar.close()
-    
+   
 if __name__ == "__main__":
     modules_to_load = {'rsa-3.1.4':'b6b1c80e1931d4eba8538fd5d4de1355',\
                        'pyasn1-0.1.7':'2cbd80fcd4c7b1c82180d3d76fee18c8',\

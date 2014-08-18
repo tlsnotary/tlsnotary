@@ -1,31 +1,14 @@
 #!/usr/bin/env python
 from __future__ import print_function
-
-import BaseHTTPServer
-import base64
-import binascii
-import hashlib
-import hmac
-import os
-import platform
-import Queue
-import re
-import shutil
-import SimpleHTTPServer
-import socket
-from SocketServer import ThreadingMixIn
-import struct
-import subprocess
-import sys
-import tarfile
-import threading
-import time
-import random
-import urllib2
-import zipfile
+import base64, binascii, hashlib, hmac, os
+import platform, Queue, re, shutil, socket
+import SimpleHTTPServer, struct, subprocess
+import sys, tarfile, threading, time, random
+import urllib2, zipfile
 try: import wingdbstub
 except: pass
 
+#file system setup.
 datadir = os.path.dirname(os.path.realpath(__file__))
 sys.path.append(os.path.dirname(datadir))
 installdir = os.path.dirname(os.path.dirname(datadir))
@@ -34,11 +17,13 @@ time_str = time.strftime("%d-%b-%Y-%H-%M-%S", time.gmtime())
 current_sessiondir = os.path.join(sessionsdir, time_str)
 os.makedirs(current_sessiondir)
 
+#OS detection
 platform = platform.system()
 if platform == 'Windows': OS = 'mswin'
 elif platform == 'Linux': OS = 'linux'
 elif platform == 'Darwin': OS = 'macos'
 
+#Globals
 my_nick = ''
 auditee_nick = ''
 myPrivateKey = myPubKey = auditeePublicKey = None
@@ -48,39 +33,32 @@ progressQueue = Queue.Queue() #messages intended to be displayed by the frontend
 rsModulus = rsExponent = 0
 bTerminateAllThreads = False
 
-#processes each http request in a separate thread
-#we need threading in order to send progress updates to the frontend in a non-blocking manner
-class StoppableThreadedHttpServer (ThreadingMixIn, BaseHTTPServer.HTTPServer):
-    """http server that reacts to self.stop flag"""
-    retval = ''
-    def serve_forever (self):
-        """Handle one request at a time until stopped. Optionally return a value"""
-        self.stop = False
-        self.socket.setblocking(1)
-        while not self.stop:
-                self.handle_request()
-        return self.retval;
-
-#respond to PING messages and put all the other messages onto the recvQueue
+#peer messaging receive thread
 def receivingThread():
     shared.tlsn_msg_receiver(my_nick,auditee_nick,ackQueue,recvQueue,shared.message_types_from_auditee,myPrivateKey,seq_init=None)
 
+#send a single message over peer messaging
 def send_message(data):
     if ('success' == shared.tlsn_send_msg(data,auditeePublicKey,ackQueue,auditee_nick)):
         return ('success',)
     else:
         return ('failure',)
  
-#Receive messages from auditee, perform calculations, and respond to them accordingly
+#Main thread which receives messages from auditee over peer messaging,
+#and performs crypto auditing functions.
 def process_messages():
 
     while True:
         try: msg = recvQueue.get(block=True, timeout=1)
         except: continue
-
+        
+        #gcr_gsr - google client random, server random.
+        #Receiving this data, the auditor generates his half of the 
+        #premaster secret, and returns the hashed version, along with
+        #the half-pms encrypted to the server's pubkey
         if msg.startswith('gcr_gsr:'):
             gcr_gsr = msg[len('gcr_gsr:'):]
-            tlsnSession = shared.TLSNSSLClientSession('dummy.com')
+            tlsnSession = shared.TLSNSSLClientSession('dummy.com') #TODO these server names aren't needed.
             googleSession = shared.TLSNSSLClientSession('google.com')
             googleSession.clientRandom = gcr_gsr[:32]
             googleSession.serverRandom = gcr_gsr[32:64]
@@ -93,7 +71,15 @@ def process_messages():
             #we keep resetting so that the final, successful choice is stored
             tlsnSession.auditorSecret = googleSession.auditorSecret
             continue
-         #---------------------------------------------------------------------#
+        #---------------------------------------------------------------------#
+        #cr_sr_hmac_n_e : sent by auditee at the start of the real audit.
+        #client random, server random, md5 hmac of auditee's PMS half, modulus and exponent.
+        #Then construct master secret half and hmac for expanded keys; note that the 
+        #HMAC is 'garbageized', meaning some bytes are set as random garbage, so that 
+        #the auditee's expanded keys will be invalid for that section (specifically -
+        #the server mac key). Finally send back to auditee the encrypted premaster secret half,
+        #the hmac half for the master secret half and the hmac for the expanded keys (message
+        #rsapms_hmacms_hmacek).
         elif msg.startswith('cr_sr_hmac_n_e:'): 
             progressQueue.put(time.strftime('%H:%M:%S', time.localtime()) + ': Processing data from the auditee.')
             cr_sr_hmac_n_e = msg[len('cr_sr_hmac_n_e:'):]
@@ -114,18 +100,27 @@ def process_messages():
             send_message('rsapms_hmacms_hmacek:'+ rsapms_hmacms_hmacek)
             continue
         #---------------------------------------------------------------------#
+        #Receive from the auditee the client handshake hashes (md5 and sha) and return
+        #auditor's half of the HMAC needed to construct the PRF output for the verify data
+        #which is needed to construct the Client Finished handshake final message.
         elif msg.startswith('verify_md5sha:'):
             md5sha = msg[len('verify_md5sha:'):]
             md5hmac = tlsnSession.getVerifyHMAC(md5sha[16:],md5sha[:16],half=1)
             send_message('verify_hmac:'+md5hmac)
             continue
         #---------------------------------------------------------------------#
+        #Exactly as above, but for the Server 'Finished' message (which must be verified)
         elif msg.startswith('verify_md5sha2:'):
             md5sha2 = msg[len('verify_md5sha2:'):]
             md5hmac2 = tlsnSession.getVerifyHMAC(md5sha2[16:],md5sha2[:16],half=1,isForClient=False)
             send_message('verify_hmac2:'+md5hmac2)
             continue
         #------------------------------------------------------------------------------------------------------#    
+        #Receive from the auditee the sha256 hashes of the ciphertext response sent by the server,
+        #as a commitment (note that the auditee does not yet possess the master secret and so cannot
+        #yet fake this data). Once received and written to disk, the auditor can pass the secret
+        #material (sha1hmac for MS) which the auditee needs to reconstruct the full master secret and
+        #so decrypt the server response safely.
         elif msg.startswith('commit_hash:'):
             commit_hash = msg[len('commit_hash:'):]
             response_hash = commit_hash[:32]
@@ -133,7 +128,8 @@ def process_messages():
             commit_dir = os.path.join(current_sessiondir, 'commit')
             if not os.path.exists(commit_dir): os.makedirs(commit_dir)
             #file names are assigned sequentially hash1, hash2 etc.
-            #The auditee must provide responsefiles response1, response2 corresponding to these sequence numbers
+            #The auditee must provide responsefiles response1, response2 corresponding
+            #to these sequence numbers.
             commdir_list = os.listdir(commit_dir)
             #get last seqno
             seqnos = [int(one_response[len('responsehash'):]) for one_response
@@ -142,7 +138,8 @@ def process_messages():
             my_seqno = last_seqno+1
             response_hash_path = os.path.join(commit_dir, 'responsehash'+str(my_seqno))
             n_hexlified = binascii.hexlify(n)
-            n_write = " ".join(n_hexlified[i:i+2] for i in range(0, len(n_hexlified), 2)) #pubkey in the format 09 56 23 ....
+            #pubkey in the format 09 56 23 ....
+            n_write = " ".join(n_hexlified[i:i+2] for i in range(0, len(n_hexlified), 2)) 
             pubkey_path = os.path.join(commit_dir, 'pubkey'+str(my_seqno))
             response_hash_path = os.path.join(commit_dir, 'responsehash'+str(my_seqno))
             md5hmac_hash_path =  os.path.join(commit_dir, 'md5hmac_hash'+str(my_seqno))
@@ -158,7 +155,15 @@ def process_messages():
             send_message('sha1hmac_for_MS:'+tlsnSession.pAuditor)
             continue  
         #---------------------------------------------------------------------#
+        #Phase 1: Receive a url from the auditee from which can be downloaded a zip file containing
+        #all relevant data: the full encrypted server response, and the "reveals" from the
+        #commits sent previously. Confirm the commitments are valid by comparing hashes.
+        #Phase 2: Then reconstruct a ssl client session object with a correct full master
+        #secret in order to decrypt the server response, and write to disk along with the
+        #claimed server pubkey (which should be checked manually). Finally indicate success
+        #or failure
         elif msg.startswith('link:'):
+            #PHASE 1
             link = msg[len('link:'):]
             time.sleep(1) #just in case the upload server needs some time to prepare the file
             req = urllib2.Request(link)
@@ -204,10 +209,7 @@ def process_messages():
                 #elif no errors
                 seqnos.append(this_seqno)
                 continue
-            #Todo: this isn't right; we are not triggering failure anywhere in the above loop
-            send_message('response:'+link_response)
-
-            #decrypt  the response files
+            #PHASE 2
             decr_dir = os.path.join(current_sessiondir, 'decrypted')
             os.makedirs(decr_dir)
             for one_response in adir_list:
@@ -220,7 +222,6 @@ def process_messages():
                 with open(os.path.join(commit_dir, 'sha1hmac'+seqno), 'rb') as f: sha1hmac = f.read()
                 with open(os.path.join(commit_dir, 'cr'+seqno), 'rb') as f: cr = f.read()
                 with open(os.path.join(commit_dir, 'sr'+seqno), 'rb') as f: sr = f.read()
-                #get the expanded keys and decrypt the corresponding response file
                 decrSession = shared.TLSNSSLClientSession('dummy.com',ccs = int(cs_data))
                 decrSession.clientRandom = cr
                 decrSession.serverRandom = sr
@@ -228,20 +229,17 @@ def process_messages():
                 decrSession.pAuditor = sha1hmac
                 decrSession.setMasterSecretHalf()
                 decrSession.doKeyExpansion()
-                
                 decrSession.storeServerAppDataRecords(response)
-                #set up the cipher state for decryption
                 if decrSession.chosenCipherSuite in [47,53]:
                     decrSession.lastServerCiphertextBlock = IV_data
                 else:
                     decrSession.serverRC4State=(map(ord,IV_data[:256]),ord(IV_data[256]),ord(IV_data[257]))
-                    
                 plaintext, bad_mac = decrSession.processServerAppDataRecords()
                 if bad_mac:
                     print ("AUDIT FAILURE - invalid mac")
                     link_response = 'false'
                 path = os.path.join(decr_dir, 'html-'+seqno)
-                with open(path, 'wb') as f: f.write(plaintext) #todo maybe strip headers?
+                with open(path, 'wb') as f: f.write(plaintext) #TODO maybe strip headers?
                 #also create a file where the auditor can see the domain and pubkey
                 with open (os.path.join(auditeetrace_dir, 'domain'+seqno), 'rb') as f: domain_data = f.read()
                 with open (os.path.join(commit_dir, 'pubkey'+seqno), 'rb') as f: pubkey_data = f.read()
@@ -257,7 +255,8 @@ In Firefox, click the padlock to the left of the URL bar -> More Information -> 
                 for i in range(len(pubkey_data)/48):
                     write_data += pubkey_data[i*48:(i+1)*48] + '\n' 
                 with open(os.path.join(decr_dir, 'domain'+seqno), 'wb') as f: f.write(write_data)
-
+                
+            send_message('response:'+link_response)            
             if link_response == 'success':
                 progressQueue.put(time.strftime('%H:%M:%S', time.localtime()) + ': The auditee has successfully finished the audit session')
             else:
@@ -330,7 +329,8 @@ class Handler(SimpleHTTPServer.SimpleHTTPRequestHandler):
         else:
             self.respond({'response':'unknown command'})
             return
-     
+        
+#Peer connection key management    
 def import_auditee_pubkey(auditee_pubkey_b64modulus): 
     auditee_pubkey_modulus = base64.b64decode(auditee_pubkey_b64modulus)
     auditee_pubkey_modulus_int = int(auditee_pubkey_modulus.encode('hex'),16)
@@ -384,6 +384,8 @@ def new_keypair():
     my_pubkey_export = base64.b64encode(shared.bi2ba(myPubKey.n))
     return my_pubkey_export
 
+#Thread to wait for arrival of auditee in peer messaging channel
+#and perform peer handshake according to tlsnotary messaging protocol
 def registerAuditeeThread():
     global auditee_nick
     global rsModulus
@@ -424,8 +426,6 @@ def registerAuditeeThread():
                         auditee_nick=''#erase the nick so that the auditee could try registering again
                         continue
 
-        #if we got here, it *should* be a client hello; if not
-        #we just move on
         if not 'client_hello' in header: continue
 
         hello_message_dict[seq] = msg
@@ -448,16 +448,14 @@ def registerAuditeeThread():
 
     if not bIsAuditeeRegistered:
         return ('failure',)
-    #else send back a hello message
     signed_hello = rsa.sign('server_hello', myPrivateKey, 'SHA-1')
-
     #send twice because it was observed that the msg would not appear on the chan
     for x in range(2):
         shared.tlsn_send_single_msg('server_hello',signed_hello,auditeePublicKey,ctrprty_nick = auditee_nick)
-        #shared.send_raw(b64encode(shared.encrypt(':'+auditee_nick + ' server_hello:'+signed_hello,myPubKey)))
         time.sleep(2)
 
-    progressQueue.put(time.strftime('%H:%M:%S', time.localtime()) + ': Auditee has been authorized. Awaiting data...')
+    progressQueue.put(time.strftime('%H:%M:%S', time.localtime()) + \
+                      ': Auditee has been authorized. Awaiting data...')
     thread = threading.Thread(target= receivingThread)
     thread.daemon = True
     thread.start()
@@ -465,25 +463,22 @@ def registerAuditeeThread():
     thread.daemon = True
     thread.start()
     
-
+#Initialise peer messaging channel with the auditee
 def start_peer_messaging():
     global my_nick
-    #we should take the IRC settings from the config file
-    #immediately before connecting, because in self-test mod
+    #we should take any IRC settings from the config file
+    #*immediately* before connecting, because in self-test mod
     #it can be reset by the auditee
     shared.config.read(shared.config_location)
-
     progressQueue.put(time.strftime('%H:%M:%S', time.localtime()) +\
-    ': Connecting to '+shared.config.get('IRC','irc_server')+' and joining #'+shared.config.get('IRC','channel_name'))
-
+    ': Connecting to '+shared.config.get('IRC','irc_server')+' and joining #'\
+    +shared.config.get('IRC','channel_name'))
     my_nick= 'user' + ''.join(random.choice('0123456789') for x in range(10))
     shared.tlsn_initialise_messaging(my_nick)
     #if we got here, no exceptions were thrown, which counts as success.
-
     thread = threading.Thread(target= registerAuditeeThread)
     thread.daemon = True
     thread.start()
-
     return 'success'
 
 #use http server to talk to auditor.html
@@ -495,7 +490,7 @@ def http_server(parentthread):
         FF_to_backend_port = random.randint(1025,65535)
         #for the GET request, serve files only from within the datadir
         os.chdir(datadir)
-        try: httpd = StoppableThreadedHttpServer(('127.0.0.1', FF_to_backend_port), Handler)
+        try: httpd = shared.StoppableThreadedHttpServer(('127.0.0.1', FF_to_backend_port), Handler)
         except Exception, e:
             print ('Error starting mini http server. Maybe the port is in use?', e,end='\r\n')
             continue
@@ -512,39 +507,29 @@ def http_server(parentthread):
     print ("Serving HTTP on", sa[0], "port", sa[1], "...",end='\r\n')
     httpd.serve_forever()
     return
-  
 
-def first_run_check():
-    #On first run, unpack rsa and pyasn1 archives, check hashes
-    rsa_dir = os.path.join(datadir, 'python', 'rsa-3.1.4')
-    if not os.path.exists(rsa_dir):
-        print ('Extracting rsa-3.1.4.tar.gz...')
-        with open(os.path.join(datadir, 'python', 'rsa-3.1.4.tar.gz'), 'rb') as f: tarfile_data = f.read()
-        #for md5 hash, see https://pypi.python.org/pypi/rsa/3.1.4
-        if hashlib.md5(tarfile_data).hexdigest() != 'b6b1c80e1931d4eba8538fd5d4de1355':
-            raise Exception('WRONG_HASH')
+#unpack and check validity of Python modules
+def first_run_check(modname,modhash):
+    if not modhash: return
+    mod_dir = os.path.join(datadir, 'python', modname)
+    if not os.path.exists(mod_dir):
+        print ('Extracting '+modname + '.tar.gz...')
+        with open(os.path.join(datadir, 'python', modname+'.tar.gz'), 'rb') as f: tarfile_data = f.read()
+        #for md5 hash, see https://pypi.python.org/pypi/<module name>/<module version>
+        if hashlib.md5(tarfile_data).hexdigest() !=  modhash:
+            raise Exception ('Wrong hash')
         os.chdir(os.path.join(datadir, 'python'))
-        tar = tarfile.open(os.path.join(datadir, 'python', 'rsa-3.1.4.tar.gz'), 'r:gz')
+        tar = tarfile.open(os.path.join(datadir, 'python', modname+'.tar.gz'), 'r:gz')
         tar.extractall()
-   
-    pyasn1_dir = os.path.join(datadir, 'python', 'pyasn1-0.1.7')
-    if not os.path.exists(pyasn1_dir):
-        print ('Extracting pyasn1-0.1.7.tar.gz...')
-        with open(os.path.join(datadir, 'python', 'pyasn1-0.1.7.tar.gz'), 'rb') as f: tarfile_data = f.read()
-        #for md5 hash, see https://pypi.python.org/pypi/pyasn1/0.1.7
-        if hashlib.md5(tarfile_data).hexdigest() != '2cbd80fcd4c7b1c82180d3d76fee18c8':
-            raise Exception ('WRONG_HASH')
-        os.chdir(os.path.join(datadir, 'python'))
-        tar = tarfile.open(os.path.join(datadir, 'python', 'pyasn1-0.1.7.tar.gz'), 'r:gz')
-        tar.extractall()
-  
-
-if __name__ == "__main__": 
-    first_run_check()
-    #both on first and subsequent runs
-    sys.path.append(os.path.join(datadir, 'python', 'rsa-3.1.4'))
-    sys.path.append(os.path.join(datadir, 'python', 'pyasn1-0.1.7'))
-    sys.path.append(os.path.join(datadir, 'python', 'slowaes'))
+        tar.close()
+        
+if __name__ == "__main__":
+    modules_to_load = {'rsa-3.1.4':'b6b1c80e1931d4eba8538fd5d4de1355',\
+                           'pyasn1-0.1.7':'2cbd80fcd4c7b1c82180d3d76fee18c8',\
+                           'slowaes':''}
+    for x,h in modules_to_load.iteritems():
+        first_run_check(x,h)
+        sys.path.append(os.path.join(datadir, 'python', x))    
     import rsa
     import pyasn1
     from pyasn1.type import univ
@@ -578,33 +563,22 @@ if __name__ == "__main__":
         prog64 = os.getenv('ProgramW6432')
         prog32 = os.getenv('ProgramFiles(x86)')
         progxp = os.getenv('ProgramFiles')                
-        browser_exepath= tshark_exepath = ''
+        browser_exepath= ''
         if prog64:
             ff64 = os.path.join(prog64, "Mozilla Firefox",  "firefox.exe")
-            if os.path.isfile(ff64): browser_exepath = ff64
-            tshark64 = os.path.join(prog64, "Wireshark",  "tshark.exe" )
-            if os.path.isfile(tshark64): tshark_exepath = tshark64            
+            if os.path.isfile(ff64): browser_exepath = ff64           
         if prog32:            
             ff32 = os.path.join(prog32, "Mozilla Firefox",  "firefox.exe" )
-            if os.path.isfile(ff32): browser_exepath = ff32
-            tshark32 = os.path.join(prog32, "Wireshark",  "tshark.exe" )
-            if  os.path.isfile(tshark32): tshark_exepath = tshark32            
+            if os.path.isfile(ff32): browser_exepath = ff32            
         if progxp:
             ff32 = os.path.join(progxp, "Mozilla Firefox",  "firefox.exe" )
             if os.path.isfile(ff32): browser_exepath = ff32
-            tshark32 = os.path.join(progxp, "Wireshark",  "tshark.exe" )
-            if  os.path.isfile(tshark32): tshark_exepath = tshark32
         if not daemon_mode and browser_exepath == '': raise Exception(
             'Failed to find Firefox in your Program Files location')     
-        if tshark_exepath == '':  raise Exception(
-            'Failed to find Wireshark in your Program Files location')
     elif OS=='linux':
         if not daemon_mode: browser_exepath = 'firefox'
-        tshark_exepath = 'tshark'
     elif OS=='macos':
         if not daemon_mode: browser_exepath = "open" #will open up the default browser
-        tshark_exepath = '/Applications/Wireshark.app/Contents/Resources/bin/tshark'
-        if not os.path.exists(tshark_exepath): raise Exception('TSHARK_NOT_FOUND')
                      
     if daemon_mode:
         my_pubkey_b64modulus, auditee_pubkey_b64modulus = get_recent_keys()
@@ -630,7 +604,7 @@ if __name__ == "__main__":
             print (auditee_pubkey_b64modulus)
         else: raise Exception ('You need to provide his key using hiskey=')
         start_peer_messaging()
-    else:#not a deamon mode
+    else:#not a daemon mode
         try: ff_proc = subprocess.Popen([browser_exepath, os.path.join(
             'http://127.0.0.1:' + str(FF_to_backend_port) + '/auditor.html')])
         except: raise Exception('BROWSER_START_ERROR')
