@@ -34,6 +34,12 @@ But why should I trust you?
 You shouldn't, you should trust math and code that you can read and understand.
 
 
+How does my tlsnotary communicate with an auditor?
+
+The communication is done through an IRC channel of your choice, which can be specified in the "Advanced" settings, the deault channle is #tlsnotary
+on Freenode IRC, all the traffic between the auditee/auditor are encrypted using RSA-2048, so no one other than those who holed the private keys can view it.
+In order to facilitate such encrypted communications, the tlsnotary program will generate a public for you before the session starts, which you will exchange
+with the auditor for his public key.
 
 
 
