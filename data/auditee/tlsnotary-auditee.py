@@ -317,7 +317,7 @@ def prepare_pms(headers,claimed_pub_key):
             print (binascii.hexlify(response))
             continue
         #else ccs was in the response
-        html_path = audit_page(headers,pmsSession.auditeeSecret,claimed_pub_key)
+        html_path = audit_page(headers,pmsSession.auditeeSecret,pmsSession.auditeePaddingSecret,claimed_pub_key)
         return ('success',html_path) #successfull pms check
     #no dice after 5 tries
     raise Exception ('Could not prepare PMS with ', shared.config.get('SSL','reliable_site'), ' after 5 tries')
@@ -380,13 +380,14 @@ def parse_headers(headers):
 #6 - Commit the encrypted server response and other data to auditor
 #7 - Receive correct server mac key and then decrypt server response (html),
 #    (includes authentication of response).
-def audit_page(headers,pms_secret,claimed_pub_key):
+def audit_page(headers,pms_secret,pms_padding_secret,claimed_pub_key):
     #PHASE 1
     tlssock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     tlssock.settimeout(int(shared.config.get("General","tcp_socket_timeout")))
     server_name, headers = parse_headers(headers)
     tlsnSession = shared.TLSNSSLClientSession(server_name,ccs=5,audit=True)
     tlsnSession.auditeeSecret = pms_secret
+    tlsnSession.auditeePaddingSecret = pms_padding_secret
     tlssock.connect((tlsnSession.serverName, tlsnSession.sslPort))
     tlssock.send(tlsnSession.handshakeMessages[0])
     sh_cert_shd = shared.recv_socket(tlssock)

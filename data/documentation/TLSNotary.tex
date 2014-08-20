@@ -114,7 +114,7 @@ These steps are illustrated in Fig 2.
 \begin{center}
 \[\left(\textrm{RSA}(x_1) \times \textrm{RSA}(x_2)\right) \textrm{mod}\ n = \textrm{RSA}(x_1 \times x_2)\]
 \end{center}
-\noindent with $n=pq$ being the RSA modulus, a 2048 bit number.
+\noindent with $n=pq$ being the RSA modulus, usually a 2048 bit number (\textit{the rest of the numbers in Section 2 assume a 2048 bit modulus; the modifications for larger moduli are fairly elementary}).
 \vskip 0.1 in 
 \noindent The RSA Encryption RFC 2313 \cite{RSA_spec} specifies that a random padding string should be prepended to the message to be encrypted (RSA encryption is not secure without padding). In particular, the message to be encrypted here is referred to as the \textit{premaster secret}, a string of 46 bytes of random data with 2 bytes of version number prepended.
 \vskip 0.1 in 
@@ -152,7 +152,7 @@ where the terms $S_1$ and $S_2$ are the 24 byte strings referred to in point 1 o
 \noindent We proceed in two stages, first describing a naive version which gives the right overall structure without meeting all the requirements of the protocol, before refining it.
 
 \subsubsection{Naive form}
-\noindent Here $P_1$ and $P_2$ denote padding strings of length 80 bytes, $S_1$ and $S_2$ are as defined above, and the final three terms are exactly the 48 byte premaster secret as required by the protocol (note that they will contain 12 zero byte strings each, so that each of (auditor, auditee) protects their secrets with 12 bytes of entropy each. The values of $k_1$,$k_2$ and $k_P$ are $(8 \times 36)$,$(8 \times 12)$ and $(8 \times 48)$ respectively. It can be seen that in this way we can construct a 256 byte number for which the last (lowest-order) 48 bytes are unaffected by the padding, and more specifically, the last 12 bytes are known only to the auditor, while bytes 25-36 are known only to the auditee. 
+\noindent Here $P_1$ and $P_2$ denote padding strings of length 80 bytes, $S_1$ and $S_2$ are as defined above, and the final three terms are exactly the 48 byte premaster secret as required by the protocol (note that they will contain 12 zero byte strings each, so that each of (auditor, auditee) protects their secrets with 12 bytes of entropy each. The values of $k_1$,$k_2$ and $k_P$ are $(8 \times 36)$,$(8 \times 12)$ and $(8 \times 48)$ respectively. It can be seen that in this way we can construct a 256 byte number for which the last (lowest-order) 48 bytes are unaffected by the padding, and more specifically, bytes 13-24 are known only to the auditor, while bytes 37-48 are known only to the auditee. 
 
 \subsubsection{Detailed form}
 
@@ -175,20 +175,20 @@ while that for the auditor is of this format:
 \vskip 0.1 in 
 \noindent Auditee - $P_1$:
 \begin{equation}\label{auditee_padding}
-[ \ 02\ ||\ \textrm{39 bytes}\ 01\ ||\ 39\ \textrm{random bytes} ] 
+[ \ 02\ ||\ \textrm{63 bytes}\ 01\ ||\ 15\ \textrm{random bytes} ] 
 \end{equation}
 \noindent Auditor - $P_2$:
 \begin{equation}\label{auditor_padding}
-[\ \textrm{40 bytes}\ 01\ ||\ 39\ \textrm{random bytes} ] 
+[\ 01\ ||\ \textrm{63 bytes}\ 01\ ||\ 15\ \textrm{random bytes} ] 
 \end{equation}
 
 \vskip 0.1 in 
 \noindent After applying all these modifications, \eqref{expanded} will yield a string of 255 bytes in line with the requirements of \eqref{blockformat}, and it will also be safe for the auditor to send his factor the auditee, and the auditee to the server, without the possibility of the other party decrypting it.
 
 \subsubsection{Zero bytes in the padding}
-\noindent The auditee, not being in possession of the secrets $P_2$ or $S_2$ by design, cannot know most of the terms listed on the RHS of \eqref{expanded}. It is therefore possible that the encrypted premaster secret be rejected if any of the bytes created in the PKCS padding region are zero, and the auditee cannot know this in advance. This is partly ameliorated by the use of the repeated byte 01 in the padding factors. A detailed analysis is beyond the scope of this paper, but the probability of one or more bytes in this padding region being zero, under the current scheme, is around 0.3.
+\noindent The auditee, not being in possession of the secrets $P_2$ or $S_2$ by design, cannot know most of the terms listed on the RHS of \eqref{expanded}. It is therefore possible that the encrypted premaster secret be rejected if any of the bytes created in the PKCS padding region are zero, and the auditee cannot know this in advance. This is partly ameliorated by the use of the repeated byte 01 in the padding factors. The larger the amount of armoring randomised padding is used, the larger will be the probability of zeros arising randomly in the padding - it's for this reason that only 15 bytes of armoring padding is used, which is considered to be more than sufficient. A detailed analysis of all this, including creating an asymmetry in the size of the padding terms between the auditee and the auditor to handle variable modulus sizes, is beyond the scope of this paper, but the probability of one or more bytes in this padding region being zero, under the current scheme, is around 1 in 3.
 \vskip 0.1 in
-\noindent An invalid input to encryption will result in a connection reset. Note, however, that the possibility of connection failure can be removed \emph{entirely} by testing any negotiated premaster secret by attempting to complete a full handshake with an oracle, which in this case can be one or many highly reliable websites which allows TLS connections.
+\noindent An invalid input to encryption will result in a connection reset. Note, however, that the possibility of connection failure can be removed \emph{entirely} by testing any negotiated premaster secret by attempting to complete a full handshake with an `oracle', which in this case can be one or many highly reliable websites which allows TLS connections.
 
 \section{Security Considerations}
 
@@ -222,7 +222,7 @@ while that for the auditor is of this format:
 \noindent From an external attacker's perspective, the traffic between auditee and server is defended against MITM and similar attacks in the same way as a normal TLS 1.0 session using an RSA ciphersuite, the only differences being: 
 \begin{itemize}
 \item the total number of bytes of entropy defending the master secret is now 21 instead of 46. This is more than necessary to defend a secret, but even if the attacker were able to decrypt traffic long after a session is complete, he can only gain access to information that the auditee has already decided is safe to give to an auditor (e.g. it does not contain credentials).
-\item the attacker may (depending on the messaging architecture) be able to access the message RSA($S_2$) sent from auditor to auditee during session set up, as well as the auditee's message containing the encrypted premaster secret. However as has been previously discussed, these message are armoured with 39 bytes of random padding, and so are protected from decryption in largely the same was as a scheme like PKCS 1 v1.5. In particular, note that there is no possibility of padding oracle attacks in this usage scenario. 
+\item the attacker may (depending on the messaging architecture) be able to access the message RSA($S_2$) sent from auditor to auditee during session set up, as well as the auditee's message containing the encrypted premaster secret. However as has been previously discussed, these message are armoured with 39 bytes of random padding, and so are protected from decryption in largely the same way as a scheme like PKCS 1 v1.5. In particular, note that there is no possibility of padding oracle attacks in this usage scenario. 
 \end{itemize}
 
 \subsubsection{Auditee gaining control of auditor secret}

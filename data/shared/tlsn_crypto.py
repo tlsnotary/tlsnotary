@@ -67,6 +67,8 @@ class TLSNSSLClientSession(object):
         self.nAuditorEntropy = 8
         self.auditorSecret = None
         self.auditeeSecret = None
+        self.auditorPaddingSecret = None
+        self.auditeePaddingSecret = None
         self.encFirstHalfPMS = None
         self.encSecondHalfPMS = None
         self.encPMS = None
@@ -272,23 +274,22 @@ class TLSNSSLClientSession(object):
         '''Sets up the auditee's half of the preparatory
         secret material to create the master secret, and
         the encrypted premaster secret.'''
-        if not (self.clientRandom and self.serverRandom): return None
+        if not (self.clientRandom and self.serverRandom): 
+            print ("need client and server random, cannot set auditee secret")
+            return None
         if not self.auditeeSecret:
-            self.auditeeSecret = os.urandom(self.nAuditeeEntropy)
+            self.auditeeSecret = os.urandom(self.nAuditeeEntropy)             
+        if not self.auditeePaddingSecret:
+            self.auditeePaddingSecret = os.urandom(15)
         label = 'master secret'
         seed = self.clientRandom + self.serverRandom
         pms1 = tlsver+self.auditeeSecret + ('\x00' * (24-2-self.nAuditeeEntropy))
         self.pAuditee = TLS10PRF(label+seed,first_half = pms1)[0]
-
         #we can construct the encrypted form if pubkey is known
-        if (self.serverModulus):
-            print ("Using server mod length:",ba2int(self.serverModLength))
-            self.encFirstHalfPMS = pow(ba2int(('\x02'+('\x01'*(ba2int(self.serverModLength) - 100))\
-                +'\x00'+pms1+('\x00'*24))) + 1, self.serverExponent, self.serverModulus)
-            #TODO this is intended to be random; non-working code below
-            #padding = '\x01'*15 
-            #self.encFirstHalfPMS = pow(ba2int('\x02'+('\x01'*63)+padding+'\x00'+\
-            #pms1+('\x00'*24)) + 1, self.serverExponent, self.serverModulus)
+        if (self.serverModulus and not self.encFirstHalfPMS):
+            oneslength = 23            
+            self.encFirstHalfPMS = pow(ba2int('\x02'+('\x01'*(oneslength))+\
+        self.auditeePaddingSecret+'\x00'+pms1 +'\x00'*23 + '\x01'), self.serverExponent, self.serverModulus)
 
         #can construct the full encrypted pre master secret if
         #the auditor's half is already calculated
@@ -305,21 +306,17 @@ class TLSNSSLClientSession(object):
         if not (self.clientRandom and self.serverRandom): return None
         if not self.auditorSecret:
             self.auditorSecret = os.urandom(self.nAuditorEntropy)
-
+        if not self.auditorPaddingSecret:
+            self.auditorPaddingSecret =  os.urandom(15)
         label = 'master secret'
         seed = self.clientRandom + self.serverRandom
         pms2 =  self.auditorSecret + ('\x00' * (24-self.nAuditorEntropy-1)) + '\x01'
         self.pAuditor = TLS10PRF(label+seed,second_half = pms2)[1]
-        
         #we can construct the encrypted form if pubkey is known
-        if (self.serverModulus):
-            self.encSecondHalfPMS = pow( int(('\x01'+('\x00'*25)+pms2).encode('hex'),16),\
-                                         self.serverExponent, self.serverModulus )
-            #TODO this is intended to be random but needs testing
-            #padding = '\x01'*15 
-            #self.encSecondHalfPMS = pow( int(('\x01'+('\x01'*63)+padding+ \
-            #('\x00'*25)+pms2).encode('hex'),16), self.serverExponent, self.serverModulus )
-
+        if (self.serverModulus and not self.encSecondHalfPMS):
+            oneslength = 103+ba2int(self.serverModLength)-256
+            self.encSecondHalfPMS = pow( ba2int('\x01'+('\x01'*(oneslength))+\
+            self.auditorPaddingSecret+ ('\x00'*25)+pms2), self.serverExponent, self.serverModulus )
         return (self.pAuditor,self.encSecondHalfPMS)
 
     def extractCertificate(self):

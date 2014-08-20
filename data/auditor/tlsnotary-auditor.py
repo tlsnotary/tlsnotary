@@ -65,11 +65,14 @@ def process_messages():
             #pubkey required to set encrypted pms
             googleSession.serverModulus = rsModulus
             googleSession.serverExponent = rsExponent
+            #TODO currently can only handle 2048 bit keys for 'reliable site'
+            googleSession.serverModLength = shared.bi2ba(256)
             googleSession.setAuditorSecret()
             grsapms = shared.bi2ba(googleSession.encSecondHalfPMS)
             send_message('grsapms_ghmac:'+ grsapms+googleSession.pAuditor)
-            #we keep resetting so that the final, successful choice is stored
+            #we keep resetting so that the final, successful choice of secrets are stored
             tlsnSession.auditorSecret = googleSession.auditorSecret
+            tlsnSession.auditorPaddingSecret = googleSession.auditorPaddingSecret
             continue
         #---------------------------------------------------------------------#
         #cr_sr_hmac_n_e : sent by auditee at the start of the real audit.
@@ -92,6 +95,7 @@ def process_messages():
             e = cr_sr_hmac_n_e[91+n_len_int:91+n_len_int+3]
             tlsnSession.serverModulus = int(n.encode('hex'),16)
             tlsnSession.serverExponent = int(e.encode('hex'),16)
+            tlsnSession.serverModLength = shared.bi2ba(n_len_int)
             if not tlsnSession.auditorSecret: raise Exception("Auditor PMS secret data should have already been set.")
             tlsnSession.setAuditorSecret() #will set the enc PMS second half
             tlsnSession.setMasterSecretHalf(half=1,providedPValue=md5hmac1_for_MS)
