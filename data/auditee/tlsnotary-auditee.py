@@ -482,12 +482,13 @@ def audit_page(headers,pms_secret,pms_padding_secret,claimed_pub_key):
     tlsnSession.doKeyExpansion()
     plaintext,bad_mac = tlsnSession.processServerAppDataRecords(checkFinished=True)
     if bad_mac: print ("WARNING! Plaintext is not authenticated.")
-    with open(join(commit_dir,'html-'+sf),'wb') as f: f.write(plaintext)
-    if not int(shared.config.get("General","prevent_render")):
-        with open(join(commit_dir,'forbrowser-'+sf+'.html'),'wb') as f:
-            f.write('\r\n\r\n'.join(plaintext.split('\r\n\r\n')[1:]))
     with open(join(current_sessiondir,'session_dump'+sf),'wb') as f: f.write(tlsnSession.dump())
-    html_path = 'html-'+sf if int(shared.config.get("General","prevent_render")) else 'forbrowser-'+sf+'.html'
+    html_path = join(commit_dir,'html-'+sf)
+    with open(html_path,'wb') as f: f.write('\xef\xbb\xbf'+plaintext) #see "Byte order mark"
+    if not int(shared.config.get("General","prevent_render")):
+        html_path = join(commit_dir,'forbrowser-'+sf+'.html')
+        with open(html_path,'wb') as f:
+            f.write('\r\n\r\n'.join(plaintext.split('\r\n\r\n')[1:]))
     return join(commit_dir,join(commit_dir,html_path))
 
 #peer messaging receive thread
