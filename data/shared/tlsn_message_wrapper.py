@@ -1,21 +1,6 @@
 
 #TLSNotary's own messaging protocol abstraction layer
-#Notes about the protocol:
-#1. *All* messages are encrypted - this is possible even though
-#   the parties may need to conduct a handshake, as the pub keys
-#   are exchanged in advance on a side channel.
-#2. All messages start with one of two header types:
-#   (a)'client_hello' or 'google_pubkey' or 'server_hello' sent during
-#   handshake
-#   (b) userid = 'user'+a 10 digit random integer
-#   The remainder of the message is whitespace separated
-#3. Messages are separated into chunks of size msg_chunk_size,
-#   read from the config file. Messages are ended by 'EOL' or 'CRLF',
-#   with CRLF indicating that another chunk is to be expected.
-#4. Messages whose header is 'userid' have the format: seqno:<seqno> encrypted_chunk [EOL/CRLF]
-#5. encrypted_chunk is base64 encoded. The decrypted form has the format: msg_type:msg
-#6. Messages with sequence number are acked.
-#7. Sequence numbers and acks are *not* encrypted.
+#Protocol is documented in the documentation folder.
 
 #Import the implementation module; a more advanced version
 #can read a choice of implementation from config and switch based on that
@@ -29,8 +14,8 @@ msg_chunk_size = None
 initialized = False
 
 #valid types of tlsnotary message to be passed on the private message channel
-message_types_from_auditor = ('grsapms_ghmac', 'rsapms_hmacms_hmacek', 'verify_hmac', 'verify_hmac2','response', 'sha1hmac_for_MS')
-message_types_from_auditee =  ('cr_sr_hmac_n_e', 'gcr_gsr', 'verify_md5sha','verify_md5sha2', 'zipsig', 'link', 'commit_hash')
+message_types_from_auditor = ('rrsapms_rhmac', 'rsapms_hmacms_hmacek', 'verify_hmac', 'verify_hmac2','response', 'sha1hmac_for_MS')
+message_types_from_auditee =  ('cr_sr_hmac_n_e', 'rcr_rsr', 'verify_md5sha','verify_md5sha2', 'zipsig', 'link', 'commit_hash')
 
 
 def tlsn_initialise_messaging(my_nick):
