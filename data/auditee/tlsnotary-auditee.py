@@ -379,7 +379,8 @@ def parse_headers(headers):
 #5 - Send TLS request including http headers and receive server response.
 #6 - Commit the encrypted server response and other data to auditor
 #7 - Receive correct server mac key and then decrypt server response (html),
-#    (includes authentication of response).
+#    (includes authentication of response). Submit resulting html for browser
+#    for display (optionally render by stripping http headers).
 def audit_page(headers,pms_secret,pms_padding_secret,claimed_pub_key):
     #PHASE 1
     tlssock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -481,11 +482,13 @@ def audit_page(headers,pms_secret,pms_padding_secret,claimed_pub_key):
     tlsnSession.doKeyExpansion()
     plaintext,bad_mac = tlsnSession.processServerAppDataRecords(checkFinished=True)
     if bad_mac: print ("WARNING! Plaintext is not authenticated.")
-    #Commit the html to disk and return it.
-    #TODO strip the headers from the html?
     with open(join(commit_dir,'html-'+sf),'wb') as f: f.write(plaintext)
+    if not int(shared.config.get("General","prevent_render")):
+        with open(join(commit_dir,'forbrowser-'+sf+'.html'),'wb') as f:
+            f.write('\r\n\r\n'.join(plaintext.split('\r\n\r\n')[1:]))
     with open(join(current_sessiondir,'session_dump'+sf),'wb') as f: f.write(tlsnSession.dump())
-    return join(commit_dir,'html-'+sf)
+    html_path = 'html-'+sf if int(shared.config.get("General","prevent_render")) else 'forbrowser-'+sf+'.html'
+    return join(commit_dir,join(commit_dir,html_path))
 
 #peer messaging receive thread
 def receivingThread(my_nick, auditor_nick):

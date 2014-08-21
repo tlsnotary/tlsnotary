@@ -626,9 +626,9 @@ class TLSNSSLClientSession(object):
         plaintext = decrypted[:-hash_len]
 
         #NB The mac cannot be checked, as in tlsnotary, the serverMacKey
-        #is garbage until after the commitment. TODO add the server Finished message mac check
-        #*after* the server has passed the real mac key.
-
+        #is garbage until after the commitment. This mac check occurs in 
+        #processServerAppDataRecords
+        
         #check the finished message header
         if plaintext[:4] != h_fin+bi2ba(12,fixed=3):
             print ("The server Finished verify data is invalid")
