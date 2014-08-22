@@ -29,9 +29,9 @@ In order to support peer discovery on public channels, the auditee must initiate
  4. Upon receipt and correct parsing of the above two messages, the auditor sends **ao_hello** message.
  5. **ao_hello** has format: `ao_hello: X [CRLF/EOL]` where X, the message content, is: `rsa_signature('ao_hello'||userid)` where userid is the new user id for the auditor as defined above).
 
-In this, 'reliable site' refers to a site pre-chosen by the auditee that will be used to prepare a PMS in the ensuing stages of the protocol. Any negotiated PMS is tried in a TLS handshake with this site to see if it fails due to padding errors.
+In this, 'reliable site' refers to a site pre-chosen at random from a list of highly stable internet sites, which will be used to prepare a PMS in the ensuing stages of the protocol. Any negotiated PMS is tried in a TLS handshake with this site to see if it fails due to padding errors.
 
-Using the temporary user id in the signatures authenticates that user for this specific handshake, thus avoiding replay attacks.
+The function of the handshake is to authenticate the connection between the temporary `userid` and the auditee's RSA public key (hence the use of RSA signatures). Using the temporary `userid` inside the data signed data avoids replay attacks.
 
 ## Message sequence in detail ##
 The full sequence of messages for a typical session is illustrated below. Definitions for the non-handshake message types are given below the table.
@@ -57,7 +57,7 @@ The full sequence of messages for a typical session is illustrated below. Defini
 | | <<<< | sha1hmac_for_MS |
 | link | >>>> | |
 
-The sequence above is fixed; however, this doesn't matter that messages may not be repeated. For example, the peer handshake messages may be repeated. The prepare PMS phase often must be repeated until a successful PMS is found. The whole sequence from rcr_rsr can be repeated multiple times for multiple different pages within the same audit session, if that is required.
+The sequence above is fixed; however, this doesn't mean that messages may not be repeated. For example, the peer handshake messages may be repeated. The prepare PMS phase often must be repeated until a successful PMS is found. The whole sequence from rcr_rsr can be repeated multiple times for multiple different pages within the same audit session, if that is required.
 
 ### Message Types ###
 
@@ -65,7 +65,7 @@ The sequence above is fixed; however, this doesn't matter that messages may not 
 
 **rrsapms_rhmac** : *Content*: reliable site RSA encrypted premaster secret half sent from auditor to auditee, concatenated with the HMAC for the master secret (see TLSNotary.pdf for details). *Notes*: Here the master secret is needed because, in order to receive a response to the 'Client Key Exchange' from the server, and thus to find out whether the encrypted PMS was correctly formatted, the client (in this case the auditee) must send the 'Client Finished' message encrypted with the correct client encryption key.
 
-**cr_sr_hmac_n_e** : the first message sent by the auditee to the auditor for the real TLS handshake (for the site to be audited). Contains client random, server random and md5 hmac for the master secret, as well as the public key modulus and exponent for the audited site.
+**cr_sr_hmac_n_e** : *Content*: client random, server random and md5 hmac for the master secret, as well as the public key modulus and exponent for the audited site. *Notes*: This is the first message sent by the auditee to the auditor for the real TLS handshake (for the site to be audited). 
 
 **rsapms_hmacms_hmacek**: *Content*: the encrypted premaster secret half for the auditor, the sha1hmac for the master secret and the sha1 hmac for the expanded keys. *Notes*: the hmac for expanded keys is corrupted with garbage in the section required to produce the server mac key. Again, details are in TLSNotary.pdf.
 
