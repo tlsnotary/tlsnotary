@@ -28,7 +28,7 @@ Inside the `tlsnotary` folder created, you will see one directory, `data` (which
 
 If you were successful you should see a new Firefox window (separate from any existing browser window) that looks like this:
 
-![](/data/documentation/MS_to_keys.png)
+![](/data/documentation/startwindow.png)
 
 ##User guide.##
 
