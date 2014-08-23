@@ -209,8 +209,6 @@ class TLSNSSLClientSession(object):
         return csInt
 
     def processServerHello(self,sh_cert_shd):
-        #server hello always starts with 16 03 01 * * 02
-        #certificate always starts with 16 03 01 * * 0b
         shd = hs + tlsver + bi2ba(4,fixed=2) + h_shd + bi2ba(0,fixed=3)
         sh_magic = re.compile(hs + tlsver + '..' + h_sh,re.DOTALL)
         if not re.match(sh_magic, sh_cert_shd): raise Exception ('Invalid server hello')
@@ -601,6 +599,7 @@ class TLSNSSLClientSession(object):
             print ("Server CCSFinished does not contain Finished")
             return None
         recordLen = ba2int(self.serverFinished[3:5])
+        assert recordLen == len(self.serverFinished[5:]), "unexpected data at end of server finished."
         #For CBC only: because the verify data is 12 bytes and the handshake header
         #is a further 4, and the mac is another 20, we have 36 bytes, meaning
         #that the padding is 12 bytes long, making a total of 48 bytes record length
@@ -610,24 +609,22 @@ class TLSNSSLClientSession(object):
         
         #decrypt:
         if self.chosenCipherSuite in [4,5]:
-            decrypted,self.serverRC4State = RC4crypt(bytearray(self.serverFinished[5:]),self.serverEncKey) #box is null for first record
+            decrypted,self.serverRC4State = RC4crypt(bytearray(self.serverFinished[5:5+recordLen]),self.serverEncKey) #box is null for first record
         elif self.chosenCipherSuite in [47,53]:
             ciphertextList,serverEncList,serverIVList = \
-                [map(ord,x) for x in [self.serverFinished[5:],str(self.serverEncKey),str(self.serverIV)]]
+                [map(ord,x) for x in [self.serverFinished[5:5+recordLen],str(self.serverEncKey),str(self.serverIV)]]
             moo = AESModeOfOperation()
             key_size = self.cipherSuites[self.chosenCipherSuite][4]
             decrypted = moo.decrypt(ciphertextList,recordLen,moo.modeOfOperation['CBC'],serverEncList,key_size,serverIVList)
             #for CBC, unpad
             decrypted = cbcUnpad(decrypted)
-            
-        #check the record mac
+                
+        #strip the mac (NB The mac cannot be checked, as in tlsnotary, the serverMacKey
+        #is garbage until after the commitment. This mac check occurs in 
+        #processServerAppDataRecords)
         hash_len = sha1_hash_len if self.chosenCipherSuite in [5,47,53] else md5_hash_len
         received_mac = decrypted[-hash_len:]
         plaintext = decrypted[:-hash_len]
-
-        #NB The mac cannot be checked, as in tlsnotary, the serverMacKey
-        #is garbage until after the commitment. This mac check occurs in 
-        #processServerAppDataRecords
         
         #check the finished message header
         if plaintext[:4] != h_fin+bi2ba(12,fixed=3):
@@ -658,10 +655,6 @@ class TLSNSSLClientSession(object):
         while True:
             if response[:3] != appd+tlsver:
                 if response[:3] == alrt + tlsver:
-                    #print ("Server response was: ",binascii.hexlify(response))
-                    #raw_plaintext, self.serverRC4State = RC4crypt(bytearray(response[5:]),\
-                    #                                self.serverEncKey,self.serverRC4State)                    
-                    #print ("Decrypted server response:",binascii.hexlify(raw_plaintext))
                     print ("Got encrypted alert, done")
                     break
                 print ('Invalid TLS Header for App Data record')
@@ -747,7 +740,7 @@ class TLSNSSLClientSession(object):
         self.encSecondHalfPMS = ba2int(rsapms2)
         self.setEncryptedPMS()
         return self.getCKECCSF()
-
+        
 def getCBCPadding(data_length):
     req_padding = 16 - data_length % 16
     return chr(req_padding-1) * req_padding
