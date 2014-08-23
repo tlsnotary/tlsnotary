@@ -32,7 +32,24 @@ If you were successful you should see a new Firefox window (separate from any ex
 
 ##User guide.##
 
-Here's how to do it.
+*This is a guide for a user who is to be audited. The guide for auditors will be produced separately.*
+
+You still have a few things to do before you can use TLSNotary in a real life audit. Notice in the above screen there are two radio buttons 'Normal Mode', 'Selftest mode' and 'Advanced'. 
+
+Perform self test:
+* Click 'Start selftest' and wait for the 'ready' message to appear (the 'AUDIT THIS PAGE' button will also go blue).
+* Navigate to your intended website, log in as normal, and navigate to the page that you want to be audited (a message page, a bank statement page or similar).
+* Click 'AUDIT THIS PAGE'. The audit will typically take 10-20 seconds. If the decryption is successful you'll see a screen something like this:
+
+![](/data/documentation/decryptedOK.png)
+
+Notice two things: "Page decryption successful" in the status bar, and that a new tab has opened. That tab will contain the exact html page that you're goind to send to the auditor. It's recommended to set `prevent_render=1` in your `tlsnotary.ini` file. Then you will see the html in plaintext, as above. If you reset it to `prevent_render=0`, then this tab will show as an html page, although it won't look totally normal as you won't see images loaded. It's up to you to decide if the data in this page satisfies two criteria:
+
+1. It doesn't contain information that you don't want the auditor to see.
+2. It **does** contain data that proves what you want to prove (e.g. proves that you sent $100 on date:X to recipient:Y).
+
+
+
 
 ###For historical reference###
 
