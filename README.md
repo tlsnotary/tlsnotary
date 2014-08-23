@@ -16,7 +16,19 @@ This can be used e.g. when the auditee must prove to an arbitrator that a bank t
 
 ##How to install and run##
 
-Do stuff and install.
+TLSNotary can run on Linux, Mac and Windows and has only two dependencies:
+1. [Firefox browser](https://www.mozilla.org/en-US/firefox/new/)
+2. [Python 2.7+ for Windows](https://www.python.org/ftp/python/2.7.8/python-2.7.8.msi). Linux and MacOS should already have Python but be aware there is no current support for Python 3 in TLSNotary.
+
+Once you have both of these (in particular, on Windows, make sure you can get a Python prompt by typing `python` at a command prompt), you are ready to try installing and running TLSNotary.
+
+You can do `git clone` if you know what that is; if not, just click the "Download Zip" on the right hand side of this page.
+
+Inside the `tlsnotary` folder created, you will see one directory, `data` (which contains all the code), and also startup scripts. If you are on Windows, double click the file `StartTLSNotary-windows.bat`. If you're on MacOS or Linux, start the appropriate shell script from the command line.
+
+If you were successful you should see a new Firefox window (separate from any existing browser window) that looks like this:
+
+![](/data/documentation/MS_to_keys.png)
 
 ##User guide.##
 
