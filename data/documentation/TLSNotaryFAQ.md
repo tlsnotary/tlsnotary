@@ -26,7 +26,7 @@ The auditee will in fact, get the authentication key to check the page, but the 
 
 ##Great, then how should I use it?##
 
-Thanks for the interest! We have made a video showing you how:(add link here) 
+Thanks for the interest! We have made some [videos] showing you how. *Note: currently the installation process explained here is a little out of date; you no longer need the binary installation - you only need to download the zip of the code, and to have Python 2 installed on your system*. 
 
 
 ##But why should I trust you?##
