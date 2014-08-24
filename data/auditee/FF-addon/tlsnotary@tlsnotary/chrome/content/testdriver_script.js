@@ -7,8 +7,8 @@ var tlsnLinkIndex=0;
 var tlsnCipherSuiteNames=["security.ssl3.rsa_aes_128_sha","security.ssl3.rsa_aes_256_sha","security.ssl3.rsa_rc4_128_md5","security.ssl3.rsa_rc4_128_sha"]
 //copied from https://developer.mozilla.org/en-US/docs/Code_snippets/Progress_Listeners
 //these const are already declared in script.js, if we declare them again, this script won't run
-//const STATE_STOP = Ci.nsIWebProgressListener.STATE_STOP;
-//const STATE_IS_WINDOW = Ci.nsIWebProgressListener.STATE_IS_WINDOW;
+const STATE_STOP = Ci.nsIWebProgressListener.STATE_STOP;
+const STATE_IS_WINDOW = Ci.nsIWebProgressListener.STATE_IS_WINDOW;
 //wait for the page to fully load before we press RECORD
 var tlsnLoadListener = {
 	QueryInterface: XPCOMUtils.generateQI(["nsIWebProgressListener",
@@ -106,7 +106,7 @@ function waitForIRCStarted(){
 						 " and cipher suite: "+tlsnCipherSuiteNames[tlsnCipherSuiteList[tlsnLinkIndex-1]]);
 		return; //give up
 	}
-	if (!helpmsg.startsWith("Navigate")){
+	if (!helpmsg.startsWith("Go to a page")){
 		setTimeout(waitForIRCStarted, 1000);
 		return;      
 	}
@@ -121,7 +121,7 @@ function openNextLink(){
         return;
     }
     //set the cipher suite to be ONLY that in the given argument
-    var prefs = Cc["@mozilla.org/preferences-service;1"].getService(Ci.nsIPrefService);
+    /*var prefs = Cc["@mozilla.org/preferences-service;1"].getService(Ci.nsIPrefService);
     var cs_int = parseInt(tlsnCipherSuiteList[tlsnLinkIndex]);
     for (var i=0;i<4;i++){
         if (i==cs_int){
@@ -131,6 +131,7 @@ function openNextLink(){
             prefs.setBoolPref(tlsnCipherSuiteNames[i], false);
         }
     }
+    */
     auditeeBrowser = gBrowser.addTab(linkArray[tlsnLinkIndex]);
     gBrowser.removeAllTabsBut(auditeeBrowser);
     document.getElementById("help").value = "Loading page..."
@@ -173,10 +174,11 @@ function tlsnRecord(){
 
 function tlsnStopRecord(){
     //reset prefs for file transfer
-    var prefs = Cc["@mozilla.org/preferences-service;1"].getService(Ci.nsIPrefService);
+    /*var prefs = Cc["@mozilla.org/preferences-service;1"].getService(Ci.nsIPrefService);
     for (var i=0;i<4;i++){
             prefs.setBoolPref(tlsnCipherSuiteNames[i], true);
     }
+    */
     var btnStop = document.getElementById("button_stop_enabled");
     tlsnSimulateClick(btnStop);
     waitForSessionEnd(0);

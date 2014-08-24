@@ -1,0 +1,35 @@
+@import url(chrome://ctraddon_os_special/skin/back-forwardextra.css);
+@namespace url(http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul);
+
+@-moz-document url(chrome://browser/content/browser.xul) {
+
+	#ctraddon_back-forward-button{
+	  visibility: visible !important;
+	}
+	
+	#main-window * * #urlbar-container #back-button,
+	#main-window * * #urlbar-container #forward-button{
+	  visibility: collapse !important;
+	  display:none !important;
+	}
+	
+	#urlbar-container *{
+	  clip-path: none !important;
+	}
+	
+	#urlbar-container[forwarddisabled] > #urlbar-wrapper > #urlbar {
+	  transition: none !important;
+	  transition-property: none !important;
+	  transition-delay: 0s !important;
+	}
+	
+	#main-window * #urlbar-container #forward-button[disabled]{
+	  visibility:collapse !important;
+	  opacity: 1.0 !important;
+	}
+	
+	#ctraddon_back-button:-moz-locale-dir(rtl) > .toolbarbutton-icon,
+	#ctraddon_forward-button:-moz-locale-dir(rtl) > .toolbarbutton-icon{
+	  transform: scaleX(-1);
+	}
+}

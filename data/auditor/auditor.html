@@ -13,11 +13,11 @@
 <ol>
 <li>Give to the auditee Your (Auditor's) key. It was auto-generated for you on first run. Generate a new key if you have to.</li>
 <li>Paste the auditee's key.</li>
-<li>Press "Connect to IRC".</li>
+<li>Press "Connect to auditee".</li>
 <li>Inform the auditee that you are ready.</li>
 </ol>
 </p>
-<button id="start_button" autofocus="autofocus" class="btn btn-primary btn-lg" style="margin-bottom:30px;" onclick="startPressed()">Connect to IRC</button>
+<button id="start_button" autofocus="autofocus" class="btn btn-primary btn-lg" style="margin-bottom:30px;" onclick="startPressed()">Connect to auditee</button>
 <button id="show_log" class="btn btn-primary btn-lg" style="margin-bottom:30px;" onclick="showLog()" disabled="true">Show log</button>
 </div>
 
@@ -48,11 +48,11 @@
 var port;
 var bGetRecentKeysResponded = false;
 var bImportAuditeePubkeyResponded = false;
-var bStartIRCResponded = false;
+var bStartPCResponded = false;
 var bNewKeypairResponded = false;
 var reqGetRecentKeys;
 var reqImportAuditeePubkey;
-var reqStartIRC;
+var reqStartPC;
 var reqNewKeypair;
 
 
@@ -128,7 +128,7 @@ function startPressed(){
     reqImportAuditeePubkey.open("HEAD", "http://127.0.0.1:"+port+"/import_auditee_pubkey?pubkey="+auditeepubkey, true);
     reqImportAuditeePubkey.send();
     responseImportAuditeePubkey(0);
-	//the response function will also call startIRC()
+        //the response function will also call startPC()
 }
 
 function responseImportAuditeePubkey(iteration){
@@ -153,14 +153,14 @@ function responseImportAuditeePubkey(iteration){
 		return;
 	}
 	//else successful response
-	startIRC();
+        startPC();
 }
 
 function showLog(){
 	$("#myModal").modal('show') // initializes and invokes show immediately
 }
 
-function startIRC(){
+function startPC(){
 	var button_start_button = document.getElementById("start_button");
 	button_start_button.setAttribute("disabled", "true");
 	var button_new_keypair = document.getElementById("new_keypair");
@@ -170,27 +170,27 @@ function startIRC(){
 
 	progressUpdate();
     $("#myModal").modal('show')                // initializes and invokes show immediately
-	reqStartIRC = new XMLHttpRequest();
-    reqStartIRC.onload = responseStartIRC;
-    reqStartIRC.open("HEAD", "http://127.0.0.1:"+port+"/start_irc", true);
-    reqStartIRC.send();
-    responseStartIRC(0);
+        reqStartPC = new XMLHttpRequest();
+    reqStartPC.onload = responseStartPC;
+    reqStartPC.open("HEAD", "http://127.0.0.1:"+port+"/start_peer_connection", true);
+    reqStartPC.send();
+    responseStartPC(0);
 }
 
-function responseStartIRC(iteration){
+function responseStartPC(iteration){
     if (typeof iteration == "number"){
         if (iteration > 10){
-            alert("responseStartIRC timed out")
+            alert("responseStartPC timed out")
             return
         }
-        if (!bStartIRCResponded) setTimeout(responseStartIRC, 1000, ++iteration)
+        if (!bStartPCResponded) setTimeout(responseStartPC, 1000, ++iteration)
         return;
     }
     //else: not a timeout but a response from the server
-	bStartIRCResponded = true;
-    var query = reqStartIRC.getResponseHeader("response");
-    var status = reqStartIRC.getResponseHeader("status");
-    if (query != "start_irc"){
+        bStartPCResponded = true;
+    var query = reqStartPC.getResponseHeader("response");
+    var status = reqStartPC.getResponseHeader("status");
+    if (query != "start_peer_connection"){
         alert("Internal error. Wrong response header: "+query);
         return;
     }

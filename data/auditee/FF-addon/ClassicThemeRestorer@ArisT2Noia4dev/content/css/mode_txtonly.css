@@ -1,0 +1,92 @@
+@import url(chrome://ctraddon_os_special/skin/back-forwardextra.css);
+@import url(chrome://ctraddon_os_special/skin/nav_txtonlyextra.css);
+@namespace url(http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul);
+
+@-moz-document url(chrome://browser/content/browser.xul) {
+
+	#navigator-toolbox .toolbarbutton-1:not(.tabs-newtab-button):not(.tab-close-button) .toolbarbutton-text,
+	#ctraddon_addon-bar .toolbarbutton-1:not(.tabs-newtab-button):not(.tab-close-button) .toolbarbutton-text	{
+	  display: -moz-box !important;
+	}
+	#navigator-toolbox #nav-bar .toolbarbutton-1:not(.tabs-newtab-button):not(.tab-close-button) .toolbarbutton-text {
+      border: 1px solid transparent;
+    }
+	#navigator-toolbox .toolbarbutton-1:not(.tabs-newtab-button):not(.tab-close-button):not([type="menu-button"]),
+	#ctraddon_addon-bar .toolbarbutton-1:not(.tabs-newtab-button):not(.tab-close-button):not([type="menu-button"]) {
+	  -moz-box-orient: vertical !important;
+	}
+	#navigator-toolbox  toolbarbutton:not(.tabs-newtab-button):not(.tab-close-button):not(#tabs-closebutton):not(#ctraddon_tabs-closebutton) .toolbarbutton-icon,
+	#ctraddon_addon-bar toolbarbutton:not(.tabs-newtab-button):not(.tab-close-button):not(#tabs-closebutton):not(#ctraddon_tabs-closebutton) .toolbarbutton-icon,
+	#navigator-toolbox #TabsToolbar #ctraddon_appbutton .toolbarbutton-text {
+	  visibility: collapse !important;
+	}
+	
+	#navigator-toolbox #urlbar-go-button:not(.tabs-newtab-button):not(.tab-close-button) .toolbarbutton-icon,
+	#navigator-toolbox #urlbar-stop-button:not(.tabs-newtab-button):not(.tab-close-button) .toolbarbutton-icon,
+	#navigator-toolbox #urlbar-reload-button:not(.tabs-newtab-button):not(.tab-close-button) .toolbarbutton-icon {
+	  visibility: visible !important;
+	}
+	
+	#navigator-toolbox #TabsToolbar #ctraddon_appbutton .toolbarbutton-icon{
+	  visibility: visible !important;
+	}
+	.toolbarbutton-1[type="menu"] dropmarker{
+	   visibility:collapse !important;
+	}
+	/* make custom back-forward visible and hide back-forward on urlbar item */
+	#ctraddon_back-forward-button{
+	  visibility: visible !important;
+	}
+	#main-window #navigator-toolbox #nav-bar #urlbar-container #back-button,
+	#main-window #navigator-toolbox #nav-bar #urlbar-container #forward-button{
+	  visibility: collapse !important;
+	}
+	window:not([chromehidden~="toolbar"]) #urlbar-container[forwarddisabled] > #urlbar-wrapper {
+	  clip-path: none !important;
+	}
+	window:not([chromehidden~="toolbar"]) #urlbar-container[forwarddisabled] > #urlbar-wrapper > #urlbar {
+	  transition: none !important;
+	  transition-property: none !important;
+	  transition-delay: 0s !important;
+	}
+	window:not([chromehidden~="toolbar"]) #urlbar-container[forwarddisabled] > #urlbar-wrapper > #urlbar:-moz-locale-dir(ltr),
+	window:not([chromehidden~="toolbar"]) #urlbar-container[forwarddisabled] > #urlbar-wrapper > #urlbar:-moz-locale-dir(rtl) {
+	  margin-left: 0px !important;
+	}
+	
+    #urlbar {
+      border:1px solid #b4c1cf !important;
+    }
+
+	@media all and (-moz-windows-theme:aero) {
+		#urlbar[focused="true"] {
+		  border:1px solid #72c0fe !important;
+		}
+	}
+	
+	#downloads-button .toolbarbutton-icon{
+	  margin: -4px !important;
+	}
+	
+	/* support for star button in urlbar */
+	#nav-bar #urlbar-container #bookmarks-menu-button .toolbarbutton-text {
+	  display: none !important;
+	  visibility: collapse !important;
+	}
+	#navigator-toolbox  #nav-bar #urlbar-container #bookmarks-menu-button:not(.tabs-newtab-button):not(.tab-close-button) .toolbarbutton-icon {
+	  visibility: visible !important;
+	}
+	#nav-bar #urlbar-container #bookmarks-menu-button {
+	  min-width: inherit !important;
+	}
+	#nav-bar #urlbar-container #bookmarks-menu-button:hover{
+	  border: 0px solid transparent !important;
+      background-image: linear-gradient(hsla(0,0%,100%,.0), hsla(0,0%,100%,.0)) !important;
+      border-color: hsla(210,54%,20%,.0) hsla(210,54%,20%,.0) hsla(210,54%,20%,.0) !important;
+      box-shadow: none !important;
+	  padding:0 !important;
+	}
+	#nav-bar #urlbar-container #bookmarks-menu-button .toolbarbutton-icon {
+	  margin: -8px 4px !important;
+	}
+}

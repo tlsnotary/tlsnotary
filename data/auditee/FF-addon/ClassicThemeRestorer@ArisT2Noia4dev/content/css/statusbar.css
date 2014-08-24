@@ -1,0 +1,55 @@
+@namespace url(http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul);
+
+@-moz-document url(chrome://browser/content/browser.xul) {
+
+	#main-window:not([customizing]) #status-bar{
+	  -moz-appearance: none !important;
+	  background: none !important;
+	  border: none !important;
+	  border-right: none !important;
+	}
+	
+	#ctraddon_addon-bar:not([customizing]) #status-bar{
+	  margin-top: -1px !important;
+	  margin-bottom: -1px !important;
+	  padding-top: 0px;
+	  padding-bottom: 0px;
+	}
+
+	#main-window[customizing] #status-bar{
+	  -moz-appearance: none !important;
+	  background: none !important;
+	  border: none !important;
+	  border-right: none !important;
+	  min-width: 50px !important;
+	  opacity: .5 !important;
+	  background-image: repeating-linear-gradient(135deg,
+						rgba(255,255,255,.3), rgba(255,255,255,.3) 5px,
+						rgba(0,0,0,.3) 5px, rgba(0,0,0,.3) 10px) !important;
+	}
+	
+	#main-window[customizing] #ctraddon_addon-bar #status-bar{
+	  margin-top:-1px !important;
+	}
+	
+	#status-bar statusbarpanel {
+	  -moz-appearance:none !important;
+	  border:none !important;
+	}
+
+	#ctraddon_statusbar[cui-areatype="menu-panel"] #status-bar,
+	toolbarpaletteitem[place="palette"] > #ctraddon_statusbar #status-bar,
+	#ctraddon_statusbar[cui-areatype="menu-panel"],
+	toolbarpaletteitem[place="palette"] > #ctraddon_statusbar {
+	  width: 100px !important;
+	}
+	toolbarpaletteitem[place="toolbar"] #ctraddon_statusbar {
+	  min-width: 50px !important;
+	}
+	
+	/* temp. workaround for 'Request Policy' add-on until dev adds a fix for Fx 29+ */
+	#requestpolicyStatusbar {
+	  display: inline !important;
+	}
+
+}

@@ -1,0 +1,196 @@
+<!ENTITY Ctr_title 			"Classic Theme Restorer">
+
+<!ENTITY Ctr_addonbar		"Barra dei componenti aggiuntivi">
+<!ENTITY Ctr_statusbar		"Barra di stato">
+<!ENTITY Ctr_extrabar 		"Barra degli strumenti aggiuntiva">
+<!ENTITY Ctr_flexspace		"Spazio flessibile">
+<!ENTITY Ctr_space			"Spazio">
+<!ENTITY Ctr_separator		"Separatore">
+<!ENTITY Ctr_puibseparator	"Pannello di separazione pulsanti">
+
+<!ENTITY Ctr_cuibuttons		"Pulsanti">
+<!ENTITY Ctr_cuibutnormal	"Normali">
+<!ENTITY Ctr_cuibutsmall	"Piccoli">
+<!ENTITY Ctr_cuimode		"Modalità">
+<!ENTITY Ctr_cuiico			"Icone">
+<!ENTITY Ctr_cuiicotxt		"Icone e testo">
+<!ENTITY Ctr_cuitxt			"Testo">
+
+<!ENTITY Ctr_combrelstoptt	"[stop][ricarica] &gt;&gt; [stop-ricarica]">
+<!ENTITY Ctr_tnot			"(schede in basso)">
+
+<!ENTITY Ctr_tabcolors_t	"Colori personalizzati">
+<!ENTITY Ctr_icons_t		"Favicon e icone">
+
+<!ENTITY Ctr_tabs			"Schede">
+<!ENTITY Ctr_tabs0			"Schede con angoli arrotondati (predefinito in Australis)">
+<!ENTITY Ctr_tabs1			"Schede con angoli spigolosi (stile classico)">
+<!ENTITY Ctr_tabs1m			"Schede con angoli spigolosi (effetto Australis)">
+<!ENTITY Ctr_tabs2			"Scheda con angoli arrotondati (stile alternativo)">
+<!ENTITY Ctr_tabs3			"Schede con angoli arrotondati (stile Aero)">
+<!ENTITY Ctr_tabforminfo	"L’aspetto delle schede è definito dal tema in uso.">
+<!ENTITY Ctr_tabsontop0		"Schede in alto (predefinito) - [CTR disattivata]">
+<!ENTITY Ctr_tabsontop1		"Schede in alto - CTR attivata - [tabsontop=true]">
+<!ENTITY Ctr_tabsontop2		"Schede in basso - CTR attivata - [tabsontop=false]">
+<!ENTITY Ctr_tabsontopI1	"Aggiunge l’attributo [tabsontop=true/false] a">
+<!ENTITY Ctr_tabsintitlebar	"Schede nella barra del titolo (about:config)">
+<!ENTITY Ctr_tabwidthdef	"(predefinita)">
+<!ENTITY Ctr_tabwidthcla	"(stile classico)">
+<!ENTITY Ctr_tabmaxwidth	"Larghezza massima:">
+<!ENTITY Ctr_tabminwidth	"Larghezza minima:">
+<!ENTITY Ctr_tabwidthinfo	"La larghezza minima e massima delle schede è definita da TabMixPlus o TabUtilities">
+<!ENTITY Ctr_closetab_0		"Pulsante di chiusura (predefinito)">
+<!ENTITY Ctr_closetab_1		"Pulsante di chiusura nella scheda attiva">
+<!ENTITY Ctr_closetab_2		"Nessun pulsante di chiusura schede">
+<!ENTITY Ctr_closetab_3		"Pulsante di chiusura a destra della barra delle schede">
+<!ENTITY Ctr_closetab_4		"Pulsante di chiusura a sinistra della barra delle schede">
+<!ENTITY Ctr_closetab_5		"Pulsante di chiusura in tutte le schede (forzato)">
+
+<!ENTITY Ctr_appbutton		"Pulsante applicazione">
+<!ENTITY Ctr_appbutton0		"Nessun pulsante">
+<!ENTITY Ctr_appbutton1		"Pulsante nella barra degli strumenti">
+<!ENTITY Ctr_appbutton1wt	"Pulsante nella barra degli strumenti (solo testo)">
+<!ENTITY Ctr_appbutton2		"Pulsante nella barra del titolo">
+<!ENTITY Ctr_appbutton2io	"Pulsante nella barra del titolo (solo icona)">
+<!ENTITY Ctr_paneluibtweak	"Pulsante pannello menu arancione nella barra delle schede">
+<!ENTITY Ctr_appbuttonc_o	"Pulsante arancione (predefinito)">
+<!ENTITY Ctr_appbuttonc_a	"Pulsante blu (Aurora)">
+<!ENTITY Ctr_appbuttonc_n	"Pulsante nero (Nightly)">
+<!ENTITY Ctr_appbuttonc_t	"Pulsante trasparente">
+<!ENTITY Ctr_appbuttonc_p	"Pulsante azzurro (Palemoon)">
+<!ENTITY Ctr_appbuttonc_r	"Pulsante rosso">
+<!ENTITY Ctr_appbuttonc_g	"Pulsante verde">
+<!ENTITY Ctr_appbuttonc_gr	"Pulsante grigio">
+<!ENTITY Ctr_appbuttonc_pu	"Pulsante viola">
+<!ENTITY Ctr_appbuttonc_wh	"Pulsante bianco">
+<!ENTITY Ctr_appbuttonI1	"riavvio consigliato">
+<!ENTITY Ctr_appbuttonI1e	"non visibile nella barra del titolo di sistema">
+<!ENTITY Ctr_appbuttonI2	"Colorato solo nella barra del titolo e nella barra delle schede.">
+<!ENTITY Ctr_alttbappb		"Icone alternative">
+<!ENTITY Ctr_appbutmhi		"In cima a tutto (se nella barra delle schede)">
+<!ENTITY Ctr_appbutbdl		"Nascondi bordi e colori di sfondo">
+<!ENTITY Ctr_dblclclosefx	"Doppio clic per chiudere la finestra corrente">
+
+<!ENTITY Ctr_ui				"Interfaccia base">
+<!ENTITY Ctr_nbiconsize0	"Imposta attributo alla barra di navigazione">
+<!ENTITY Ctr_smallnavbut	"Pulsanti piccoli nella barra di navigazione">
+<!ENTITY Ctr_bfurlbarfix	"Correggi la curvatura della barra degli indirizzi per i pulsanti Avanti e Indietro mobili e i pulsanti piccoli">
+<!ENTITY Ctr_backforward	"Pulsante Indietro/Avanti mobile">
+<!ENTITY Ctr_hide_bf_popup	"Nascondi la cronologia tenendo premuto il pulsante Avanti/Indietro mobile">
+<!ENTITY Ctr_wincontrols	"Angoli finestra mobili in modalità schermo intero">
+<!ENTITY Ctr_starinurl		"Stella nella barra degli indirizzi (riavviare Firefox)">
+<!ENTITY Ctr_mstatusbar		"Barra di stato mobile">
+<!ENTITY Ctr_hideurelstop	"Nascondi pulsanti Stop e Ricarica nella barra degli indirizzi">
+<!ENTITY Ctr_combrelstop	"Unisci i pulsanti Stop e Ricarica">
+<!ENTITY Ctr_panelmenucol	"Colore di sfondo alternativo per i menu">
+<!ENTITY Ctr_hideprivmask	"Nascondi indicatore modalità di Navigazione anonima">
+<!ENTITY Ctr_verifiedcolors	"Indicatore connessioni sicure blu o verde per i siti verificati">
+<!ENTITY Ctr_findbar		"Barra di ricerca nel testo">
+<!ENTITY Ctr_findbar_def	"Posizione predefinita">
+<!ENTITY Ctr_findbar_top	"In alto">
+<!ENTITY Ctr_findbar_bot	"In basso">
+<!ENTITY Ctr_findbar_topa	"In alto (stile alternativo)">
+<!ENTITY Ctr_findbar_bota	"In basso (stile alternativo)">
+<!ENTITY Ctr_nav_txt_ico0	"Utilizza solo icone (predefinito)">
+<!ENTITY Ctr_nav_txt_ico1	"Utilizza icone grandi">
+<!ENTITY Ctr_nav_txt_ico2	"Utilizza icone e testo">
+<!ENTITY Ctr_nav_txt_ico3	"Utilizza solo testo">
+<!ENTITY Ctr_stoprel0		"Impostazioni pulsante ‘Stop e ricarica’">
+<!ENTITY Ctr_stoprel1		"Importante: disporre il pulsante Ricarica a destra del pulsante Stop!">
+<!ENTITY Ctr_cpanelmenus	"Pannello menu unificato (Segnalibri, Cronologia, ecc..)">
+<!ENTITY Ctr_hidezoomres	"Nascondi il pulsante per ripristinare il livello di zoom dalla barra degli strumenti">
+<!ENTITY Ctr_pmhidelabels	"Mostra solo icone nel pannello menu">
+<!ENTITY Ctr_menupopupscr	"Utilizza barra di scorrimento al posto delle frecce nei menu di popup">
+
+<!ENTITY Ctr_fxmockup		"Mockup">
+<!ENTITY Ctr_tabmokcolor	"Utilizza il colore bianco per i pulsanti delle schede (Chiudi, Nuova, Gruppi, Mostra tutte)">
+<!ENTITY Ctr_tabmokcolor2	"Utilizza testo bianco con ombreggiatura scura nelle schede non attive">
+<!ENTITY Ctr_tabmokcolor3	"Utilizza separatori bianchi nella barra delle schede">
+
+<!ENTITY Ctr_tab_tf_info1	"È possibile usare nomi di colori (in inglese), valori esadecimali e i formati rgb(a) e hsl(a).">
+<!ENTITY Ctr_tab_tf_info2	"Nessuna validazione dell’input.">
+<!ENTITY Ctr_tabact_t		"attiva">
+<!ENTITY Ctr_tabhov_t		"al passaggio del mouse">
+<!ENTITY Ctr_tabnor_t		"predefinita">
+<!ENTITY Ctr_tabpen_t		"non caricata">
+<!ENTITY Ctr_tabunr_t		"non letta">
+<!ENTITY Ctr_ntab_t			"nuova">
+<!ENTITY Ctr_customsqtab0	"Colori personalizzati per le schede">
+<!ENTITY Ctr_customsqtab1	"Sfondo">
+<!ENTITY Ctr_ctext			"Testo">
+<!ENTITY Ctr_ctextsh		"Ombreggiatura testo">
+<!ENTITY Ctr_tabnor			"Scheda predefinita">
+<!ENTITY Ctr_tabhov			"Scheda al passaggio del mouse">
+<!ENTITY Ctr_tabact			"Scheda attiva">
+<!ENTITY Ctr_tabpen			"Scheda non caricata">
+<!ENTITY Ctr_tabunr			"Scheda non letta">
+<!ENTITY Ctr_ntabnor		"Nuova scheda predefinita">
+<!ENTITY Ctr_ntabhov		"Nuova scheda al passaggio del mouse">
+<!ENTITY Ctr_bold			"Grassetto">
+<!ENTITY Ctr_italic			"Corsivo">
+
+<!ENTITY Ctr_favicon		"Impostazioni favicon">
+<!ENTITY Ctr_emptyfavicon	"Nei siti che non hanno una favicon usa la vecchia favicon vuota">
+<!ENTITY Ctr_emptyfavicon2	"Sostituisci la favicon generica predefinita con un’icona a forma di foglio">
+<!ENTITY Ctr_faviconurl		"Favicon nella barra degli indirizzi (riavviare Firefox)">
+<!ENTITY Ctr_padlock_hid	"Lucchetto (nascosto))">
+<!ENTITY Ctr_padlock_def	"Lucchetto (predefinito)">
+<!ENTITY Ctr_padlock_cla	"Lucchetto (classico)">
+<!ENTITY Ctr_padlock_mod	"Lucchetto (moderno)">
+<!ENTITY Ctr_padlock_ext	"Icone connessioni sicure">
+
+<!ENTITY Ctr_invicons		"Icone invertite">
+<!ENTITY Ctr_menubar		"Barra dei menu">
+<!ENTITY Ctr_tabstoolbar	"Barra delle schede">
+<!ENTITY Ctr_navbar			"Barra di navigazione">
+<!ENTITY Ctr_bookbar		"Barra dei segnalibri">
+
+<!ENTITY Ctr_toolbars		"Barra degli strumenti">
+<!ENTITY Ctr_dblclnewtab	"Doppio clic del mouse per aprire una nuova scheda">
+<!ENTITY Ctr_hidetbwot		"Nascondi la barra delle schede quando è aperta una sola scheda (riavviare Firefox)">
+<!ENTITY Ctr_notabfog		"Disattiva l’effetto nebbia (Windows AeroGlass e Win8)">
+<!ENTITY Ctr_notabbg		"Rimuovi colore di sfondo (Windows AeroGlass e Win8)">
+<!ENTITY Ctr_hightabpos		"Quando possibile, riduci lo spazio sopra">
+<!ENTITY Ctr_alttabstb		"Colore di sfondo alternativo">
+
+<!ENTITY Ctr_altmenubar		"Aggiungi colore di sfondo (Barra del titolo di sistema)">
+<!ENTITY Ctr_altmenubarpos	"Posizione alternativa (sotto la barra del titolo)">
+<!ENTITY Ctr_menubarnofog	"Elimina l’effetto nebbia o il colore di sfondo (Windows AeroGlass e Windows 8)">
+
+<!ENTITY Ctr_hidenavbar		"Nascondi barra di navigazione">
+<!ENTITY Ctr_nobookbarbg	"Rimuovi colore di sfondo dalla barra dei segnalibri">
+<!ENTITY Ctr_nonavbarbg		"Rimuovi colore di sfondo dalla barra di navigazione">
+<!ENTITY Ctr_nonavborder	"Aggiungi bordo superiore alla barra dei segnalibri">
+<!ENTITY Ctr_nonavtbborder	"Rimuovi i bordi alle barre degli strumenti posizionate in alto">
+
+<!ENTITY Ctr_closeabarbut	"Nascondi pulsante di chiusura">
+<!ENTITY Ctr_highaddonsbar	"Aumenta l’altezza">
+<!ENTITY Ctr_noaddonbarbg	"Rimuovi colore di sfondo (Windows AeroGlass e Win8)">
+
+<!ENTITY Ctr_animation		"Icone animate">
+<!ENTITY Ctr_throbberalt	"Throbber di caricamento scheda alternativo">
+<!ENTITY Ctr_bmanimation	"Icona animata durante l’aggiunta ai segnalibri">
+<!ENTITY Ctr_pananimation	"Icona animata durante l’apertura di un pannello">
+<!ENTITY Ctr_tabanimation	"Icona animata per l’apertura o chiusura di una scheda (about:config)">
+<!ENTITY Ctr_dlanimation	"Icona animata avviso download (about:config)">
+
+<!ENTITY Ctr_toolsitem		"Aggiungi voci al menu Strumenti">
+<!ENTITY Ctr_appmenuitem	"Aggiungi voci nel menu del pulsante app">
+<!ENTITY Ctr_contextitem	"Voci nel menu contestuale delle barre degli strumenti">
+<!ENTITY Ctr_cuibotbuttons	"Aggiungi pulsanti in modalità personalizzazione">
+
+
+<!ENTITY Ctr_pw_settings	"Impostazioni">
+<!ENTITY Ctr_pw_set_reset	"Ripristina predefinite">
+<!ENTITY Ctr_pw_set_predef	"Preset classico">
+<!ENTITY Ctr_pw_set_export	"Esporta preferenze">
+<!ENTITY Ctr_pw_set_import	"Importa preferenze">
+
+<!ENTITY Ctr_special_font	"La modifica del colore di sfondo si applica solo utilizzando il tema predefinito!">
+<!ENTITY Ctr_special_info	"Alcune opzioni si applicano solo in casi particolari">
+<!ENTITY Ctr_special_info2	"Le impostazioni sono pensate per il tema predefinito e potrebbero non funzionare con altri temi">
+<!ENTITY Ctr_support		"Forum di supporto">
+<!ENTITY Ctr_newversion		"È disponibile una nuova versione?">
+
+<!ENTITY Ctr_addon-bar.accesskey	"B">
+<!ENTITY Ctr_extrabar.accesskey		"A">

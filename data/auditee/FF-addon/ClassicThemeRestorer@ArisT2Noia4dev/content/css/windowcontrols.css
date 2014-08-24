@@ -1,0 +1,23 @@
+@namespace url(http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul);
+
+@-moz-document url(chrome://browser/content/browser.xul),
+			   url(chrome://global/content/customizeToolbar.xul) {
+
+   #main-window[inFullscreen] #autohide-context {
+	  visibility:collapse !important;
+	}
+
+	#main-window:not([inFullscreen]):not([customizing]) #ctraddon_window-controls,
+	#main-window[inFullscreen] #window-controls {
+	  visibility:collapse !important;
+	}
+
+	#main-window[inFullscreen]  #ctraddon_window-controls {
+	  visibility: visible !important;
+	}
+	
+	#nav-bar #ctraddon_window-controls{
+	  -moz-box-align: start !important;
+	}
+
+}

@@ -3,14 +3,14 @@
          xmlns="http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul">
   <script type="application/x-javascript" src="script.js"/>
   <script type="application/x-javascript" src="testdriver_script.js"/>
-  <toolbar id="addon-bar">
+  <toolbar id="ctraddon_addon-bar">
     <box id="box" orient="horizontal" align="center">
 		<label id="help" value=""/>
-        <button id="button_record_disabled" maxheight="50" width="100" hidden="false" image="chrome://tlsnotary/skin/record_disabled.png" style="background-color: #006ECC !important;"/>
-		  <button id="button_record_enabled" maxheight="50" width="100" hidden="true" image="chrome://tlsnotary/skin/record_enabled.png" onclick="startRecording()" style="background-color: #006ECC !important;" tooltiptext="Records a currently displayed webpage"/>
-		  <button id="button_spinner" maxheight="50" width="100" hidden="true" image="chrome://tlsnotary/skin/spinner.gif" style="background-color: #006ECC !important;" />
-        <button id="button_stop_disabled" maxheight="50" width="100" hidden="false" image="chrome://tlsnotary/skin/stop_disabled.png" style="background-color: #EEEEEE !important;" />
-		<button id="button_stop_enabled" maxheight="50" width="100" hidden="true" onclick="stopRecording()" image="chrome://tlsnotary/skin/stop_enabled.png" style="background-color: #EEEEEE !important;" tooltiptext="Sends all recorded webpages to the auditor and ends the current auditing session"/>
+        <button id="button_record_disabled" minheight="25" maxheight="25" width="180" hidden="false" disabled="true" image="chrome://tlsnotary/skin/record_disabled.png" style="background-color: #006ECC !important;"/>
+		  <button id="button_record_enabled" minheight="25" maxheight="25" width="180" hidden="true" image="chrome://tlsnotary/skin/record_enabled.png" onclick="startRecording()" style="background-color: #006ECC !important;" tooltiptext="Records a currently displayed webpage"/>
+		  <button id="button_spinner" minheight="25" maxheight="25" width="100" hidden="true" disabled="true" image="chrome://tlsnotary/skin/spinner.gif" style="background-color: #006ECC !important;" />
+        <button id="button_stop_disabled" minheight="25" maxheight="25" width="100" hidden="false" disabled="true" image="chrome://tlsnotary/skin/stop_disabled.png" style="background-color: #EEEEEE !important;" />
+		<button id="button_stop_enabled" minheight="25" maxheight="25" width="100" hidden="true" onclick="stopRecording()" image="chrome://tlsnotary/skin/stop_enabled.png" style="background-color: #EEEEEE !important;" tooltiptext="Sends all recorded webpages to the auditor and ends the current auditing session"/>
     </box>
   </toolbar>
 </overlay>

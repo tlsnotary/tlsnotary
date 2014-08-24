@@ -34,7 +34,9 @@ tlsnCipherSuiteNames=["security.ssl3.rsa_aes_128_sha","security.ssl3.rsa_aes_256
 "security.ssl3.rsa_rc4_128_md5","security.ssl3.rsa_rc4_128_sha"]
 website_list_file=""
 website_list=[]
+website_num = 0
 cs_list=[]
+ffdir = None
 
 m_platform = platform.system()
 if m_platform == 'Windows':
@@ -181,8 +183,13 @@ def perform_final_check():
 
     #auditor first
     while True:
-        time.sleep(10) #allow to decrypt all files
-        if os.path.exists(auditee_decrypted_dir): break
+        time.sleep(1) #allow to decrypt all files
+        if not os.path.exists(auditor_decrypted_dir): continue
+        nd=False
+        for i in range(website_num):
+            if not os.path.isfile(os.path.join(auditor_decrypted_dir,'html-'+str(i+1))): nd=True
+        if not nd: break
+        
     for i in os.listdir(auditor_decrypted_dir):
         if os.path.isfile(os.path.join(auditor_decrypted_dir,i)) and i.startswith('html'):
             with open(os.path.join(auditor_decrypted_dir,i),'rb') as f: dh = f.read()
@@ -191,7 +198,7 @@ def perform_final_check():
     #now auditee
     for i in os.listdir(auditee_decrypted_dir):
         if os.path.isfile(os.path.join(auditee_decrypted_dir,i)) and i.startswith('html'):
-            with open(os.path.join(auditor_decrypted_dir,i),'rb') as f: dh = f.read()
+            with open(os.path.join(auditee_decrypted_dir,i),'rb') as f: dh = f.read()
             auditee_md5s[i] = hashlib.md5(dh).hexdigest()
 
     bCheckFailed = False
@@ -248,6 +255,7 @@ def start_run():
     global website_list_file
     global website_list
     global cs_list
+    global website_num
     website_list = []
     cs_list = []
     with open(website_list_file) as f:
@@ -255,7 +263,8 @@ def start_run():
         for a in wfl:
             #url and cipher suite details are split by whitespace
             url,code = a.split()
-            website_list.append(url)
+            if not url.startswith('#'):
+                website_list.append(url)
             #accepted ciphersuites (indexed by tlsnCipherSuiteList above)
             #are separated by commas:
             acceptable_ciphersuites = code.split(',')
@@ -267,7 +276,7 @@ def start_run():
     log_to_file("and these cipher suites:")
     log_to_file(','.join(cs_list))
     log_to_file("************************************")
-
+    website_num = len(website_list)
 
 def start_auditor(parentthread):
     global auditor_pid
@@ -283,20 +292,21 @@ def start_auditee(parentthread):
     global auditee_pid    
     print ("Starting the auditee")
     auditee_py = os.path.join(installdir, 'data', 'auditee', 'tlsnotary-auditee.py')
-    auditee_proc = subprocess.Popen(['python', auditee_py, 'test'])
+    auditee_proc = subprocess.Popen(filter(None,['python', auditee_py, ffdir,'test']))
     auditee_pid = auditee_proc.pid
 
 if __name__ == "__main__":
 
     global website_list_file
+    global ffdir
     website_list_file = sys.argv[1]
+    if len(sys.argv) > 2: ffdir = sys.argv[2]
 
     #start auditor
     thread_auditor = ThreadWithRetval(target= start_auditor)
     thread_auditor.daemon = True
     thread_auditor.start()
 
-    time.sleep(2.0)
     #start auditee
     thread_auditee = ThreadWithRetval(target= start_auditee)
     thread_auditee.daemon = True
