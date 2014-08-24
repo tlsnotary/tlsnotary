@@ -296,13 +296,13 @@ def prepare_pms(headers,claimed_pub_key):
             raise Exception("Failure in processing of server Hello from " + pmsSession.serverName)
         #give auditor cr&sr and get an encrypted second half of PMS,
         #and shahmac that needs to be xored with my md5hmac to get MS
-        reply = send_and_recv('gcr_gsr:'+pmsSession.clientRandom+pmsSession.serverRandom)
-        if reply[0] != 'success': raise Exception ('Failed to receive a reply for gcr_gsr:')
-        if not reply[1].startswith('grsapms_ghmac:'):
-            raise Exception ('bad reply. Expected grsapms_ghmac:')
-        grsapms_ghmac = reply[1][len('grsapms_ghmac:'):]
-        rsapms2 = grsapms_ghmac[:256]
-        shahmac = grsapms_ghmac[256:304]
+        reply = send_and_recv('rcr_rsr:'+pmsSession.clientRandom+pmsSession.serverRandom)
+        if reply[0] != 'success': raise Exception ('Failed to receive a reply for rcr_rsr:')
+        if not reply[1].startswith('rrsapms_rhmac:'):
+            raise Exception ('bad reply. Expected rrsapms_rhmac:')
+        rrsapms_rhmac = reply[1][len('rrsapms_rhmac:'):]
+        rsapms2 = rrsapms_rhmac[:256]
+        shahmac = rrsapms_rhmac[256:304]
         pmsSession.pAuditor = shahmac
         data = pmsSession.completeHandshake(rsapms2)
         tlssock.send(data)
@@ -317,7 +317,7 @@ def prepare_pms(headers,claimed_pub_key):
             print (binascii.hexlify(response))
             continue
         #else ccs was in the response
-        html_path = audit_page(headers,pmsSession.auditeeSecret,claimed_pub_key)
+        html_path = audit_page(headers,pmsSession.auditeeSecret,pmsSession.auditeePaddingSecret,claimed_pub_key)
         return ('success',html_path) #successfull pms check
     #no dice after 5 tries
     raise Exception ('Could not prepare PMS with ', shared.config.get('SSL','reliable_site'), ' after 5 tries')
@@ -379,14 +379,16 @@ def parse_headers(headers):
 #5 - Send TLS request including http headers and receive server response.
 #6 - Commit the encrypted server response and other data to auditor
 #7 - Receive correct server mac key and then decrypt server response (html),
-#    (includes authentication of response).
-def audit_page(headers,pms_secret,claimed_pub_key):
+#    (includes authentication of response). Submit resulting html for browser
+#    for display (optionally render by stripping http headers).
+def audit_page(headers,pms_secret,pms_padding_secret,claimed_pub_key):
     #PHASE 1
     tlssock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     tlssock.settimeout(int(shared.config.get("General","tcp_socket_timeout")))
     server_name, headers = parse_headers(headers)
     tlsnSession = shared.TLSNSSLClientSession(server_name,ccs=5,audit=True)
     tlsnSession.auditeeSecret = pms_secret
+    tlsnSession.auditeePaddingSecret = pms_padding_secret
     tlssock.connect((tlsnSession.serverName, tlsnSession.sslPort))
     tlssock.send(tlsnSession.handshakeMessages[0])
     sh_cert_shd = shared.recv_socket(tlssock)
@@ -480,11 +482,14 @@ def audit_page(headers,pms_secret,claimed_pub_key):
     tlsnSession.doKeyExpansion()
     plaintext,bad_mac = tlsnSession.processServerAppDataRecords(checkFinished=True)
     if bad_mac: print ("WARNING! Plaintext is not authenticated.")
-    #Commit the html to disk and return it.
-    #TODO strip the headers from the html?
-    with open(join(commit_dir,'html-'+sf),'wb') as f: f.write(plaintext)
     with open(join(current_sessiondir,'session_dump'+sf),'wb') as f: f.write(tlsnSession.dump())
-    return join(commit_dir,'html-'+sf)
+    html_path = join(commit_dir,'html-'+sf)
+    with open(html_path,'wb') as f: f.write('\xef\xbb\xbf'+plaintext) #see "Byte order mark"
+    if not int(shared.config.get("General","prevent_render")):
+        html_path = join(commit_dir,'forbrowser-'+sf+'.html')
+        with open(html_path,'wb') as f:
+            f.write('\r\n\r\n'.join(plaintext.split('\r\n\r\n')[1:]))
+    return join(commit_dir,join(commit_dir,html_path))
 
 #peer messaging receive thread
 def receivingThread(my_nick, auditor_nick):
@@ -526,7 +531,7 @@ def peer_handshake():
     #hello contains the first 10 bytes of modulus of the auditor's pubkey
     #this is how the auditor knows that we are addressing him.
     modulus = shared.bi2ba(auditorPubKey.n)[:10]
-    signed_hello = rsa.sign('client_hello', myPrvKey, 'SHA-1')
+    signed_hello = rsa.sign('ae_hello'+my_nick, myPrvKey, 'SHA-1')
     rs_n = shared.bi2ba(rsModulus)
     rs_e = shared.bi2ba(rsExponent)
 
@@ -534,15 +539,15 @@ def peer_handshake():
     for attempt in range(6): #try for 6*10 secs to find the auditor
         if bIsAuditorRegistered == True: break #previous iteration successfully regd the auditor
         time_attempt_began = int(time.time())
-        shared.tlsn_send_single_msg(' :client_hello:',modulus+signed_hello,auditorPubKey)
-        shared.tlsn_send_single_msg(' :google_pubkey:',rs_n+rs_e,auditorPubKey)
+        shared.tlsn_send_single_msg(' :ae_hello:',modulus+signed_hello,auditorPubKey)
+        shared.tlsn_send_single_msg(' :rs_pubkey:',rs_n+rs_e,auditorPubKey)
         signed_hello_message_dict = {}
         full_signed_hello = ''
         while not bIsAuditorRegistered:
             if int(time.time()) - time_attempt_began > 20: break
             #ignore decryption errors here, as above, the message may be
             #from someone else's handshake
-            x = shared.tlsn_receive_single_msg('server_hello:',myPrvKey,my_nick,iDE=True)
+            x = shared.tlsn_receive_single_msg('ao_hello:',myPrvKey,my_nick,iDE=True)
             if not x: continue
             returned_msg,returned_auditor_nick = x
             hdr, seq, signed_hello, ending = returned_msg
@@ -553,7 +558,7 @@ def peer_handshake():
                     for i in range(sh_message_len):
                         full_signed_hello += signed_hello_message_dict[i]
                     try:
-                        rsa.verify('server_hello', full_signed_hello, auditorPubKey)
+                        rsa.verify('ao_hello'+returned_auditor_nick, full_signed_hello, auditorPubKey)
                         auditor_nick = returned_auditor_nick
                         bIsAuditorRegistered = True
                         print ('Auditor successfully verified')

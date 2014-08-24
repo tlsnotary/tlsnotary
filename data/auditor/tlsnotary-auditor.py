@@ -52,24 +52,27 @@ def process_messages():
         try: msg = recvQueue.get(block=True, timeout=1)
         except: continue
         
-        #gcr_gsr - google client random, server random.
+        #rcr_rsr - reliable site client random, server random.
         #Receiving this data, the auditor generates his half of the 
         #premaster secret, and returns the hashed version, along with
         #the half-pms encrypted to the server's pubkey
-        if msg.startswith('gcr_gsr:'):
-            gcr_gsr = msg[len('gcr_gsr:'):]
+        if msg.startswith('rcr_rsr:'):
+            rcr_rsr = msg[len('rcr_rsr:'):]
             tlsnSession = shared.TLSNSSLClientSession('dummy.com') #TODO these server names aren't needed.
-            googleSession = shared.TLSNSSLClientSession('google.com')
-            googleSession.clientRandom = gcr_gsr[:32]
-            googleSession.serverRandom = gcr_gsr[32:64]
+            rspSession = shared.TLSNSSLClientSession('google.com')
+            rspSession.clientRandom = rcr_rsr[:32]
+            rspSession.serverRandom = rcr_rsr[32:64]
             #pubkey required to set encrypted pms
-            googleSession.serverModulus = rsModulus
-            googleSession.serverExponent = rsExponent
-            googleSession.setAuditorSecret()
-            grsapms = shared.bi2ba(googleSession.encSecondHalfPMS)
-            send_message('grsapms_ghmac:'+ grsapms+googleSession.pAuditor)
-            #we keep resetting so that the final, successful choice is stored
-            tlsnSession.auditorSecret = googleSession.auditorSecret
+            rspSession.serverModulus = rsModulus
+            rspSession.serverExponent = rsExponent
+            #TODO currently can only handle 2048 bit keys for 'reliable site'
+            rspSession.serverModLength = shared.bi2ba(256)
+            rspSession.setAuditorSecret()
+            rrsapms = shared.bi2ba(rspSession.encSecondHalfPMS)
+            send_message('rrsapms_rhmac:'+ rrsapms+rspSession.pAuditor)
+            #we keep resetting so that the final, successful choice of secrets are stored
+            tlsnSession.auditorSecret = rspSession.auditorSecret
+            tlsnSession.auditorPaddingSecret = rspSession.auditorPaddingSecret
             continue
         #---------------------------------------------------------------------#
         #cr_sr_hmac_n_e : sent by auditee at the start of the real audit.
@@ -92,6 +95,7 @@ def process_messages():
             e = cr_sr_hmac_n_e[91+n_len_int:91+n_len_int+3]
             tlsnSession.serverModulus = int(n.encode('hex'),16)
             tlsnSession.serverExponent = int(e.encode('hex'),16)
+            tlsnSession.serverModLength = shared.bi2ba(n_len_int)
             if not tlsnSession.auditorSecret: raise Exception("Auditor PMS secret data should have already been set.")
             tlsnSession.setAuditorSecret() #will set the enc PMS second half
             tlsnSession.setMasterSecretHalf(half=1,providedPValue=md5hmac1_for_MS)
@@ -396,26 +400,26 @@ def registerAuditeeThread():
     myModulus = shared.bi2ba(myPubKey.n)[:10]
     bIsAuditeeRegistered = False
     hello_message_dict = {}
-    google_pubkey_message_dict = {}
+    rs_pubkey_message_dict = {}
     full_hello = ''
-    full_google_pubkey   = ''
+    full_rs_pubkey   = ''
     while not (bIsAuditeeRegistered or bTerminateAllThreads):
         #NB we must allow decryption errors for this message, since another
         #handshake might be going on at the same time.
-        x = shared.tlsn_receive_single_msg((':google_pubkey:',':client_hello:'),myPrivateKey,iDE=True)
+        x = shared.tlsn_receive_single_msg((':rs_pubkey:',':ae_hello:'),myPrivateKey,iDE=True)
         if not x: continue
         msg_array,nick = x
         header, seq, msg, ending = msg_array
-        if 'google_pubkey' in header and auditee_nick != '': #we already got the first client_hello part
-            google_pubkey_message_dict[seq] = msg
+        if 'rs_pubkey' in header and auditee_nick != '': #we already got the first ae_hello part
+            rs_pubkey_message_dict[seq] = msg
             if 'EOL' in ending:
                 google_message_len = seq + 1
-                if range(google_message_len) == google_pubkey_message_dict.keys():
+                if range(google_message_len) == rs_pubkey_message_dict.keys():
                     try:
                         for i in range(google_message_len):
-                            full_google_pubkey += google_pubkey_message_dict[i]
-                        google_modulus_byte = full_google_pubkey[:256]
-                        google_exponent_byte = full_google_pubkey[256:]
+                            full_rs_pubkey += rs_pubkey_message_dict[i]
+                        google_modulus_byte = full_rs_pubkey[:256]
+                        google_exponent_byte = full_rs_pubkey[256:]
                         rsModulus = int(google_modulus_byte.encode('hex'),16)
                         rsExponent = int(google_exponent_byte.encode('hex'),16)
                         print ('Auditee successfully verified')
@@ -426,7 +430,7 @@ def registerAuditeeThread():
                         auditee_nick=''#erase the nick so that the auditee could try registering again
                         continue
 
-        if not 'client_hello' in header: continue
+        if not 'ae_hello' in header: continue
 
         hello_message_dict[seq] = msg
         if 'EOL' in ending:
@@ -437,9 +441,9 @@ def registerAuditeeThread():
                         full_hello += hello_message_dict[i]
 
                     modulus = full_hello[:10] #this is the first 10 bytes of modulus of auditor's pubkey
-                    sig = str(full_hello[10:]) #this is a sig for 'client_hello'. The auditor is expected to have received auditee's pubkey via other channels
+                    sig = str(full_hello[10:]) #this is a sig for 'ae_hello||auditee nick'. The auditor is expected to have received auditee's pubkey via other channels
                     if modulus != myModulus : continue
-                    rsa.verify('client_hello', sig, auditeePublicKey)
+                    rsa.verify('ae_hello'+nick, sig, auditeePublicKey)
                     #we get here if there was no exception
                     auditee_nick = nick
                 except:
@@ -448,10 +452,10 @@ def registerAuditeeThread():
 
     if not bIsAuditeeRegistered:
         return ('failure',)
-    signed_hello = rsa.sign('server_hello', myPrivateKey, 'SHA-1')
+    signed_hello = rsa.sign('ao_hello'+my_nick, myPrivateKey, 'SHA-1')
     #send twice because it was observed that the msg would not appear on the chan
     for x in range(2):
-        shared.tlsn_send_single_msg('server_hello',signed_hello,auditeePublicKey,ctrprty_nick = auditee_nick)
+        shared.tlsn_send_single_msg('ao_hello',signed_hello,auditeePublicKey,ctrprty_nick = auditee_nick)
         time.sleep(2)
 
     progressQueue.put(time.strftime('%H:%M:%S', time.localtime()) + \

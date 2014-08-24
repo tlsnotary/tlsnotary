@@ -67,6 +67,8 @@ class TLSNSSLClientSession(object):
         self.nAuditorEntropy = 8
         self.auditorSecret = None
         self.auditeeSecret = None
+        self.auditorPaddingSecret = None
+        self.auditeePaddingSecret = None
         self.encFirstHalfPMS = None
         self.encSecondHalfPMS = None
         self.encPMS = None
@@ -207,8 +209,6 @@ class TLSNSSLClientSession(object):
         return csInt
 
     def processServerHello(self,sh_cert_shd):
-        #server hello always starts with 16 03 01 * * 02
-        #certificate always starts with 16 03 01 * * 0b
         shd = hs + tlsver + bi2ba(4,fixed=2) + h_shd + bi2ba(0,fixed=3)
         sh_magic = re.compile(hs + tlsver + '..' + h_sh,re.DOTALL)
         if not re.match(sh_magic, sh_cert_shd): raise Exception ('Invalid server hello')
@@ -272,23 +272,22 @@ class TLSNSSLClientSession(object):
         '''Sets up the auditee's half of the preparatory
         secret material to create the master secret, and
         the encrypted premaster secret.'''
-        if not (self.clientRandom and self.serverRandom): return None
+        if not (self.clientRandom and self.serverRandom): 
+            print ("need client and server random, cannot set auditee secret")
+            return None
         if not self.auditeeSecret:
-            self.auditeeSecret = os.urandom(self.nAuditeeEntropy)
+            self.auditeeSecret = os.urandom(self.nAuditeeEntropy)             
+        if not self.auditeePaddingSecret:
+            self.auditeePaddingSecret = os.urandom(15)
         label = 'master secret'
         seed = self.clientRandom + self.serverRandom
         pms1 = tlsver+self.auditeeSecret + ('\x00' * (24-2-self.nAuditeeEntropy))
         self.pAuditee = TLS10PRF(label+seed,first_half = pms1)[0]
-
         #we can construct the encrypted form if pubkey is known
-        if (self.serverModulus):
-            print ("Using server mod length:",ba2int(self.serverModLength))
-            self.encFirstHalfPMS = pow(ba2int(('\x02'+('\x01'*(ba2int(self.serverModLength) - 100))\
-                +'\x00'+pms1+('\x00'*24))) + 1, self.serverExponent, self.serverModulus)
-            #TODO this is intended to be random; non-working code below
-            #padding = '\x01'*15 
-            #self.encFirstHalfPMS = pow(ba2int('\x02'+('\x01'*63)+padding+'\x00'+\
-            #pms1+('\x00'*24)) + 1, self.serverExponent, self.serverModulus)
+        if (self.serverModulus and not self.encFirstHalfPMS):
+            oneslength = 23            
+            self.encFirstHalfPMS = pow(ba2int('\x02'+('\x01'*(oneslength))+\
+        self.auditeePaddingSecret+'\x00'+pms1 +'\x00'*23 + '\x01'), self.serverExponent, self.serverModulus)
 
         #can construct the full encrypted pre master secret if
         #the auditor's half is already calculated
@@ -305,21 +304,17 @@ class TLSNSSLClientSession(object):
         if not (self.clientRandom and self.serverRandom): return None
         if not self.auditorSecret:
             self.auditorSecret = os.urandom(self.nAuditorEntropy)
-
+        if not self.auditorPaddingSecret:
+            self.auditorPaddingSecret =  os.urandom(15)
         label = 'master secret'
         seed = self.clientRandom + self.serverRandom
         pms2 =  self.auditorSecret + ('\x00' * (24-self.nAuditorEntropy-1)) + '\x01'
         self.pAuditor = TLS10PRF(label+seed,second_half = pms2)[1]
-        
         #we can construct the encrypted form if pubkey is known
-        if (self.serverModulus):
-            self.encSecondHalfPMS = pow( int(('\x01'+('\x00'*25)+pms2).encode('hex'),16),\
-                                         self.serverExponent, self.serverModulus )
-            #TODO this is intended to be random but needs testing
-            #padding = '\x01'*15 
-            #self.encSecondHalfPMS = pow( int(('\x01'+('\x01'*63)+padding+ \
-            #('\x00'*25)+pms2).encode('hex'),16), self.serverExponent, self.serverModulus )
-
+        if (self.serverModulus and not self.encSecondHalfPMS):
+            oneslength = 103+ba2int(self.serverModLength)-256
+            self.encSecondHalfPMS = pow( ba2int('\x01'+('\x01'*(oneslength))+\
+            self.auditorPaddingSecret+ ('\x00'*25)+pms2), self.serverExponent, self.serverModulus )
         return (self.pAuditor,self.encSecondHalfPMS)
 
     def extractCertificate(self):
@@ -604,6 +599,7 @@ class TLSNSSLClientSession(object):
             print ("Server CCSFinished does not contain Finished")
             return None
         recordLen = ba2int(self.serverFinished[3:5])
+        assert recordLen == len(self.serverFinished[5:]), "unexpected data at end of server finished."
         #For CBC only: because the verify data is 12 bytes and the handshake header
         #is a further 4, and the mac is another 20, we have 36 bytes, meaning
         #that the padding is 12 bytes long, making a total of 48 bytes record length
@@ -613,25 +609,23 @@ class TLSNSSLClientSession(object):
         
         #decrypt:
         if self.chosenCipherSuite in [4,5]:
-            decrypted,self.serverRC4State = RC4crypt(bytearray(self.serverFinished[5:]),self.serverEncKey) #box is null for first record
+            decrypted,self.serverRC4State = RC4crypt(bytearray(self.serverFinished[5:5+recordLen]),self.serverEncKey) #box is null for first record
         elif self.chosenCipherSuite in [47,53]:
             ciphertextList,serverEncList,serverIVList = \
-                [map(ord,x) for x in [self.serverFinished[5:],str(self.serverEncKey),str(self.serverIV)]]
+                [map(ord,x) for x in [self.serverFinished[5:5+recordLen],str(self.serverEncKey),str(self.serverIV)]]
             moo = AESModeOfOperation()
             key_size = self.cipherSuites[self.chosenCipherSuite][4]
             decrypted = moo.decrypt(ciphertextList,recordLen,moo.modeOfOperation['CBC'],serverEncList,key_size,serverIVList)
             #for CBC, unpad
             decrypted = cbcUnpad(decrypted)
-            
-        #check the record mac
+                
+        #strip the mac (NB The mac cannot be checked, as in tlsnotary, the serverMacKey
+        #is garbage until after the commitment. This mac check occurs in 
+        #processServerAppDataRecords)
         hash_len = sha1_hash_len if self.chosenCipherSuite in [5,47,53] else md5_hash_len
         received_mac = decrypted[-hash_len:]
         plaintext = decrypted[:-hash_len]
-
-        #NB The mac cannot be checked, as in tlsnotary, the serverMacKey
-        #is garbage until after the commitment. TODO add the server Finished message mac check
-        #*after* the server has passed the real mac key.
-
+        
         #check the finished message header
         if plaintext[:4] != h_fin+bi2ba(12,fixed=3):
             print ("The server Finished verify data is invalid")
@@ -661,10 +655,6 @@ class TLSNSSLClientSession(object):
         while True:
             if response[:3] != appd+tlsver:
                 if response[:3] == alrt + tlsver:
-                    #print ("Server response was: ",binascii.hexlify(response))
-                    #raw_plaintext, self.serverRC4State = RC4crypt(bytearray(response[5:]),\
-                    #                                self.serverEncKey,self.serverRC4State)                    
-                    #print ("Decrypted server response:",binascii.hexlify(raw_plaintext))
                     print ("Got encrypted alert, done")
                     break
                 print ('Invalid TLS Header for App Data record')
@@ -750,7 +740,7 @@ class TLSNSSLClientSession(object):
         self.encSecondHalfPMS = ba2int(rsapms2)
         self.setEncryptedPMS()
         return self.getCKECCSF()
-
+        
 def getCBCPadding(data_length):
     req_padding = 16 - data_length % 16
     return chr(req_padding-1) * req_padding
