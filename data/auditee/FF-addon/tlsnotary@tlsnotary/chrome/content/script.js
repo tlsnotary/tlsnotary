@@ -187,7 +187,7 @@ function responsePreparePMS(iteration){
         var browser = gBrowser.getBrowserForTab(gBrowser.addTab(html_paths[i]));
     }
 
-    help.value = "Page decryption successful. Go to another page and press AUDIT THIS PAGE or press FINISH";
+    help.value = "Page decryption successful. Press FINISH or go to another page and press AUDIT THIS PAGE";
     button_record_enabled.hidden = false;
     button_spinner.hidden = true;
     button_stop_disabled.hidden = true;
