@@ -12,6 +12,60 @@ config_location = os.path.join(os.path.dirname(os.path.realpath(__file__)),'tlsn
 
 required_options = {'IRC':['irc_server','irc_port','channel_name']}
 
+#file transfer functions - currently only used for sending
+#ciphertext to auditor
+def sendspace_getlink(mfile,rg,rp):
+    reply = rg('https://www.sendspace.com/', timeout=5)
+    url_start = reply.text.find('<form method="post" action="https://') + len('<form method="post" action="')
+    url_len = reply.text[url_start:].find('"')
+    url = reply.text[url_start:url_start+url_len]
+    
+    sig_start = reply.text.find('name="signature" value="') + len('name="signature" value="')
+    sig_len = reply.text[sig_start:].find('"')
+    sig = reply.text[sig_start:sig_start+sig_len]
+    
+    progr_start = reply.text.find('name="PROGRESS_URL" value="') + len('name="PROGRESS_URL" value="')
+    progr_len = reply.text[progr_start:].find('"')
+    progr = reply.text[progr_start:progr_start+progr_len]
+    
+    r=rp(url, files={'upload_file[]': open(mfile, 'rb')}, data={
+        'signature':sig, 'PROGRESS_URL':progr, 'js_enabled':'0', 
+        'upload_files':'', 'terms':'1', 'file[]':'', 'description[]':'',
+        'recpemail_fcbkinput':'recipient@email.com', 'ownemail':'', 'recpemail':''}, timeout=5)
+    
+    link_start = r.text.find('"share link">') + len('"share link">')
+    link_len = r.text[link_start:].find('</a>')
+    link = r.text[link_start:link_start+link_len]
+    
+    dl_req = rg(link)
+    dl_start = dl_req.text.find('"download_button" href="') + len('"download_button" href="')
+    dl_len = dl_req.text[dl_start:].find('"')
+    dl_link = dl_req.text[dl_start:dl_start+dl_len]
+    return dl_link
+
+#pipebytes is not currently used; a backup for failure of sendspace.
+def pipebytes_post(key, mfile,rp):
+    #the server responds only when the recepient picks up the file
+    rp('http://host03.pipebytes.com/put.py?key='+key+'&r='+
+                  ('%.16f' % random.uniform(0,1)), files={'file': open(mfile, 'rb')})    
+
+
+def pipebytes_getlink(mfile,rg,rp):
+    reply1 = rg('http://host03.pipebytes.com/getkey.php?r='+
+                          ('%.16f' % random.uniform(0,1)), timeout=5)
+    key = reply1.text
+    reply2 = rp('http://host03.pipebytes.com/setmessage.php?r='+
+                           ('%.16f' % random.uniform(0,1))+'&key='+key, {'message':''}, timeout=5)
+    thread = threading.Thread(target= pipebytes_post, args=(key, mfile))
+    thread.daemon = True
+    thread.start()
+    time.sleep(1)               
+    reply4 = rg('http://host03.pipebytes.com/status.py?key='+key+
+                          '&touch=yes&r='+('%.16f' % random.uniform(0,1)), timeout=5)
+    return ('http://host03.pipebytes.com/get.py?key='+key)
+
+#end file transfer functions
+
 def load_program_config():    
     loadedFiles = config.read([config_location])
     #detailed sanity checking :

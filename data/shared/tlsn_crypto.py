@@ -33,8 +33,7 @@ sha1_hash_len = 20
 #-only implements one client request and one server response
 # after the handshake is complete.
 #-certificate is extracted but not checked using any PKI; the
-# certificate check must be implemented in the browser and 
-# passed into this code.
+# certificate check must be implemented by the calling code.
 #-does not support record level compression.
 #Modifications:
 #The master secret and key generation is based on the
@@ -165,8 +164,8 @@ class TLSNSSLClientSession(object):
         return returnStr
 
     def setClientHello(self,audit):
-        if not self.clientRandom: return None
-        if not self.chosenCipherSuite: return None
+        assert self.clientRandom, "Client random should have been set in constructor."
+        assert self.chosenCipherSuite, "Cipher suite should be set."
         remaining = tlsver + self.clientRandom + '\x00' #last byte is session id length
         if not audit:
             #hard coded cipher suite for preparing pms
@@ -187,24 +186,19 @@ class TLSNSSLClientSession(object):
             self.masterSecretHalfAuditor = xor(self.pAuditee[:24],self.pAuditor[:24])
             self.masterSecretHalfAuditee = xor(self.pAuditee[24:],self.pAuditor[24:])
             return self.masterSecretHalfAuditor+self.masterSecretHalfAuditee
-
+        assert half in [1,2], "Must provide half argument as 1 or 2"
         #otherwise the p value must be enough to provide one half of MS
-        if not len(providedPValue)==24: return None
+        assert len(providedPValue)==24, "Wrong length of P-hash value for half MS setting."
         if half == 1:
             self.masterSecretHalfAuditor = xor(self.pAuditor[:24],providedPValue)
             return self.masterSecretHalfAuditor
-        elif half == 2:
+        else:
             self.masterSecretHalfAuditee = xor(self.pAuditee[24:],providedPValue)
             return self.masterSecretHalfAuditee
-        else:
-            return None
-
 
     def setCipherSuite(self, csByte):
         csInt = ba2int(csByte)
-        if csInt not in self.cipherSuites.keys():
-            print ("Invalid cipher suite chosen")
-            return None
+        assert csInt in self.cipherSuites.keys(), "Invalid cipher suite chosen" 
         self.chosenCipherSuite = csInt
         return csInt
 
@@ -260,11 +254,9 @@ class TLSNSSLClientSession(object):
         return (self.handshakeMessages[1:4], self.serverRandom)
 
     def setEncryptedPMS(self):
-        if not (self.encFirstHalfPMS and self.encSecondHalfPMS and self.serverModulus):
-            print ('failed to set encpms, first half was: ',self.encFirstHalfPMS, \
-                    ' second half was: ',self.encSecondHalfPMS, ' modulus was: ', \
-                                                        self.serverModulus)
-            return None
+        assert (self.encFirstHalfPMS and self.encSecondHalfPMS and self.serverModulus), \
+            'failed to set encpms, first half was: ' + str(self.encFirstHalfPMS) +\
+            ' second half was: ' + self.encSecondHalfPMS + ' modulus was: ' + self.serverModulus
         self.encPMS =  self.encFirstHalfPMS * self.encSecondHalfPMS % self.serverModulus
         return self.encPMS
 
@@ -272,9 +264,7 @@ class TLSNSSLClientSession(object):
         '''Sets up the auditee's half of the preparatory
         secret material to create the master secret, and
         the encrypted premaster secret.'''
-        if not (self.clientRandom and self.serverRandom): 
-            print ("need client and server random, cannot set auditee secret")
-            return None
+        assert self.clientRandom and self.serverRandom,"one of client or server random not set"
         if not self.auditeeSecret:
             self.auditeeSecret = os.urandom(self.nAuditeeEntropy)             
         if not self.auditeePaddingSecret:
@@ -301,7 +291,7 @@ class TLSNSSLClientSession(object):
         secret material to create the master secret, and
         the encrypted premaster secret.
         'secret' should be a bytearray of length nAuditorEntropy'''
-        if not (self.clientRandom and self.serverRandom): return None
+        assert (self.clientRandom and self.serverRandom), "one of client or server random not set"
         if not self.auditorSecret:
             self.auditorSecret = os.urandom(self.nAuditorEntropy)
         if not self.auditorPaddingSecret:
@@ -318,15 +308,14 @@ class TLSNSSLClientSession(object):
         return (self.pAuditor,self.encSecondHalfPMS)
 
     def extractCertificate(self):
-        if not self.handshakeMessages[2]: return None
+        assert self.handshakeMessages[2], "Cannot extract certificate, no handshake message present."
         cert_len = ba2int(self.handshakeMessages[2][12:15])
         self.serverCertificate = self.handshakeMessages[2][15:15+cert_len]
         return self.serverCertificate
 
     def extractModAndExp(self,certDER=None):
-        if not (self.serverCertificate or certDER):
-            print ("No server certificate, cannot extract pubkey")
-            return None
+        if not certDER: self.extractCertificate()
+        assert (self.serverCertificate or certDER), "No server certificate, cannot extract pubkey"
         if certDER:
             rv  = decoder.decode(certDER, asn1Spec=univ.Sequence())
             bitstring = rv[0].getComponentByPosition(1)
@@ -363,7 +352,8 @@ class TLSNSSLClientSession(object):
     #that key from the counterparty, in the array 'garbage', each number is
     #an index to that key in the cipherSuites dict
     def getPValueMS(self,ctrprty,garbage=[]):
-        if not (self.serverRandom and self.clientRandom and self.chosenCipherSuite): return None
+        assert (self.serverRandom and self.clientRandom and self.chosenCipherSuite), \
+               "server random, client random or cipher suite not set."
         label = 'key expansion'
         seed = self.serverRandom + self.clientRandom
         if ctrprty == 'auditor':
@@ -391,10 +381,7 @@ class TLSNSSLClientSession(object):
         portions of the two master secret halves. TODO find a way to make this
         explicit so that querying the object will only give real keys.
         '''
-
-        if not (self.serverRandom and self.clientRandom):
-            print ("Cannot expand keys, need client and server random")
-            return None
+        assert (self.serverRandom and self.clientRandom)," need client and server random"
         label = 'key expansion'
         seed = self.serverRandom + self.clientRandom
         #for maximum flexibility, we will compute the sha1 or md5 hmac
@@ -410,14 +397,11 @@ class TLSNSSLClientSession(object):
         elif self.pMasterSecretAuditee and self.pMasterSecretAuditor:
             keyExpansion = xor(self.pMasterSecretAuditee,self.pMasterSecretAuditor)
         else:
-            print ('Cannot expand keys, insufficient data')
-            return None
+            raise Exception ('Cannot expand keys, insufficient data')
 
         #we have the raw key expansion, but want the keys. Use the data
         #embedded in the cipherSuite dict to identify the boundaries.
-        if not self.chosenCipherSuite:
-            print ("Cannot expand ssl keys without a chosen cipher suite.")
-            return None
+        assert self.chosenCipherSuite,"Cannot expand ssl keys without a chosen cipher suite."
 
         keyAccumulator = []
         ctr=0
@@ -469,9 +453,8 @@ class TLSNSSLClientSession(object):
         if not providedPValue:
             #we calculate the verify data from the raw handshake messages
             if self.handshakeMessages[:6] != filter(None,self.handshakeMessages[:6]):
-                print ('Handshake data was not complete, could not calculate verify data')
                 print ('Here are the handshake messages: ',[str(x) for x in self.handshakeMessages[:6]])
-                return None
+                raise Exception('Handshake data was not complete, could not calculate verify data')
             label = 'client finished'
             seed = md5_verify + sha_verify
             ms = self.masterSecretHalfAuditor+self.masterSecretHalfAuditee
@@ -504,8 +487,7 @@ class TLSNSSLClientSession(object):
             moo.encrypt(str(paddedCleartext), moo.modeOfOperation['CBC'], \
             clientEncList, key_size , self.lastClientCiphertextBlock)
         else:
-            print ("Error, unrecognized cipher suite in buildRequest")
-            return None
+            raise Exception ("Error, unrecognized cipher suite in buildRequest")
 
         cpt_len = bi2ba(len(ciphertext),fixed=2)
         bytes_to_send += cpt_len + bytearray(ciphertext)
@@ -528,8 +510,7 @@ class TLSNSSLClientSession(object):
         seqNoBytes = ''.join(map(chr,seqByteList))
         macKey = self.serverMacKey if isFromServer else self.clientMacKey
         if not macKey:
-            print ("Failed to build mac; mac key is missing")
-            return None
+            raise Exception("Failed to build mac; mac key is missing")
         fragment_len = bi2ba(len(cleartext),fixed=2)    
         record_mac = hmac.new(macKey,seqNoBytes + recordType + \
                     tlsver+fragment_len + cleartext, mac_algo).digest()
@@ -560,15 +541,14 @@ class TLSNSSLClientSession(object):
             verifyData = self.getVerifyDataForFinished(providedPValue=providedPValue,half=2)
         else:
             verifyData = self.getVerifyDataForFinished()
-        if not verifyData:
-            print ('Verify data was null')
-            return None
+        assert verifyData,'Verify data was null'
 
         #HMAC and encrypt the verify_data
         hs_header = h_fin + bi2ba(12,fixed=3)
         hmacVerify = self.buildRecordMac(False,hs_header + verifyData,hs)
         cleartext = hs_header + verifyData + hmacVerify
         self.unencryptedClientFinished = hs_header + verifyData
+        assert self.chosenCipherSuite in self.cipherSuites.keys(), "invalid cipher suite"
         if self.chosenCipherSuite in [4,5]:
             hmacedVerifyData, self.clientRC4State = RC4crypt(cleartext,self.clientEncKey)
         elif self.chosenCipherSuite in [47,53]:
@@ -580,9 +560,6 @@ class TLSNSSLClientSession(object):
             moo.encrypt( str(paddedCleartext), moo.modeOfOperation['CBC'], \
                          clientEncList, len(self.clientEncKey), clientIVList)
             self.lastClientCiphertextBlock = hmacedVerifyData[-16:]
-        else:
-            print ("Unrecognised cipher suite in getCKECCSF")
-            return None
 
         self.clientSeqNo += 1
         self.handshakeMessages[6] = hs + tlsver + bi2ba(len(hmacedVerifyData),fixed=2) \
@@ -591,21 +568,17 @@ class TLSNSSLClientSession(object):
 
     def processServerCCSFinished(self, data, providedPValue):
         if data[:6] != chcis + tlsver + bi2ba(1,fixed=2)+'\x01':
-            print ("Server CCSFinished did not contain CCS")
             print ("Got response:",binascii.hexlify(data))
-            return None
+            raise Exception("Server CCSFinished did not contain CCS")
         self.serverFinished = data[6:]
-        if self.serverFinished[:3] != hs+tlsver:
-            print ("Server CCSFinished does not contain Finished")
-            return None
+        assert self.serverFinished[:3] == hs+tlsver,"Server CCSFinished does not contain Finished"
         recordLen = ba2int(self.serverFinished[3:5])
         assert recordLen == len(self.serverFinished[5:]), "unexpected data at end of server finished."
         #For CBC only: because the verify data is 12 bytes and the handshake header
         #is a further 4, and the mac is another 20, we have 36 bytes, meaning
         #that the padding is 12 bytes long, making a total of 48 bytes record length
         if recordLen != 48 and self.chosenCipherSuite in [47,53]:
-            print ("Server Finished record record length should be 48, is: ",recordLen)
-            return None
+            raise Exception("Server Finished record record length should be 48, is: ",recordLen)
         
         #decrypt:
         if self.chosenCipherSuite in [4,5]:
@@ -627,9 +600,7 @@ class TLSNSSLClientSession(object):
         plaintext = decrypted[:-hash_len]
         
         #check the finished message header
-        if plaintext[:4] != h_fin+bi2ba(12,fixed=3):
-            print ("The server Finished verify data is invalid")
-            return None
+        assert plaintext[:4] == h_fin+bi2ba(12,fixed=3), "The server Finished verify data is invalid"
         #Verify the verify data
         verifyData = plaintext[4:]
         sha_verify,md5_verify = self.getHandshakeHashes(isForServer=True)
@@ -637,9 +608,7 @@ class TLSNSSLClientSession(object):
             print ("Wrong length of plaintext")
         verifyDataCheck = xor(providedPValue,\
                             self.getVerifyHMAC(sha_verify=sha_verify,md5_verify=md5_verify,half=2,isForClient=False))
-        if not verifyData == verifyDataCheck:
-            print ("Server Finished record verify data is not valid.")
-            return None
+        assert verifyData == verifyDataCheck, "Server Finished record verify data is not valid."
         #now the server finished is verified (except mac), we store
         #the plaintext of the message for later mac check 
         #(after auditor has passed server mac key)
@@ -657,12 +626,10 @@ class TLSNSSLClientSession(object):
                 if response[:3] == alrt + tlsver:
                     print ("Got encrypted alert, done")
                     break
-                print ('Invalid TLS Header for App Data record')
-                return None
+                raise Exception('Invalid TLS Header for App Data record')
             recordLen = ba2int(response[3:5])
             if self.chosenCipherSuite in [47,53] and recordLen %16: 
-                print ('Invalid ciphertext length for App Data')
-                return None
+                raise Exception('Invalid ciphertext length for App Data')
             self.serverResponseCiphertexts.append(response[5:5+recordLen])
             #prepare for next record, if there is one:
             if len(response) == 5+len(self.serverResponseCiphertexts[-1]):
@@ -695,9 +662,9 @@ class TLSNSSLClientSession(object):
         
         plaintext = ''
         
-        if not len(self.serverResponseCiphertexts):
-            print ("Could not process the server response, no ciphertext found.")
-            return None
+        assert len(self.serverResponseCiphertexts),\
+               "Could not process the server response, no ciphertext found."
+        
         for ciphertext in self.serverResponseCiphertexts:
             #need correct sequence number for macs
             self.serverSeqNo += 1

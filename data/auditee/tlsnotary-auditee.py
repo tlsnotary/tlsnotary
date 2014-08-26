@@ -7,15 +7,14 @@ from __future__ import print_function
 #2. A marshaller, passing messages between (a) the javascript/html
 #   front end, (b) the Python back-end, including crypto functions
 #   and (c) the peer messaging between auditor and auditee.
-#3. Performs actual crypto audit functions in prepare_pms() and 
-#   audit_page().
+#3. Performs actual crypto audit functions.
 
 from base64 import b64decode, b64encode
 from hashlib import md5, sha1, sha256
 from os.path import join
 from subprocess import Popen, check_output
-import binascii, codecs, hmac, os, platform,  tarfile
-import Queue, random, re, select, shutil, signal, sys, time
+import binascii, hmac, os, platform,  tarfile
+import Queue, random, re, shutil, signal, sys, time
 import SimpleHTTPServer, socket, threading, zipfile
 try: import wingdbstub
 except: pass
@@ -38,13 +37,11 @@ elif m_platform == 'Darwin': OS = 'macos'
 #Globals
 recvQueue = Queue.Queue() #all messages from the auditor are placed here by receivingThread
 ackQueue = Queue.Queue() #ack numbers are placed here
-auditor_nick = '' #we learn auditor's nick as soon as we get a hello_server signed by the auditor
+auditor_nick = '' #we learn auditor's nick as soon as we get a ao_hello signed by the auditor
 my_nick = '' #our nick is randomly generated on connection
 myPrvKey = myPubKey = auditorPubKey = None
 rsModulus = None
 rsExponent = None
-tlsnSession = None
-tshark_exepath = editcap_exepath= ''
 firefox_pid = selftest_pid = 0
 firefox_install_path = None
 cr_list = [] #a list of all client_randoms used to index html files audited.
@@ -82,62 +79,6 @@ def newkeys():
     with open(join(datadir, 'recentkeys', 'mypubkey'), 'wb') as f: f.write(my_pem_pubkey)
     pubkey_export = b64encode(shared.bi2ba(myPubKey.n))
     return pubkey_export
-
-
-#file transfer functions - currently only used for sending
-#ciphertext to auditor
-def sendspace_getlink(mfile):
-    reply = requests.get('https://www.sendspace.com/', timeout=5)
-    url_start = reply.text.find('<form method="post" action="https://') + len('<form method="post" action="')
-    url_len = reply.text[url_start:].find('"')
-    url = reply.text[url_start:url_start+url_len]
-    
-    sig_start = reply.text.find('name="signature" value="') + len('name="signature" value="')
-    sig_len = reply.text[sig_start:].find('"')
-    sig = reply.text[sig_start:sig_start+sig_len]
-    
-    progr_start = reply.text.find('name="PROGRESS_URL" value="') + len('name="PROGRESS_URL" value="')
-    progr_len = reply.text[progr_start:].find('"')
-    progr = reply.text[progr_start:progr_start+progr_len]
-    
-    r=requests.post(url, files={'upload_file[]': open(mfile, 'rb')}, data={
-        'signature':sig, 'PROGRESS_URL':progr, 'js_enabled':'0', 
-        'upload_files':'', 'terms':'1', 'file[]':'', 'description[]':'',
-        'recpemail_fcbkinput':'recipient@email.com', 'ownemail':'', 'recpemail':''}, timeout=5)
-    
-    link_start = r.text.find('"share link">') + len('"share link">')
-    link_len = r.text[link_start:].find('</a>')
-    link = r.text[link_start:link_start+link_len]
-    
-    dl_req = requests.get(link)
-    dl_start = dl_req.text.find('"download_button" href="') + len('"download_button" href="')
-    dl_len = dl_req.text[dl_start:].find('"')
-    dl_link = dl_req.text[dl_start:dl_start+dl_len]
-    return dl_link
-
-#pipebytes is not currently used; a backup for failure of sendspace.
-def pipebytes_post(key, mfile):
-    #the server responds only when the recepient picks up the file
-    requests.post('http://host03.pipebytes.com/put.py?key='+key+'&r='+
-                  ('%.16f' % random.uniform(0,1)), files={'file': open(mfile, 'rb')})    
-
-
-def pipebytes_getlink(mfile):
-    reply1 = requests.get('http://host03.pipebytes.com/getkey.php?r='+
-                          ('%.16f' % random.uniform(0,1)), timeout=5)
-    key = reply1.text
-    reply2 = requests.post('http://host03.pipebytes.com/setmessage.php?r='+
-                           ('%.16f' % random.uniform(0,1))+'&key='+key, {'message':''}, timeout=5)
-    thread = threading.Thread(target= pipebytes_post, args=(key, mfile))
-    thread.daemon = True
-    thread.start()
-    time.sleep(1)               
-    reply4 = requests.get('http://host03.pipebytes.com/status.py?key='+key+
-                          '&touch=yes&r='+('%.16f' % random.uniform(0,1)), timeout=5)
-    return ('http://host03.pipebytes.com/get.py?key='+key)
-
-#end file transfer functions
-
 
 #Receive HTTP HEAD requests from FF addon
 class HandlerClass(SimpleHTTPServer.SimpleHTTPRequestHandler):
@@ -223,12 +164,19 @@ class HandlerClass(SimpleHTTPServer.SimpleHTTPRequestHandler):
                 return
             b64headers = arg_str[len('b64headers='):]
             sha1_and_headers = b64decode(b64headers)
-            #the sha1 of the cert, in colon separated hex, (DE:AD:BE:EF etc.)
-            #is snuck in at the front of the headers
             raw_pk = sha1_and_headers[:59]
             processed_pk = binascii.unhexlify(raw_pk.replace(':',''))
-            
-            rv = prepare_pms(sha1_and_headers[59:], processed_pk)
+            pms_secret,pms_padding_secret = prepare_pms()
+            server_name, modified_headers = parse_headers(sha1_and_headers[59:])
+            tlssock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            tlssock.settimeout(int(shared.config.get("General","tcp_socket_timeout")))            
+            tlsnSession = setUpTLSSession(pms_secret, pms_padding_secret,server_name,tlssock)
+            verifyServer(processed_pk, tlsnSession)
+            negotiateCrippledSecrets(tlsnSession)
+            negotiateVerifyAndFinishHandshake(tlsnSession,tlssock)
+            tlsnSession,response = makeTLSNRequest(modified_headers,tlsnSession,tlssock)
+            sf = str(len(cr_list))
+            rv = decryptHTML(commitSession(tlsnSession, response,sf), tlsnSession, sf)
             if rv[0] == 'success': html_paths = b64encode(rv[1])
             self.respond({'response':'prepare_pms', 'status':rv[0],'html_paths':html_paths})
             return             
@@ -280,7 +228,7 @@ class HandlerClass(SimpleHTTPServer.SimpleHTTPRequestHandler):
 
 #Because there is a 1 in 6 chance that the encrypted PMS will contain zero bytes in its
 #padding, we first try the encrypted PMS with a reliable site and see if it gets rejected.
-def prepare_pms(headers,claimed_pub_key):
+def prepare_pms():
     for i in range(5): #try 5 times until reliable site check succeeds
         #first 4 bytes of client random are unix time
         pmsSession = shared.TLSNSSLClientSession(shared.config.get('SSL','reliable_site'),\
@@ -290,12 +238,8 @@ def prepare_pms(headers,claimed_pub_key):
         tlssock.settimeout(int(shared.config.get("General","tcp_socket_timeout")))
         tlssock.connect((pmsSession.serverName, pmsSession.sslPort))
         tlssock.send(pmsSession.handshakeMessages[0])
-        #we must get 3 concatenated tls handshake messages in response:
-        #sh --> server_hello, cert --> certificate, shd --> server_hello_done
         if not pmsSession.processServerHello(shared.recv_socket(tlssock)):
             raise Exception("Failure in processing of server Hello from " + pmsSession.serverName)
-        #give auditor cr&sr and get an encrypted second half of PMS,
-        #and shahmac that needs to be xored with my md5hmac to get MS
         reply = send_and_recv('rcr_rsr:'+pmsSession.clientRandom+pmsSession.serverRandom)
         if reply[0] != 'success': raise Exception ('Failed to receive a reply for rcr_rsr:')
         if not reply[1].startswith('rrsapms_rhmac:'):
@@ -304,21 +248,17 @@ def prepare_pms(headers,claimed_pub_key):
         rsapms2 = rrsapms_rhmac[:256]
         shahmac = rrsapms_rhmac[256:304]
         pmsSession.pAuditor = shahmac
-        data = pmsSession.completeHandshake(rsapms2)
-        tlssock.send(data)
+        tlssock.send(pmsSession.completeHandshake(rsapms2))
         response = shared.recv_socket(tlssock)
         tlssock.close()
         if not response:
             print ("PMS trial failed")
             continue
         if not response.count(pmsSession.handshakeMessages[5]):
-            #the response did not contain ccs == error alert received
             print ("PMS trial failed, server response was: ")
             print (binascii.hexlify(response))
             continue
-        #else ccs was in the response
-        html_path = audit_page(headers,pmsSession.auditeeSecret,pmsSession.auditeePaddingSecret,claimed_pub_key)
-        return ('success',html_path) #successfull pms check
+        return (pmsSession.auditeeSecret,pmsSession.auditeePaddingSecret)
     #no dice after 5 tries
     raise Exception ('Could not prepare PMS with ', shared.config.get('SSL','reliable_site'), ' after 5 tries')
 
@@ -334,7 +274,6 @@ def send_and_recv (data):
         return ('success', onemsg)
     return ('failure', '')
 
-
 #complete audit function
 def stop_recording():
     tracedir = join(current_sessiondir, 'mytrace')
@@ -346,9 +285,9 @@ def stop_recording():
         if not onefile.startswith(('response', 'md5hmac', 'domain','IV','cs')): continue
         zipf.write(join(commit_dir, onefile), onefile)
     zipf.close()
-    try: link = sendspace_getlink(join(tracedir, 'mytrace.zip'))
+    try: link = shared.sendspace_getlink(join(tracedir, 'mytrace.zip'),requests.get,requests.post)
     except:
-        try: link = pipebytes_getlink(join(tracedir, 'mytrace.zip'))
+        try: link = shared.pipebytes_getlink(join(tracedir, 'mytrace.zip'))
         except: return 'failure'
     return send_link(link)
 
@@ -364,51 +303,35 @@ def parse_headers(headers):
         
     return (server,modified_headers)
 
-
-#The main auditing function occurs here.
-#Phases:
-#1 - Construct ssl client session object and do
-#    client hello, server hello, server hello one, certificate
-#    initial phase of handshake.
-#2 - Verify the server certificate by comparing that provided
-#    with the one that firefox already verified.
-#3 - Negotiate with auditor in order to create valid session keys
-#    (except server mac is garbage as auditor withholds it)
-#4 - Complete handshake (includes negotiation of verify data 
-#    with auditor).
-#5 - Send TLS request including http headers and receive server response.
-#6 - Commit the encrypted server response and other data to auditor
-#7 - Receive correct server mac key and then decrypt server response (html),
-#    (includes authentication of response). Submit resulting html for browser
-#    for display (optionally render by stripping http headers).
-def audit_page(headers,pms_secret,pms_padding_secret,claimed_pub_key):
-    #PHASE 1
-    tlssock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    tlssock.settimeout(int(shared.config.get("General","tcp_socket_timeout")))
-    server_name, headers = parse_headers(headers)
+def setUpTLSSession(pms_secret,pms_padding_secret,server_name,tlssock):
+    '''Construct ssl client session object and do
+    client hello, server hello, server hello done, certificate
+    initial phase of handshake.'''
     tlsnSession = shared.TLSNSSLClientSession(server_name,ccs=5,audit=True)
-    tlsnSession.auditeeSecret = pms_secret
-    tlsnSession.auditeePaddingSecret = pms_padding_secret
+    tlsnSession.auditeeSecret,tlsnSession.auditeePaddingSecret = pms_secret,pms_padding_secret
     tlssock.connect((tlsnSession.serverName, tlsnSession.sslPort))
     tlssock.send(tlsnSession.handshakeMessages[0])
-    sh_cert_shd = shared.recv_socket(tlssock)
-    if not tlsnSession.processServerHello(sh_cert_shd): #this will set the serverRandom
+    if not tlsnSession.processServerHello(shared.recv_socket(tlssock)):
         raise Exception("Failure in processing of server Hello from " + tlsnSession.serverName)
     cr_list.append(tlsnSession.clientRandom)
-    tlsnSession.extractCertificate()
-    tlsnSession.extractModAndExp()
-    
-    #PHASE 2
-    our_pub_key = sha1(tlsnSession.serverCertificate).digest()
-    if not our_pub_key == claimed_pub_key:
-        print ("Tlsnotary session certificate hash was:",binascii.hexlify(our_pub_key))
-        print ("Browser certificate hash was: ",binascii.hexlify(claimed_pub_key))
+    tlsnSession.extractModAndExp()    
+    return tlsnSession
+
+def verifyServer(claimed_cert_sha,tlsnSession):
+    '''Verify the server certificate by comparing that provided
+    with the one that firefox already verified.'''
+    our_cert_sha = sha1(tlsnSession.serverCertificate).digest()
+    if not our_cert_sha == claimed_cert_sha:
+        print ("Tlsnotary session certificate hash was:",binascii.hexlify(our_cert_sha))
+        print ("Browser certificate hash was: ",binascii.hexlify(claimed_cert_sha))
         raise Exception("WARNING! The server is presenting an invalid certificate. "+ \
                         "This is most likely an error, although it could be a hacking attempt. Audit aborted.")
     else:
-        print ("Browser verifies that the server certificate is valid, continuing audit.")
-    
-    #PHASE 3
+        print ("Browser verifies that the server certificate is valid, continuing audit.")    
+        
+def negotiateCrippledSecrets(tlsnSession):
+    '''Negotiate with auditor in order to create valid session keys
+    (except server mac is garbage as auditor withholds it)'''
     tlsnSession.setAuditeeSecret()
     cr_sr_hmac_n_e= chr(tlsnSession.chosenCipherSuite)+tlsnSession.clientRandom+tlsnSession.serverRandom+ \
                 tlsnSession.pAuditee[:24]+tlsnSession.serverModLength+\
@@ -425,9 +348,12 @@ def audit_page(headers,pms_secret,pms_padding_secret,claimed_pub_key):
     enc_pms = shared.bi2ba(tlsnSession.setEncryptedPMS()) #TODO: length? fixed argument
     tlsnSession.setMasterSecretHalf(half=2,providedPValue = rsapms_hmacms_hmacek[ml:ml+24])
     tlsnSession.pMasterSecretAuditor = rsapms_hmacms_hmacek[ml+24:ml+24+tlsnSession.cipherSuites[tlsnSession.chosenCipherSuite][-1]]
-    tlsnSession.doKeyExpansion() 
-    
-    #PHASE 4
+    tlsnSession.doKeyExpansion()    
+    return tlsnSession #accounts for state updates
+
+def negotiateVerifyAndFinishHandshake(tlsnSession,tlssock):
+    '''Complete handshake (includes negotiation of verify data 
+    with auditor).'''
     sha_digest,md5_digest = tlsnSession.getHandshakeHashes()
     reply = send_and_recv('verify_md5sha:'+md5_digest+sha_digest)
     if reply[0] != 'success': return ('Failed to receive a reply')
@@ -441,55 +367,56 @@ def audit_page(headers,pms_secret,pms_padding_secret,claimed_pub_key):
     if not reply[1].startswith('verify_hmac2:'):return("bad reply. Expected verify_hmac2:")
     if not tlsnSession.processServerCCSFinished(response,providedPValue = reply[1][len('verify_hmac2:'):]):
         raise Exception ("Could not finish handshake with server successfully. Audit aborted")
-    
-    #PHASE 5
+    return tlsnSession
+
+def makeTLSNRequest(headers,tlsnSession,tlssock):
+    '''Send TLS request including http headers and receive server response.'''
     headers += '\r\n'
     tlssock.send(tlsnSession.buildRequest(headers))
     response = shared.recv_socket(tlssock)
     if not response: raise Exception ("Received no response to request, cannot continue audit.")
     tlsnSession.storeServerAppDataRecords(response)
-    tlssock.close()
-    
-    #PHASE 6
-    sf = str(len(cr_list))
+    tlssock.close()    
+    return tlsnSession,response #state updates
+
+def commitSession(tlsnSession,response,sf):
+    '''Commit the encrypted server response and other data to auditor'''
     commit_dir = join(current_sessiondir, 'commit')
-    if not os.path.exists(commit_dir): os.makedirs(commit_dir)
-    response_path = join(commit_dir, 'response'+ sf )
-    with open(response_path,'wb') as f: f.write(response)
-    IV_path = join(commit_dir,'IV' + sf )
     #the IV data is not actually an IV, it's the current cipher state
     if tlsnSession.chosenCipherSuite in [47,53]: IV_data = tlsnSession.serverFinished[-16:]
-    else: IV_data = bytearray(tlsnSession.serverRC4State[0])+chr(tlsnSession.serverRC4State[1])+chr(tlsnSession.serverRC4State[2])
-    with open(IV_path,'wb') as f: f.write(IV_data)
-    cs_path = join(commit_dir,'cs' + sf )
-    with open(cs_path,'wb') as f: f.write(str(tlsnSession.chosenCipherSuite))
-    md5hmac_path = join(commit_dir, 'md5hmac'+ sf )
-    with open(md5hmac_path, 'wb') as f: f.write(tlsnSession.pAuditee)
-    domain_path = join(commit_dir,'domain' + sf)
-    with open(domain_path,'wb') as f: f.write(tlsnSession.serverName)
-    #send the hash of tracefile and md5hmac
-    with open(response_path, 'rb') as f: data=f.read()
-    commit_hash = sha256(data).digest()
+    else: IV_data = bytearray(tlsnSession.serverRC4State[0])+\
+        chr(tlsnSession.serverRC4State[1])+chr(tlsnSession.serverRC4State[2])    
+    if not os.path.exists(commit_dir): os.makedirs(commit_dir)
+    stuff_to_be_committed  = {'response':response,'IV':IV_data,'cs':str(tlsnSession.chosenCipherSuite),\
+                              'md5hmac':tlsnSession.pAuditee,'domain':tlsnSession.serverName}
+    for k,v in stuff_to_be_committed.iteritems():
+        with open(join(commit_dir,k+sf),'wb') as f: f.write(v)    
+    commit_hash = sha256(response).digest()
     md5hmac_hash = sha256(tlsnSession.pAuditee).digest()
     reply = send_and_recv('commit_hash:'+commit_hash+md5hmac_hash)
-    if reply[0] != 'success': raise Exception ('Failed to receive a reply')
-    
-    #PHASE 7
+    if reply[0] != 'success': raise Exception ('Failed to receive a reply') 
     if not reply[1].startswith('sha1hmac_for_MS:'):
-        raise Exception ('bad reply. Expected sha1hmac_for_MS')
-    tlsnSession.pAuditor = reply[1][len('sha1hmac_for_MS:'):]
+            raise Exception ('bad reply. Expected sha1hmac_for_MS')    
+    return reply[1][len('sha1hmac_for_MS:'):]
+
+def decryptHTML(sha1hmac, tlsnSession,sf):
+    '''Receive correct server mac key and then decrypt server response (html),
+    (includes authentication of response). Submit resulting html for browser
+    for display (optionally render by stripping http headers).'''
+    tlsnSession.pAuditor = sha1hmac
     tlsnSession.setMasterSecretHalf() #without arguments sets the whole MS
     tlsnSession.doKeyExpansion()
     plaintext,bad_mac = tlsnSession.processServerAppDataRecords(checkFinished=True)
     if bad_mac: print ("WARNING! Plaintext is not authenticated.")
     with open(join(current_sessiondir,'session_dump'+sf),'wb') as f: f.write(tlsnSession.dump())
+    commit_dir = join(current_sessiondir, 'commit')
     html_path = join(commit_dir,'html-'+sf)
     with open(html_path,'wb') as f: f.write('\xef\xbb\xbf'+plaintext) #see "Byte order mark"
     if not int(shared.config.get("General","prevent_render")):
         html_path = join(commit_dir,'forbrowser-'+sf+'.html')
         with open(html_path,'wb') as f:
             f.write('\r\n\r\n'.join(plaintext.split('\r\n\r\n')[1:]))
-    return join(commit_dir,join(commit_dir,html_path))
+    return ('success',html_path)
 
 #peer messaging receive thread
 def receivingThread(my_nick, auditor_nick):
@@ -503,11 +430,11 @@ def start_peer_messaging():
     #if we got here, no exceptions were thrown, which counts as success.
     return 'success'
 
-#do truncated handshake with reliable site in order to grab
-#its certificate in advance (because we want the reliable site's
-#server modulus in order to perform RSA homomorphism, and we need
-#to pass it to the auditor in the peer handshake in preparation).
 def get_reliable_site_certificate():
+    '''Do truncated handshake with reliable site in order to grab
+    its certificate in advance (because we want the reliable site's
+    server modulus in order to perform RSA homomorphism, and we need
+    to pass it to the auditor in the peer handshake in preparation).'''
     global rsModulus
     global rsExponent
     rsSession = shared.TLSNSSLClientSession(shared.config.get('SSL','reliable_site'),\
@@ -517,8 +444,8 @@ def get_reliable_site_certificate():
     tlssock.connect((rsSession.serverName, rsSession.sslPort))
     tlssock.send(rsSession.handshakeMessages[0])
     rsSession.processServerHello(shared.recv_socket(tlssock))
+    tlssock.close()
     #TODO: fallback to alternatives if one site fails?
-    if not rsSession.extractCertificate(): print ("Failed to extract certificate")
     rsModulus, rsExponent = rsSession.extractModAndExp()
     if not rsModulus: print ("Failed to extract pubkey")
 
@@ -580,7 +507,7 @@ def start_firefox(FF_to_backend_port):
     global firefox_install_path
     if not os.path.exists(join(datadir,'firefoxcopy')):
         shutil.copytree(firefox_install_path,join(datadir,'firefoxcopy'))
-    firefox_install_path = join(datadir,'firefoxcopy') 
+    if OS != 'macos': firefox_install_path = join(datadir,'firefoxcopy') 
     
     #find the binary
     if OS=='linux':
@@ -605,46 +532,14 @@ def start_firefox(FF_to_backend_port):
     with open(join(logs_dir, 'firefox.stderr'), 'w') as f: pass
     ffprof_dir = join(datadir, 'FF-profile')
     if not os.path.exists(ffprof_dir): os.makedirs(ffprof_dir)
-    #show addon bar
-    with open(join(ffprof_dir, 'prefs.js'), 'w') as f:
-        f.writelines([
-        'user_pref("browser.startup.homepage", "chrome://tlsnotary/content/auditee.html");\n',
-        'user_pref("browser.startup.homepage_override.mstone", "ignore");\n', #prevents welcome page
-        'user_pref("browser.rights.3.shown", true);\n',
-        'user_pref("app.update.auto", false);\n',
-        'user_pref("app.update.enabled", false);\n',
-        'user_pref("browser.shell.checkDefaultBrowser", false);\n',
-        'user_pref("browser.search.update", false);\n',
-        'user_pref("browser.link.open_newwindow", 3);\n', #open new window in a new tab
-        'user_pref("browser.link.open_newwindow.restriction", 0);\n', #enforce the above rule without exceptions
-        'user_pref("extensions.lastAppVersion", "100.0.0");\n',
-        'user_pref("extensions.checkCompatibility.4.*", false);\n',
-        'user_pref("extensions.update.autoUpdate", false);\n',
-        'user_pref("extensions.update.enabled", false);\n',
-        'user_pref("extensions.enabledScopes", 0);\n', #prevent from looking for system addons
-        'user_pref("datareporting.healthreport.service.enabled", false);\n',
-        'user_pref("datareporting.healthreport.uploadEnabled", false);\n',
-        'user_pref("datareporting.policy.dataSubmissionEnabled", false);\n'
-                'user_pref("gfx.direct2d.disabled", true);\n'
-                'user_pref("layers.acceleration.disabled", true);\n'
-        'user_pref("browser.sessionstore.resume_from_crash", false);\n'
-        'user_pref("network.proxy.socks_remote_dns", false);\n'
-        ])
-
-    with codecs.open(join(ffprof_dir, 'localstore.rdf'), 'w') as f:
-        f.write('<?xml version="1.0"?>'
-                '<RDF:RDF xmlns:NC="http://home.netscape.com/NC-rdf#" xmlns:RDF="http://www.w3.org/1999/02/22-rdf-syntax-ns#">'
-                '<RDF:Description RDF:about="chrome://browser/content/browser.xul">'
-                '<NC:persist RDF:resource="chrome://browser/content/browser.xul#addon-bar" collapsed="false"/>'
-                '</RDF:Description></RDF:RDF>')
-    
+    shutil.copyfile(join(datadir,'prefs.js'),join(ffprof_dir,'prefs.js'))
+    shutil.copyfile(join(datadir,'localstore.rdf'),join(ffprof_dir,'localstore.rdf'))
     bundles_dir = os.path.join(firefox_install_path, 'distribution', 'bundles')
     if not os.path.exists(bundles_dir):
         os.makedirs(bundles_dir)    
     for ext_dir in ['tlsnotary@tlsnotary','ClassicThemeRestorer@ArisT2Noia4dev']:
-        if not os.path.exists(join(bundles_dir, ext_dir)):    
-            shutil.copytree(join(datadir, 'FF-addon', ext_dir),
-                                join(bundles_dir, ext_dir))                  
+        if not os.path.exists(join(bundles_dir,ext_dir)):
+            shutil.copytree(join(datadir, 'FF-addon', ext_dir),join(bundles_dir, ext_dir))                  
     os.putenv('FF_to_backend_port', str(FF_to_backend_port))
     os.putenv('FF_first_window', 'true')   #prevents addon confusion when websites open multiple FF windows
 
@@ -710,7 +605,6 @@ def first_run_check(modname,modhash):
     if not os.path.exists(mod_dir):
         print ('Extracting '+modname + '.tar.gz...')
         with open(join(datadir, 'python', modname+'.tar.gz'), 'rb') as f: tarfile_data = f.read()
-        #for md5 hash, see https://pypi.python.org/pypi/<module name>/<module version>
         if md5(tarfile_data).hexdigest() !=  modhash:
             raise Exception ('Wrong hash')
         os.chdir(join(datadir, 'python'))
@@ -719,6 +613,7 @@ def first_run_check(modname,modhash):
         tar.close()
    
 if __name__ == "__main__":
+    #for md5 hash, see https://pypi.python.org/pypi/<module name>/<module version>
     modules_to_load = {'rsa-3.1.4':'b6b1c80e1931d4eba8538fd5d4de1355',\
                        'pyasn1-0.1.7':'2cbd80fcd4c7b1c82180d3d76fee18c8',\
                        'slowaes':'','requests-2.3.0':'7449ffdc8ec9ac37bbcd286003c80f00'}
