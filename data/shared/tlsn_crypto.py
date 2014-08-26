@@ -62,8 +62,8 @@ class TLSNSSLClientSession(object):
     def __init__(self,server,port=443,ccs=53,audit=False):
         self.serverName = server
         self.sslPort = port
-        self.nAuditeeEntropy = 13
-        self.nAuditorEntropy = 8
+        self.nAuditeeEntropy = 12
+        self.nAuditorEntropy = 9
         self.auditorSecret = None
         self.auditeeSecret = None
         self.auditorPaddingSecret = None
