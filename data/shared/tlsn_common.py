@@ -1,7 +1,7 @@
 from __future__ import print_function
 from ConfigParser import SafeConfigParser
 from SocketServer import ThreadingMixIn
-import os
+import os, binascii
 import threading, BaseHTTPServer
 import select, socket, time
 #General utility objects used by both auditor and auditee.
@@ -82,37 +82,33 @@ def load_program_config():
             if o not in config.options(k):
                 raise Exception("Config file does not contain the required option: "+o)
 
-
-def recv_socket(sckt):
-    bDataFromServerSeen = False
-    databuffer = ''
+def checkCompleteRecords(d):
+    assert d[1:3]=='\x03\x01',"invalid ssl data"
+    l = ba2int(d[3:5])
+    if len(d)< l+5: return False
+    elif len(d)==l+5: return True
+    else: checkCompleteRecords(d[l+5:])
+    
+def recv_socket(sckt,isHandshake=False):
     last_time_data_was_seen_from_server = 0
+    databuffer=''
     while True:
-        rlist, wlist, xlist = select.select((sckt,), (), (sckt,), 1)
-        if len(rlist) ==  len(xlist) == 0: #timeout
-            if not bDataFromServerSeen: continue
+        data = sckt.recv(1024*32)
+        if not data:
+            if not databuffer:
+                print ("Server closed the socket and sent no data")
+                return None
             #TODO dont rely on a fixed timeout 
-            if int(time.time()) - last_time_data_was_seen_from_server < int(config.get("General","server_response_timeout")): continue
-            return databuffer
-        if len(xlist) > 0:
-            print ('Socket exceptional condition. Terminating connection')
-            return ''
-        if len(rlist) == 0:
-            print ('Python internal socket error: rlist should not be empty. Please investigate. Terminating connection')
-            return ''
-        #else rlist contains socket with data
-        #(actually, only one socket involved)
-        for rsocket in rlist:
-            data = rsocket.recv( 1024*1024 )
-            if not data: #socket closed
-                if not databuffer:
-                    print('Server closed the socket and sent no data')
-                    return None
-                #else the server sent a response and closed the socket
-                return databuffer
-            bDataFromServerSeen = True
-            last_time_data_was_seen_from_server = int(time.time())
-            databuffer += data
+            if int(time.time()) - last_time_data_was_seen_from_server < int(config.get("General","server_response_timeout")): continue            
+            return databuffer #we timed out on the socket read
+        
+        databuffer += data
+        if isHandshake: 
+            print ("We're returning,ength:\n",len(databuffer),"data: ",binascii.hexlify(databuffer))
+            if checkCompleteRecords(databuffer): return databuffer #else, just continue loop
+            
+        last_time_data_was_seen_from_server = int(time.time())
+        
             
 
 #a thread which returns a value. This is achieved by passing self as the first argument to a target function

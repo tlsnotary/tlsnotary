@@ -238,7 +238,7 @@ def prepare_pms():
         tlssock.settimeout(int(shared.config.get("General","tcp_socket_timeout")))
         tlssock.connect((pmsSession.serverName, pmsSession.sslPort))
         tlssock.send(pmsSession.handshakeMessages[0])
-        if not pmsSession.processServerHello(shared.recv_socket(tlssock)):
+        if not pmsSession.processServerHello(shared.recv_socket(tlssock,isHandshake=True)):
             raise Exception("Failure in processing of server Hello from " + pmsSession.serverName)
         reply = send_and_recv('rcr_rsr:'+pmsSession.clientRandom+pmsSession.serverRandom)
         if reply[0] != 'success': raise Exception ('Failed to receive a reply for rcr_rsr:')
@@ -249,7 +249,7 @@ def prepare_pms():
         shahmac = rrsapms_rhmac[256:304]
         pmsSession.pAuditor = shahmac
         tlssock.send(pmsSession.completeHandshake(rsapms2))
-        response = shared.recv_socket(tlssock)
+        response = shared.recv_socket(tlssock,isHandshake=True)
         tlssock.close()
         if not response:
             print ("PMS trial failed")
@@ -311,7 +311,7 @@ def setUpTLSSession(pms_secret,pms_padding_secret,server_name,tlssock):
     tlsnSession.auditeeSecret,tlsnSession.auditeePaddingSecret = pms_secret,pms_padding_secret
     tlssock.connect((tlsnSession.serverName, tlsnSession.sslPort))
     tlssock.send(tlsnSession.handshakeMessages[0])
-    if not tlsnSession.processServerHello(shared.recv_socket(tlssock)):
+    if not tlsnSession.processServerHello(shared.recv_socket(tlssock,isHandshake=True)):
         raise Exception("Failure in processing of server Hello from " + tlsnSession.serverName)
     cr_list.append(tlsnSession.clientRandom)
     tlsnSession.extractModAndExp()    
@@ -360,7 +360,7 @@ def negotiateVerifyAndFinishHandshake(tlsnSession,tlssock):
     if not reply[1].startswith('verify_hmac:'): return ('bad reply. Expected verify_hmac:')
     data =  tlsnSession.getCKECCSF(providedPValue=reply[1][len('verify_hmac:'):])
     tlssock.send(data)
-    response = shared.recv_socket(tlssock)
+    response = shared.recv_socket(tlssock,isHandshake=True)
     sha_digest2,md5_digest2 = tlsnSession.getHandshakeHashes(isForServer = True)
     reply = send_and_recv('verify_md5sha2:'+md5_digest2+sha_digest2)
     if reply[0] != 'success':return("Failed to receive a reply")
@@ -443,7 +443,7 @@ def get_reliable_site_certificate():
     tlssock.settimeout(int(shared.config.get("General","tcp_socket_timeout")))
     tlssock.connect((rsSession.serverName, rsSession.sslPort))
     tlssock.send(rsSession.handshakeMessages[0])
-    rsSession.processServerHello(shared.recv_socket(tlssock))
+    rsSession.processServerHello(shared.recv_socket(tlssock,isHandshake=True))
     tlssock.close()
     #TODO: fallback to alternatives if one site fails?
     rsModulus, rsExponent = rsSession.extractModAndExp()
