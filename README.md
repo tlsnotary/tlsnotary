@@ -1,7 +1,7 @@
 TLSNotary Overview
 ==================
 
-1. [For the generally curious - a FAQ](https://github.com/AdamISZ/tlsnotary/blob/no_patch/data/documentation/TLSNotaryFAQ.md)
+1. [For the generally curious - a FAQ](/data/documentation/TLSNotaryFAQ.md)
 2. [How to install and run](#how-to-install-and-run)
 2. [User Guide](#user-guide)
 3. [Video version of the above](https://www.youtube.com/playlist?list=PLnSCooZY6_w9j5tQ8jAeZtrl9l4NnL48G) for a more hands-on education style. This is a little out of date and will be updated soon.
