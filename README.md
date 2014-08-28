@@ -5,8 +5,8 @@ TLSNotary Overview
 2. [How to install and run](#how-to-install-and-run)
 2. [User Guide](#user-guide)
 3. [Video version of the above](https://www.youtube.com/playlist?list=PLnSCooZY6_w9j5tQ8jAeZtrl9l4NnL48G) for a more hands-on education style. This is a little out of date and will be updated soon.
-5. [Algorithm white paper](https://github.com/AdamISZ/tlsnotary/blob/no_patch/data/documentation/TLSNotary.pdf)  (here be dragons).
-5. [Peer messaging protocol spec](https://github.com/AdamISZ/tlsnotary/blob/no_patch/data/documentation/TLSNotary_messaging.md)
+5. [Algorithm white paper](/data/documentation/TLSNotary.pdf)  (here be dragons).
+5. [Peer messaging protocol spec](/data/documentation/TLSNotary_messaging.md)
 
 
 ###Really, really short version: ###
@@ -51,7 +51,7 @@ Notice two things: "Page decryption successful" in the status bar, and that a ne
 1. It doesn't contain information that you don't want the auditor to see.
 2. It **does** contain data that proves what you want to prove (e.g. proves that you sent $100 on date:X to recipient:Y).
 
-Once you're satisfied on these two points, you can click 'FINISH'. Note: in self-test mode, you are only "auditing yourself", so no one else will see the data at this stage. After a few seconds, you should see a message saying "Congratulations, the audit has acknowledged..." etc. This means the audit is succcessfully completed. Go to `tlsnotary/data/auditor/sessions/[session timestamp]/decrypted` and in that folder, you should see a decrypted copy of your chosen audited html page.
+Once you're satisfied on these two points, you can click 'FINISH'. Note: in self-test mode, you are only "auditing yourself", so no one else will see the data at this stage. After a few seconds, you should see a message saying "Congratulations, the audit has acknowledged..." etc. This means the audit is succcessfully completed. Go to `tlsnotary/data/auditor/sessions/[session timestamp]/decrypted` and in that folder, you should see a decrypted copy of your chosen audited html page. It should be identical to what you see in the Firefox browser, as well as what's stored in `tlsnotary/data/auditee/sessions/[session timestamp]/commit`.
 
 *Running an audit for real*:
 
