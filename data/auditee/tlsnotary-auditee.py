@@ -516,27 +516,23 @@ def peer_handshake():
 #and start up firefox with that profile.
 def start_firefox(FF_to_backend_port, firefox_install_path):
     local_ff_copy = join(datadir,'Firefox.app') if OS=='macos' else join(datadir,'firefoxcopy')
-    if not os.path.exists(join(datadir,'firefoxcopy')):
+    if not os.path.exists(local_ff_copy):
         shutil.copytree(firefox_install_path,local_ff_copy)
-    firefox_install_path = join(datadir,'firefoxcopy') 
+    firefox_install_path = join(local_ff_copy) 
     
     #find the binary
-    if OS=='linux':
-        if firefox_install_path=='/usr/lib/firefox':
-            firefox_exepath='firefox'
-        else:
-            firefox_exepath=join(firefox_install_path,'firefox')
+    if OS in ['linux','macos']:
+        if not os.path.isfile(join(firefox_install_path,'firefox')):
+            exit(FIREFOX_MISSING)
+        firefox_exepath=join(firefox_install_path,'firefox')
 
     elif OS=='mswin':
         if not os.path.isfile(join(firefox_install_path,'firefox.exe')):
             exit(FIREFOX_MISSING)
         firefox_exepath = join(firefox_install_path,'firefox.exe')
     
-    elif OS=='macos':
-        if not os.path.isfile(join(firefox_install_path,'firefox')):
-            exit(FIREFOX_MISSING)
-        firefox_exepath=join(firefox_install_path,'firefox')
-        
+    else: raise Exception("Unrecognised OS")
+    
     logs_dir = join(datadir, 'logs')
     if not os.path.isdir(logs_dir): os.makedirs(logs_dir)
     with open(join(logs_dir, 'firefox.stdout'), 'w') as f: pass
