@@ -312,9 +312,7 @@ class Handler(SimpleHTTPServer.SimpleHTTPRequestHandler):
        #----------------------------------------------------------------------# 
         if self.path.startswith('/start_peer_connection'):
             #connect, send hello to the auditor and get a hello in return
-            print ("About to start auditor peer messaging")
             rv = start_peer_messaging()
-            print ("Finished auditor peer messaging")
             self.respond({'response':'start_peer_connection', 'status':rv})
             return
         #----------------------------------------------------------------------#

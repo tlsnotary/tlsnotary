@@ -43,7 +43,6 @@ myPrvKey = myPubKey = auditorPubKey = None
 rsModulus = None
 rsExponent = None
 firefox_pid = selftest_pid = 0
-firefox_install_path = None
 cr_list = [] #a list of all client_randoms used to index html files audited.
 
 #RSA key management for peer messaging
@@ -513,13 +512,13 @@ def peer_handshake():
     thread.start()
     return 'success'
 
-#Find the firefox binary, install the new firefox profile
+#Make a local copy of firefox, find the binary, install the new profile
 #and start up firefox with that profile.
-def start_firefox(FF_to_backend_port):
-    global firefox_install_path
+def start_firefox(FF_to_backend_port, firefox_install_path):
+    local_ff_copy = join(datadir,'Firefox.app') if OS=='macos' else join(datadir,'firefoxcopy')
     if not os.path.exists(join(datadir,'firefoxcopy')):
-        shutil.copytree(firefox_install_path,join(datadir,'firefoxcopy'))
-    if OS != 'macos': firefox_install_path = join(datadir,'firefoxcopy') 
+        shutil.copytree(firefox_install_path,local_ff_copy)
+    firefox_install_path = join(datadir,'firefoxcopy') 
     
     #find the binary
     if OS=='linux':
@@ -642,7 +641,7 @@ if __name__ == "__main__":
     import shared
     shared.load_program_config()
     
-    global firefox_install_path
+    firefox_install_path = None
     if len(sys.argv) > 1: firefox_install_path = sys.argv[1]
     if firefox_install_path == 'test': firefox_install_path = None
     
@@ -664,7 +663,7 @@ if __name__ == "__main__":
             if not firefox_install_path:
                 raise Exception('Could not set firefox install path')
         elif OS=='macos':
-            if not os.path.exists(join("/","Applications","Firefox.app","Contents","MacOS")):
+            if not os.path.exists(join("/","Applications","Firefox.app")):
                 raise Exception("Could not set firefox install path")
             firefox_install_path = join("/","Applications","Firefox.app","Contents","MacOS")
         else:
@@ -691,7 +690,7 @@ if __name__ == "__main__":
         raise Exception ('minihttpd failed to start in 10 secs. Please investigate')
     FF_to_backend_port = thread.retval[1]
         
-    ff_retval = start_firefox(FF_to_backend_port)
+    ff_retval = start_firefox(FF_to_backend_port, firefox_install_path)
     if ff_retval[0] != 'success': raise Exception (
         'Error while starting Firefox: '+ ff_retval[0])
     ff_proc = ff_retval[1]
