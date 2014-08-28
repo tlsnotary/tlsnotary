@@ -146,8 +146,11 @@ class HandlerClass(SimpleHTTPServer.SimpleHTTPRequestHandler):
             return        
         #----------------------------------------------------------------------#
         if self.path.startswith('/start_peer_connection'):
+            print ("Starting auditee peer messaging")
             rv = start_peer_messaging()
+            print ("Finished auditee peer messaging")
             rv2 = peer_handshake()
+            print ("Finished auditee handshake")
             self.respond({'response':'start_peer_connection', 'status':rv,'pms_status':rv2})
             return       
         #----------------------------------------------------------------------#
@@ -174,7 +177,7 @@ class HandlerClass(SimpleHTTPServer.SimpleHTTPRequestHandler):
             verifyServer(processed_pk, tlsnSession)
             negotiateCrippledSecrets(tlsnSession)
             negotiateVerifyAndFinishHandshake(tlsnSession,tlssock)
-            tlsnSession,response = makeTLSNRequest(modified_headers,tlsnSession,tlssock)
+            response = makeTLSNRequest(modified_headers,tlsnSession,tlssock)
             sf = str(len(cr_list))
             rv = decryptHTML(commitSession(tlsnSession, response,sf), tlsnSession, sf)
             if rv[0] == 'success': html_paths = b64encode(rv[1])
@@ -229,7 +232,7 @@ class HandlerClass(SimpleHTTPServer.SimpleHTTPRequestHandler):
 #Because there is a 1 in 6 chance that the encrypted PMS will contain zero bytes in its
 #padding, we first try the encrypted PMS with a reliable site and see if it gets rejected.
 def prepare_pms():
-    for i in range(5): #try 5 times until reliable site check succeeds
+    for i in range(7): #try 5 times until reliable site check succeeds
         #first 4 bytes of client random are unix time
         pmsSession = shared.TLSNSSLClientSession(shared.config.get('SSL','reliable_site'),\
                                             int(shared.config.get('SSL','reliable_site_ssl_port')))
@@ -302,7 +305,7 @@ def parse_headers(headers):
         modified_headers = '\r\n'.join(header_lines)
         
     return (server,modified_headers)
-
+    
 def setUpTLSSession(pms_secret,pms_padding_secret,server_name,tlssock):
     '''Construct ssl client session object and do
     client hello, server hello, server hello done, certificate
@@ -311,7 +314,13 @@ def setUpTLSSession(pms_secret,pms_padding_secret,server_name,tlssock):
     tlsnSession.auditeeSecret,tlsnSession.auditeePaddingSecret = pms_secret,pms_padding_secret
     tlssock.connect((tlsnSession.serverName, tlsnSession.sslPort))
     tlssock.send(tlsnSession.handshakeMessages[0])
-    if not tlsnSession.processServerHello(shared.recv_socket(tlssock,isHandshake=True)):
+    response = shared.recv_socket(tlssock,isHandshake=True)
+    #a nasty but necessary hack: check whether server hello, cert, server hello done
+    #is complete; if not, go back to server for more. This arises because we don't
+    #know how the three handshake messages were packaged into records (1,2 or 3).
+    while not response.endswith(shared.h_shd+shared.bi2ba(0,fixed=3)):
+        response += shared.recv_socket(tlssock,isHandshake=True)
+    if not tlsnSession.processServerHello(response):
         raise Exception("Failure in processing of server Hello from " + tlsnSession.serverName)
     cr_list.append(tlsnSession.clientRandom)
     tlsnSession.extractModAndExp()    
@@ -361,6 +370,9 @@ def negotiateVerifyAndFinishHandshake(tlsnSession,tlssock):
     data =  tlsnSession.getCKECCSF(providedPValue=reply[1][len('verify_hmac:'):])
     tlssock.send(data)
     response = shared.recv_socket(tlssock,isHandshake=True)
+    #in case the server sent only CCS; wait until we get Finished also
+    while response.count(shared.hs+shared.tlsver) != 1:
+        response += shared.recv_socket(tlssock,isHandshake=True)
     sha_digest2,md5_digest2 = tlsnSession.getHandshakeHashes(isForServer = True)
     reply = send_and_recv('verify_md5sha2:'+md5_digest2+sha_digest2)
     if reply[0] != 'success':return("Failed to receive a reply")
@@ -373,11 +385,11 @@ def makeTLSNRequest(headers,tlsnSession,tlssock):
     '''Send TLS request including http headers and receive server response.'''
     headers += '\r\n'
     tlssock.send(tlsnSession.buildRequest(headers))
-    response = shared.recv_socket(tlssock)
+    response = shared.recv_socket(tlssock) #not handshake flag means we wait on timeout
     if not response: raise Exception ("Received no response to request, cannot continue audit.")
     tlsnSession.storeServerAppDataRecords(response)
     tlssock.close()    
-    return tlsnSession,response #state updates
+    return response 
 
 def commitSession(tlsnSession,response,sf):
     '''Commit the encrypted server response and other data to auditor'''
@@ -643,7 +655,6 @@ if __name__ == "__main__":
             prog64 = os.getenv('ProgramW6432')
             prog32 = os.getenv('ProgramFiles(x86)')
             progxp = os.getenv('ProgramFiles')
-            print ("Env vars:",prog64,prog32,progxp)
             if os.path.exists(join(prog64,'Mozilla Firefox')):
                 firefox_install_path = join(prog64,'Mozilla Firefox')
             elif os.path.exists(join(prog32,'Mozilla Firefox')):

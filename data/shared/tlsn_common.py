@@ -87,27 +87,39 @@ def checkCompleteRecords(d):
     l = ba2int(d[3:5])
     if len(d)< l+5: return False
     elif len(d)==l+5: return True
-    else: checkCompleteRecords(d[l+5:])
+    else: return checkCompleteRecords(d[l+5:])
     
 def recv_socket(sckt,isHandshake=False):
     last_time_data_was_seen_from_server = 0
+    data_from_server_seen = False
     databuffer=''
     while True:
-        data = sckt.recv(1024*32)
-        if not data:
-            if not databuffer:
-                print ("Server closed the socket and sent no data")
-                return None
+        rlist, wlist, xlist = select.select((sckt,), (), (sckt,), 1)
+        if len(rlist) == len(xlist) == 0: #timeout
             #TODO dont rely on a fixed timeout 
-            if int(time.time()) - last_time_data_was_seen_from_server < int(config.get("General","server_response_timeout")): continue            
-            return databuffer #we timed out on the socket read
-        
-        databuffer += data
-        if isHandshake: 
-            print ("We're returning,ength:\n",len(databuffer),"data: ",binascii.hexlify(databuffer))
-            if checkCompleteRecords(databuffer): return databuffer #else, just continue loop
-            
-        last_time_data_was_seen_from_server = int(time.time())
+            delta = int(time.time()) - last_time_data_was_seen_from_server
+            if not data_from_server_seen: continue
+            if  delta < int(config.get("General","server_response_timeout")): continue
+            return databuffer #we timed out on the socket read 
+        if len(xlist) > 0:
+            print ('Socket exceptional condition. Terminating connection')
+            return ''
+        if len(rlist) == 0:
+            print ('Python internal socket error: rlist should not be empty. Please investigate. Terminating connection')
+            return ''
+        for rsckt in rlist:
+            data = rsckt.recv(1024*32)
+            if not data:
+                if not databuffer:
+                    print ("Server closed the socket and sent no data")
+                    return None
+                else:
+                    return databuffer
+            data_from_server_seen = True  
+            databuffer += data
+            if isHandshake: 
+                if checkCompleteRecords(databuffer): return databuffer #else, just continue loop
+            last_time_data_was_seen_from_server = int(time.time())
         
             
 

@@ -1,18 +1,11 @@
-#https://www.chase.com  0,1,3
-#https://www.bankofamerica.com/  0,1,3 
-#https://www.wellsfargo.com/  0,1,3
+https://www.chase.com  0,1,3
+https://www.bankofamerica.com/  0,1,3 
+https://www.wellsfargo.com/  0,1,3
 https://i.bankuralsib.ru  0,1,2,3
-https://i.bankuralsib.ru  0,1,2,3
-https://i.bankuralsib.ru  0,1,2,3
-https://i.bankuralsib.ru  0,1,2,3
-https://i.bankuralsib.ru  0,1,2,3
-https://i.bankuralsib.ru  0,1,2,3
-https://i.bankuralsib.ru  0,1,2,3
-https://i.bankuralsib.ru  0,1,2,3
-https://i.bankuralsib.ru  0,1,2,3
-#https://www.debian.org/  0,1,3
-#https://bitcointalk.org 0,1,2,3
-#https://www.japanpost.jp/ 0,1,2,3
-#https://www.okpay.com/en/index.html 0,1,2,3
-#https://pay.reddit.com/r/Bitcoin 0,1,2,3
+https://www.debian.org/  0,1,3
+https://bitcointalk.org 0,1,2,3
+https://www.japanpost.jp/ 0,1,2,3
+https://www.okpay.com/en/index.html 0,1,2,3
+https://www.okpay.com/en/index.html 0,1,2,3
+https://pay.reddit.com/r/Bitcoin 0,1,2,3
 
