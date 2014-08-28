@@ -11,7 +11,7 @@ TLSNotary Overview
 
 ###Really, really short version: ###
 
-tlsnotary allows the auditee to prove to the auditor that a certain https page is present in the auditee's browser.
+TLSNotary allows the auditee to prove to the auditor that a certain https page is present in the auditee's browser.
 This can be used e.g. when the auditee must prove to an arbitrator that a bank transfer has been made.
 
 ##How to install and run##
@@ -46,7 +46,7 @@ This is an essential first step - doing this enables you to find out if (a) your
 
 ![](/data/documentation/decryptedOK.png)
 
-Notice two things: "Page decryption successful" in the status bar, and that a new tab has opened. That tab will contain the exact html page that you're goind to send to the auditor. It's recommended to set `prevent_render=1` in your `tlsnotary.ini` file. Then you will see the html in plaintext, as above. If you reset it to `prevent_render=0`, then this tab will show as an html page, although it won't look totally normal as you won't see images loaded. It's up to you to decide if the data in this page satisfies two criteria:
+Notice two things: "Page decryption successful" in the status bar, and that a new tab has opened. That tab will contain the exact html page that you're goind to send to the auditor. It's recommended to set `prevent_render=1` (the default) in your `tlsnotary.ini` file. Then you will see the html in plaintext, as above. If you reset it to `prevent_render=0`, then this tab will show as an html page, although it won't look totally normal as you won't see images loaded. It's up to you to decide if the data in this page satisfies two criteria:
 
 1. It doesn't contain information that you don't want the auditor to see.
 2. It **does** contain data that proves what you want to prove (e.g. proves that you sent $100 on date:X to recipient:Y).
@@ -68,5 +68,5 @@ The original idea started here: https://bitcointalk.org/index.php?topic=173220.0
 
 ###Contact###
 
-The authors can be found on freenode.net IRC channel #bitsquare.io most of the time. Users dansmith_btc, waxwing and oakpacific can also be contacted on reddit and bitcointalk.org.
+The authors (usernames dansmith_btc, waxwing and oakpacific) can be found on freenode.net IRC channel #bitsquare.io most of the time, and can also be contacted on reddit and bitcointalk.org.
 
