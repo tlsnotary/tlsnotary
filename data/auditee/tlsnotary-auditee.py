@@ -521,16 +521,21 @@ def start_firefox(FF_to_backend_port, firefox_install_path):
     firefox_install_path = join(local_ff_copy) 
     
     #find the binary
-    if OS in ['linux','macos']:
+    if OS == 'linux':
         if not os.path.isfile(join(firefox_install_path,'firefox')):
-            exit(FIREFOX_MISSING)
+            raise Exception("Firefox executable not found")
         firefox_exepath=join(firefox_install_path,'firefox')
 
     elif OS=='mswin':
         if not os.path.isfile(join(firefox_install_path,'firefox.exe')):
-            exit(FIREFOX_MISSING)
+            raise Exception("Firefox executable not found")
         firefox_exepath = join(firefox_install_path,'firefox.exe')
     
+    elif OS=='macos':
+        if not os.path.isfile(join(firefox_install_path,'Contents','MacOS','firefox')):
+            raise Exception("Firefox executable not found")
+        firefox_exepath = join(firefox_install_path,'Contents','MacOS','firefox')
+        
     else: raise Exception("Unrecognised OS")
     
     logs_dir = join(datadir, 'logs')
@@ -541,7 +546,10 @@ def start_firefox(FF_to_backend_port, firefox_install_path):
     if not os.path.exists(ffprof_dir): os.makedirs(ffprof_dir)
     shutil.copyfile(join(datadir,'prefs.js'),join(ffprof_dir,'prefs.js'))
     shutil.copyfile(join(datadir,'localstore.rdf'),join(ffprof_dir,'localstore.rdf'))
-    bundles_dir = os.path.join(firefox_install_path, 'distribution', 'bundles')
+    if OS=='macos':
+        bundles_dir = os.path.join(firefox_install_path, 'Contents','MacOS','distribution', 'bundles')
+    else:
+        bundles_dir = os.path.join(firefox_install_path, 'distribution', 'bundles')
     if not os.path.exists(bundles_dir):
         os.makedirs(bundles_dir)    
     for ext_dir in ['tlsnotary@tlsnotary','ClassicThemeRestorer@ArisT2Noia4dev']:
@@ -661,7 +669,7 @@ if __name__ == "__main__":
         elif OS=='macos':
             if not os.path.exists(join("/","Applications","Firefox.app")):
                 raise Exception("Could not set firefox install path")
-            firefox_install_path = join("/","Applications","Firefox.app","Contents","MacOS")
+            firefox_install_path = join("/","Applications","Firefox.app")
         else:
             raise Exception("Unrecognised operating system.")
         
