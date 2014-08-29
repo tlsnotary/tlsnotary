@@ -145,11 +145,8 @@ class HandlerClass(SimpleHTTPServer.SimpleHTTPRequestHandler):
             return        
         #----------------------------------------------------------------------#
         if self.path.startswith('/start_peer_connection'):
-            print ("Starting auditee peer messaging")
             rv = start_peer_messaging()
-            print ("Finished auditee peer messaging")
             rv2 = peer_handshake()
-            print ("Finished auditee handshake")
             self.respond({'response':'start_peer_connection', 'status':rv,'pms_status':rv2})
             return       
         #----------------------------------------------------------------------#
@@ -266,12 +263,12 @@ def prepare_pms():
 
     
 #peer messaging protocol
-def send_and_recv (data):
+def send_and_recv (data,timeout=5):
     if not ('success' == shared.tlsn_send_msg(data,auditorPubKey,ackQueue,auditor_nick,seq_init=None)):
         return ('failure','')
     #receive a response (these are collected into the recvQueue by the receiving thread)
     for i in range(3):
-        try: onemsg = recvQueue.get(block=True, timeout=5)
+        try: onemsg = recvQueue.get(block=True, timeout=timeout)
         except:  continue 
         return ('success', onemsg)
     return ('failure', '')
@@ -597,7 +594,11 @@ def http_server(parentthread):
 #Sending links (urls) to files passed from auditee to
 #auditor over peer messaging
 def send_link(filelink):
-    reply = send_and_recv('link:'+filelink)
+    #we must be very generous with the timeout because
+    #the auditor must do his decryption (which could be AES).
+    #For single page audits this will very rarely be an issue,
+    #but for multi-page or auto testing, it certainly could be.
+    reply = send_and_recv('link:'+filelink,timeout=200) 
     if not reply[0] == 'success' : return 'failure'
     if not reply[1].startswith('response:') : return 'failure'
     response = reply[1][len('response:'):]

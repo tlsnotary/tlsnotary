@@ -15,7 +15,7 @@ required_options = {'IRC':['irc_server','irc_port','channel_name']}
 #file transfer functions - currently only used for sending
 #ciphertext to auditor
 def sendspace_getlink(mfile,rg,rp):
-    reply = rg('https://www.sendspace.com/', timeout=5)
+    reply = rg('https://www.sendspace.com/', timeout=25)
     url_start = reply.text.find('<form method="post" action="https://') + len('<form method="post" action="')
     url_len = reply.text[url_start:].find('"')
     url = reply.text[url_start:url_start+url_len]
@@ -31,7 +31,7 @@ def sendspace_getlink(mfile,rg,rp):
     r=rp(url, files={'upload_file[]': open(mfile, 'rb')}, data={
         'signature':sig, 'PROGRESS_URL':progr, 'js_enabled':'0', 
         'upload_files':'', 'terms':'1', 'file[]':'', 'description[]':'',
-        'recpemail_fcbkinput':'recipient@email.com', 'ownemail':'', 'recpemail':''}, timeout=5)
+        'recpemail_fcbkinput':'recipient@email.com', 'ownemail':'', 'recpemail':''}, timeout=25)
     
     link_start = r.text.find('"share link">') + len('"share link">')
     link_len = r.text[link_start:].find('</a>')

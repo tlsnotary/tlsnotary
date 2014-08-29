@@ -259,7 +259,7 @@ In Firefox, click the padlock to the left of the URL bar -> More Information -> 
                 for i in range(len(pubkey_data)/48):
                     write_data += pubkey_data[i*48:(i+1)*48] + '\n' 
                 with open(os.path.join(decr_dir, 'domain'+seqno), 'wb') as f: f.write(write_data)
-                
+               
             send_message('response:'+link_response)            
             if link_response == 'success':
                 progressQueue.put(time.strftime('%H:%M:%S', time.localtime()) + ': The auditee has successfully finished the audit session')

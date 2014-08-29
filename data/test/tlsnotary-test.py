@@ -199,7 +199,7 @@ def perform_final_check():
     for i in os.listdir(auditee_decrypted_dir):
         if os.path.isfile(os.path.join(auditee_decrypted_dir,i)) and i.startswith('html'):
             with open(os.path.join(auditee_decrypted_dir,i),'rb') as f: dh = f.read()
-            auditee_md5s[i] = hashlib.md5(dh).hexdigest()
+            auditee_md5s[i] = hashlib.md5(dh[3:]).hexdigest() #hack to remove byte order mark
 
     bCheckFailed = False
     if not auditee_md5s: 
