@@ -58,8 +58,8 @@ def process_messages():
         #the half-pms encrypted to the server's pubkey
         if msg.startswith('rcr_rsr:'):
             rcr_rsr = msg[len('rcr_rsr:'):]
-            tlsnSession = shared.TLSNSSLClientSession('dummy.com') #TODO these server names aren't needed.
-            rspSession = shared.TLSNSSLClientSession('google.com')
+            tlsnSession = shared.TLSNSSLClientSession()
+            rspSession = shared.TLSNSSLClientSession()
             rspSession.clientRandom = rcr_rsr[:32]
             rspSession.serverRandom = rcr_rsr[32:64]
             #pubkey required to set encrypted pms
@@ -219,25 +219,26 @@ def process_messages():
             for one_response in adir_list:
                 if not one_response.startswith('response'): continue
                 seqno = one_response[len('response'):]
-                with open(os.path.join(auditeetrace_dir, 'md5hmac'+seqno), 'rb') as f: md5hmac = f.read()
-                with open(os.path.join(auditeetrace_dir,'response'+seqno),'rb') as f: response = f.read()
-                with open(os.path.join(auditeetrace_dir,'IV'+seqno),'rb') as f: IV_data = f.read()
-                with open(os.path.join(auditeetrace_dir,'cs'+seqno),'rb') as f: cs_data = f.read()
-                with open(os.path.join(commit_dir, 'sha1hmac'+seqno), 'rb') as f: sha1hmac = f.read()
-                with open(os.path.join(commit_dir, 'cr'+seqno), 'rb') as f: cr = f.read()
-                with open(os.path.join(commit_dir, 'sr'+seqno), 'rb') as f: sr = f.read()
-                decrSession = shared.TLSNSSLClientSession('dummy.com',ccs = int(cs_data))
-                decrSession.clientRandom = cr
-                decrSession.serverRandom = sr
-                decrSession.pAuditee = md5hmac
-                decrSession.pAuditor = sha1hmac
+                decr_data = {}
+                for fname in ['md5hmac','response','IV','cs']:
+                    with open(os.path.join(auditeetrace_dir, fname+seqno), 'rb') as f: 
+                        decr_data[fname] = f.read()
+                for fname in ['sha1hmac','cr','sr']:
+                    with open(os.path.join(commit_dir, fname+seqno), 'rb') as f: 
+                        decr_data[fname] = f.read()                    
+                decrSession = shared.TLSNSSLClientSession(ccs = int(decr_data['cs']))
+                decrSession.clientRandom = decr_data['cr']
+                decrSession.serverRandom = decr_data['sr']
+                decrSession.pAuditee = decr_data['md5hmac']
+                decrSession.pAuditor = decr_data['sha1hmac']
                 decrSession.setMasterSecretHalf()
                 decrSession.doKeyExpansion()
-                decrSession.storeServerAppDataRecords(response)
+                decrSession.storeServerAppDataRecords(decr_data['response'])
+                IVd = decr_data['IV']
                 if decrSession.chosenCipherSuite in [47,53]:
-                    decrSession.lastServerCiphertextBlock = IV_data
+                    decrSession.lastServerCiphertextBlock = IVd
                 else:
-                    decrSession.serverRC4State=(map(ord,IV_data[:256]),ord(IV_data[256]),ord(IV_data[257]))
+                    decrSession.serverRC4State=(map(ord,IVd[:256]),ord(IVd[256]),ord(IVd[257]))
                 plaintext, bad_mac = decrSession.processServerAppDataRecords()
                 if bad_mac:
                     print ("AUDIT FAILURE - invalid mac")

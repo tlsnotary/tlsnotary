@@ -59,7 +59,7 @@ h_cke = '\x10' #Client Key Exchange
 h_fin = '\x14' #Finished
 
 class TLSNSSLClientSession(object):
-    def __init__(self,server,port=443,ccs=53,audit=False):
+    def __init__(self,server=None,port=443,ccs=53,audit=False):
         self.serverName = server
         self.sslPort = port
         self.nAuditeeEntropy = 12
