@@ -512,28 +512,15 @@ def peer_handshake():
 #Make a local copy of firefox, find the binary, install the new profile
 #and start up firefox with that profile.
 def start_firefox(FF_to_backend_port, firefox_install_path):
+    #find the binary *before* copying; acts as sanity check
+    ffbinloc = {'linux':['firefox'],'mswin':['firefox.exe'],'macos':['Contents','MacOS','firefox']}
+    assert os.path.isfile(join(*([firefox_install_path]+ffbinloc[OS]))),\
+           "Firefox executable not found - invalid Firefox application directory."
+        
     local_ff_copy = join(datadir,'Firefox.app') if OS=='macos' else join(datadir,'firefoxcopy')
     if not os.path.exists(local_ff_copy):
-        shutil.copytree(firefox_install_path,local_ff_copy)
-    firefox_install_path = join(local_ff_copy) 
-    
-    #find the binary
-    if OS == 'linux':
-        if not os.path.isfile(join(firefox_install_path,'firefox')):
-            raise Exception("Firefox executable not found")
-        firefox_exepath=join(firefox_install_path,'firefox')
-
-    elif OS=='mswin':
-        if not os.path.isfile(join(firefox_install_path,'firefox.exe')):
-            raise Exception("Firefox executable not found")
-        firefox_exepath = join(firefox_install_path,'firefox.exe')
-    
-    elif OS=='macos':
-        if not os.path.isfile(join(firefox_install_path,'Contents','MacOS','firefox')):
-            raise Exception("Firefox executable not found")
-        firefox_exepath = join(firefox_install_path,'Contents','MacOS','firefox')
-        
-    else: raise Exception("Unrecognised OS")
+        shutil.copytree(firefox_install_path,local_ff_copy) 
+    firefox_exepath = join(*([local_ff_copy]+ffbinloc[OS]))
     
     logs_dir = join(datadir, 'logs')
     if not os.path.isdir(logs_dir): os.makedirs(logs_dir)
@@ -544,9 +531,9 @@ def start_firefox(FF_to_backend_port, firefox_install_path):
     shutil.copyfile(join(datadir,'prefs.js'),join(ffprof_dir,'prefs.js'))
     shutil.copyfile(join(datadir,'localstore.rdf'),join(ffprof_dir,'localstore.rdf'))
     if OS=='macos':
-        bundles_dir = os.path.join(firefox_install_path, 'Contents','MacOS','distribution', 'bundles')
+        bundles_dir = os.path.join(local_ff_copy, 'Contents','MacOS','distribution', 'bundles')
     else:
-        bundles_dir = os.path.join(firefox_install_path, 'distribution', 'bundles')
+        bundles_dir = os.path.join(local_ff_copy, 'distribution', 'bundles')
     if not os.path.exists(bundles_dir):
         os.makedirs(bundles_dir)    
     for ext_dir in ['tlsnotary@tlsnotary','ClassicThemeRestorer@ArisT2Noia4dev']:
