@@ -42,6 +42,7 @@ my_nick = '' #our nick is randomly generated on connection
 myPrvKey = myPubKey = auditorPubKey = None
 rsModulus = None
 rsExponent = None
+rsSite = None
 firefox_pid = selftest_pid = 0
 cr_list = [] #a list of all client_randoms used to index html files audited.
 
@@ -225,13 +226,13 @@ class HandlerClass(SimpleHTTPServer.SimpleHTTPRequestHandler):
             self.respond({'response':'unknown command'})
             return
 
-#Because there is a 1 in 6 chance that the encrypted PMS will contain zero bytes in its
+#Because there is a 1 in ? chance that the encrypted PMS will contain zero bytes in its
 #padding, we first try the encrypted PMS with a reliable site and see if it gets rejected.
+#TODO the probability seems to have increased too much w.r.t. random padding, investigate
 def prepare_pms():
-    for i in range(7): #try 5 times until reliable site check succeeds
+    for i in range(7): #try 7 times until reliable site check succeeds
         #first 4 bytes of client random are unix time
-        pmsSession = shared.TLSNSSLClientSession(shared.config.get('SSL','reliable_site'),\
-                                            int(shared.config.get('SSL','reliable_site_ssl_port')))
+        pmsSession = shared.TLSNSSLClientSession(*rsSite)
         if not pmsSession: raise Exception("Client session construction failed in prepare_pms")
         tlssock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         tlssock.settimeout(int(shared.config.get("General","tcp_socket_timeout")))
@@ -259,7 +260,7 @@ def prepare_pms():
             continue
         return (pmsSession.auditeeSecret,pmsSession.auditeePaddingSecret)
     #no dice after 5 tries
-    raise Exception ('Could not prepare PMS with ', shared.config.get('SSL','reliable_site'), ' after 5 tries')
+    raise Exception ('Could not prepare PMS with ', rsSite[0], ' after 5 tries')
 
     
 #peer messaging protocol
@@ -443,10 +444,13 @@ def get_reliable_site_certificate():
     its certificate in advance (because we want the reliable site's
     server modulus in order to perform RSA homomorphism, and we need
     to pass it to the auditor in the peer handshake in preparation).'''
-    global rsModulus
-    global rsExponent
-    rsSession = shared.TLSNSSLClientSession(shared.config.get('SSL','reliable_site'),\
-                                    int(shared.config.get('SSL','reliable_site_ssl_port')))
+    global rsModulus, rsExponent, rsSite
+    sites = [x.strip() for x in shared.config.get('SSL','reliable_sites').split(',')]
+    ports = [int(x.strip()) for x in shared.config.get('SSL','reliable_sites_ssl_ports').split(',')]
+    assert len(sites) == len(ports), "Error, tlsnotary.ini file contains a mismatch between reliable sites and ports"
+    sI = random.randrange(len(sites))
+    rsSite = (sites[sI],ports[sI])
+    rsSession = shared.TLSNSSLClientSession(*rsSite)
     tlssock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     tlssock.settimeout(int(shared.config.get("General","tcp_socket_timeout")))
     tlssock.connect((rsSession.serverName, rsSession.sslPort))
