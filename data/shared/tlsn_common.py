@@ -1,7 +1,7 @@
 from __future__ import print_function
 from ConfigParser import SafeConfigParser
 from SocketServer import ThreadingMixIn
-import os, binascii
+import os, binascii, itertools, re
 import threading, BaseHTTPServer
 import select, socket, time
 #General utility objects used by both auditor and auditee.
@@ -11,6 +11,8 @@ config = SafeConfigParser()
 config_location = os.path.join(os.path.dirname(os.path.realpath(__file__)),'tlsnotary.ini')
 
 required_options = {'IRC':['irc_server','irc_port','channel_name']}
+
+reliable_sites = {}
 
 #file transfer functions - currently only used for sending
 #ciphertext to auditor
@@ -82,7 +84,48 @@ def load_program_config():
             if o not in config.options(k):
                 raise Exception("Config file does not contain the required option: "+o)
 
+
+def import_reliable_sites(d):
+    '''Read in the site names and ssl ports from the config file,
+    and then read in the corresponding pubkeys in browser hex format from
+    the file pubkeys.txt in directory d. Then combine this data into the reliable_sites global dict'''
+    sites = [x.strip() for x in config.get('SSL','reliable_sites').split(',')]
+    ports = [int(x.strip()) for x in config.get('SSL','reliable_sites_ssl_ports').split(',')]
+    assert len(sites) == len(ports), "Error, tlsnotary.ini file contains a mismatch between reliable sites and ports"    
+    #import hardcoded pubkeys
+    with open(os.path.join(d,'pubkeys.txt'),'rb') as f: plines = f.readlines()
+    raw_pubkeys= []
+    pubkeys = []
+    while len(plines):
+        next_raw_pubkey = list(itertools.takewhile(lambda x: x.startswith('#') != True,plines))
+        k = len(next_raw_pubkey)
+        plines = plines[k+1:]
+        if k > 0 : raw_pubkeys.append(''.join(next_raw_pubkey))
+    for rp in raw_pubkeys: 
+        pubkeys.append(re.sub(r'\s+','',rp))
+    for i,site in enumerate(sites):
+        reliable_sites[site] = [ports[i]]
+        reliable_sites[site].append(pubkeys[i])
+    
+def get_site_cert(site,port):
+    '''Do truncated handshake with site in order to grab
+    its certificate.'''
+    sSession = TLSNSSLClientSession(site,port)
+    tlssock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    tlssock.settimeout(int(config.get("General","tcp_socket_timeout")))
+    tlssock.connect((sSession.serverName, sSession.sslPort))
+    tlssock.send(sSession.handshakeMessages[0])
+    sSession.processServerHello(recv_socket(tlssock,isHandshake=True))
+    tlssock.close()
+    #TODO: fallback to alternatives if one site fails?
+    sModulus, sExponent = rsSession.extractModAndExp()
+    assert sModulus,"Failed to extract pubkey"
+    return (sModulus,sExponent)
+
 def checkCompleteRecords(d):
+    '''Given a response d from a server,
+    we want to know if its contents represents
+    a complete set of records, however many.'''
     assert d[1:3]=='\x03\x01',"invalid ssl data"
     l = ba2int(d[3:5])
     if len(d)< l+5: return False

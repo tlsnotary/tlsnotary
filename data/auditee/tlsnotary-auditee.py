@@ -42,7 +42,7 @@ my_nick = '' #our nick is randomly generated on connection
 myPrvKey = myPubKey = auditorPubKey = None
 rsModulus = None
 rsExponent = None
-rsSite = None
+rsChoice = None
 firefox_pid = selftest_pid = 0
 cr_list = [] #a list of all client_randoms used to index html files audited.
 
@@ -232,7 +232,7 @@ class HandlerClass(SimpleHTTPServer.SimpleHTTPRequestHandler):
 def prepare_pms():
     for i in range(7): #try 7 times until reliable site check succeeds
         #first 4 bytes of client random are unix time
-        pmsSession = shared.TLSNSSLClientSession(*rsSite)
+        pmsSession = shared.TLSNSSLClientSession(rsChoice,shared.reliable_sites[rsChoice][0])
         if not pmsSession: raise Exception("Client session construction failed in prepare_pms")
         tlssock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         tlssock.settimeout(int(shared.config.get("General","tcp_socket_timeout")))
@@ -259,8 +259,10 @@ def prepare_pms():
             print (binascii.hexlify(response))
             continue
         return (pmsSession.auditeeSecret,pmsSession.auditeePaddingSecret)
-    #no dice after 5 tries
-    raise Exception ('Could not prepare PMS with ', rsSite[0], ' after 5 tries')
+    #no dice after 7 tries
+    raise Exception ('Could not prepare PMS with ', rsChoice, ' after 7 tries. Please '+\
+                     'double check that you are using a valid public key modulus for this site; '+\
+                     'it may have expired.')
 
     
 #peer messaging protocol
@@ -439,47 +441,28 @@ def start_peer_messaging():
     #if we got here, no exceptions were thrown, which counts as success.
     return 'success'
 
-def get_reliable_site_certificate():
-    '''Do truncated handshake with reliable site in order to grab
-    its certificate in advance (because we want the reliable site's
-    server modulus in order to perform RSA homomorphism, and we need
-    to pass it to the auditor in the peer handshake in preparation).'''
-    global rsModulus, rsExponent, rsSite
-    sites = [x.strip() for x in shared.config.get('SSL','reliable_sites').split(',')]
-    ports = [int(x.strip()) for x in shared.config.get('SSL','reliable_sites_ssl_ports').split(',')]
-    assert len(sites) == len(ports), "Error, tlsnotary.ini file contains a mismatch between reliable sites and ports"
-    sI = random.randrange(len(sites))
-    rsSite = (sites[sI],ports[sI])
-    rsSession = shared.TLSNSSLClientSession(*rsSite)
-    tlssock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    tlssock.settimeout(int(shared.config.get("General","tcp_socket_timeout")))
-    tlssock.connect((rsSession.serverName, rsSession.sslPort))
-    tlssock.send(rsSession.handshakeMessages[0])
-    rsSession.processServerHello(shared.recv_socket(tlssock,isHandshake=True))
-    tlssock.close()
-    #TODO: fallback to alternatives if one site fails?
-    rsModulus, rsExponent = rsSession.extractModAndExp()
-    if not rsModulus: print ("Failed to extract pubkey")
-
 #perform handshake with auditor over peer messaging channel.
 def peer_handshake():
     global my_nick
     global auditor_nick
     global auditorPubKey
-    get_reliable_site_certificate()
+    global rsChoice
+    shared.import_reliable_sites(join(installdir,'data','shared'))
     #hello contains the first 10 bytes of modulus of the auditor's pubkey
     #this is how the auditor knows that we are addressing him.
     modulus = shared.bi2ba(auditorPubKey.n)[:10]
     signed_hello = rsa.sign('ae_hello'+my_nick, myPrvKey, 'SHA-1')
-    rs_n = shared.bi2ba(rsModulus)
-    rs_e = shared.bi2ba(rsExponent)
+    rsChoice = random.choice(shared.reliable_sites.keys())
+    print ("Chosen site: ",rsChoice)
+    rs_n = shared.reliable_sites[rsChoice][1].decode('hex')
+    rs_e = shared.bi2ba(65537,fixed=4)
 
     bIsAuditorRegistered = False
     for attempt in range(6): #try for 6*10 secs to find the auditor
         if bIsAuditorRegistered == True: break #previous iteration successfully regd the auditor
         time_attempt_began = int(time.time())
         shared.tlsn_send_single_msg(' :ae_hello:',modulus+signed_hello,auditorPubKey)
-        shared.tlsn_send_single_msg(' :rs_pubkey:',rs_n+rs_e,auditorPubKey)
+        shared.tlsn_send_single_msg(' :rs_pubkey:',rs_n+rs_e+rsChoice,auditorPubKey)
         signed_hello_message_dict = {}
         full_signed_hello = ''
         while not bIsAuditorRegistered:

@@ -30,7 +30,7 @@ myPrivateKey = myPubKey = auditeePublicKey = None
 recvQueue = Queue.Queue() #all messages destined for me
 ackQueue = Queue.Queue() #auditee ACKs
 progressQueue = Queue.Queue() #messages intended to be displayed by the frontend
-rsModulus = rsExponent = 0
+rsChoice = 0
 bTerminateAllThreads = False
 
 #peer messaging receive thread
@@ -63,8 +63,8 @@ def process_messages():
             rspSession.clientRandom = rcr_rsr[:32]
             rspSession.serverRandom = rcr_rsr[32:64]
             #pubkey required to set encrypted pms
-            rspSession.serverModulus = rsModulus
-            rspSession.serverExponent = rsExponent
+            rspSession.serverModulus = int(shared.reliable_sites[rsChoice][1],16)
+            rspSession.serverExponent = 65537
             #TODO currently can only handle 2048 bit keys for 'reliable site'
             rspSession.serverModLength = shared.bi2ba(256)
             rspSession.setAuditorSecret()
@@ -389,13 +389,17 @@ def new_keypair():
     my_pubkey_export = base64.b64encode(shared.bi2ba(myPubKey.n))
     return my_pubkey_export
 
+
+def verifyPubkey(pubkey, site, port):
+    return pubkey == shared.get_site_cert(site,port)
+
 #Thread to wait for arrival of auditee in peer messaging channel
 #and perform peer handshake according to tlsnotary messaging protocol
 def registerAuditeeThread():
     global auditee_nick
-    global rsModulus
-    global rsExponent
+    global rsChoice
     global myPubKey
+    shared.import_reliable_sites(os.path.join(installdir,'data','shared'))
     with open(os.path.join(current_sessiondir, 'mypubkey'), 'r') as f: my_pubkey_pem =f.read()
     myPubKey = rsa.PublicKey.load_pkcs1(my_pubkey_pem)
     myModulus = shared.bi2ba(myPubKey.n)[:10]
@@ -414,20 +418,24 @@ def registerAuditeeThread():
         if 'rs_pubkey' in header and auditee_nick != '': #we already got the first ae_hello part
             rs_pubkey_message_dict[seq] = msg
             if 'EOL' in ending:
-                google_message_len = seq + 1
-                if range(google_message_len) == rs_pubkey_message_dict.keys():
+                rs_message_len = seq + 1
+                if range(rs_message_len) == rs_pubkey_message_dict.keys():
                     try:
-                        for i in range(google_message_len):
+                        for i in range(rs_message_len):
                             full_rs_pubkey += rs_pubkey_message_dict[i]
-                        google_modulus_byte = full_rs_pubkey[:256]
-                        google_exponent_byte = full_rs_pubkey[256:]
-                        rsModulus = int(google_modulus_byte.encode('hex'),16)
-                        rsExponent = int(google_exponent_byte.encode('hex'),16)
+                        rs_modulus_byte = full_rs_pubkey[:256]
+                        rs_exponent_byte = full_rs_pubkey[256:260]
+                        domain_bytes = full_rs_pubkey[260:]
+                        #look up the domain in the locally stored reliable sites,
+                        #and as a sanity check compare his pubkey with ours
+                        assert rs_modulus_byte == shared.reliable_sites[domain_bytes][1].decode('hex'),\
+                        "Auditee provided pubkey for : "+domain_bytes+ " did not match ours; investigate."
+                        rsChoice = domain_bytes
                         print ('Auditee successfully verified')
                         bIsAuditeeRegistered = True
                         break
                     except:
-                        print ('Error while processing google pubkey')
+                        print ('Error while processing rs pubkey')
                         auditee_nick=''#erase the nick so that the auditee could try registering again
                         continue
 
