@@ -270,15 +270,14 @@ function responseGetRecentKeys(iteration){
 }
 
 function startPressed(){
-	//use the auditor pubkey, regardless if it is a newly-pasted key
-	//or one of the recent keys. We still import it explicitely
-	//rather than relying on the backend to remember which keys were
-	//provided during the get_recent_keys() call. Makes life simpler.
-	
-	var textarea_auditorkey = document.getElementById("textarea_auditorkey");
+    //use the auditor pubkey, regardless if it is a newly-pasted key
+    //or one of the recent keys. We still import it explicitely
+    //rather than relying on the backend to remember which keys were
+    //provided during the get_recent_keys() call. Makes life simpler.
+    var textarea_auditorkey = document.getElementById("textarea_auditorkey");
     var auditorpubkey = textarea_auditorkey.value;
-	if (auditorpubkey.length != 172){setError("ERROR Wrong auditee pubkey length. Expected 172 characters");return;}
-	reqImportAuditorPubkey = new XMLHttpRequest();
+    if (auditorpubkey.length != 172){setError("ERROR Wrong auditee pubkey length. Expected 172 characters");return;}
+    reqImportAuditorPubkey = new XMLHttpRequest();
     reqImportAuditorPubkey.onload = responseImportAuditorPubkey;
     reqImportAuditorPubkey.open("HEAD", "http://127.0.0.1:"+port+"/import_auditor_pubkey?pubkey="+auditorpubkey, true);
     reqImportAuditorPubkey.send();
@@ -320,17 +319,17 @@ function progressBar(){
 var bSelfTestResponded = false;
 var reqSelfTest;
 function startSelftest(){
-	Cc["@mozilla.org/process/environment;1"].getService(Ci.nsIEnvironment).set("TLSNOTARY_MSG", "Please wait. Connecting auditor (1/2)");	 
-	var selftest_button = document.getElementById("selftest_button");
-	var progress_bar_selftest = document.getElementById("progress_bar_selftest");
-	progress_bar_selftest.style.visibility = "visible";
-	selftest_button.setAttribute("disabled", "true");
-	var normalbutton = document.getElementById("option1")
-	normalbutton.setAttribute("disabled","true");
-	var advbutton = document.getElementById("option3");
-	advbutton.setAttribute("disabled","true");
-	setTimeout(progressBar, 1);
-	reqSelfTest = new XMLHttpRequest();
+    Cc["@mozilla.org/process/environment;1"].getService(Ci.nsIEnvironment).set("TLSNOTARY_MSG", "Please wait. Connecting auditor (1/2)");	 
+    var selftest_button = document.getElementById("selftest_button");
+    var progress_bar_selftest = document.getElementById("progress_bar_selftest");
+    progress_bar_selftest.style.visibility = "visible";
+    selftest_button.setAttribute("disabled", "true");
+    var normalbutton = document.getElementById("option1")
+    normalbutton.setAttribute("disabled","true");
+    var advbutton = document.getElementById("option3");
+    advbutton.setAttribute("disabled","true");
+    setTimeout(progressBar, 1);
+    reqSelfTest = new XMLHttpRequest();
     reqSelfTest.onload = responseSelfTest;
     reqSelfTest.open("HEAD", "http://127.0.0.1:"+port+"/selftest", true);
     reqSelfTest.send();
@@ -398,8 +397,7 @@ function responseStartPC(iteration){
 	//inform the addon. We use env var as IPC
 	//NB: we can set envvar from this JS code only because this file is part of the addon
 	//When debugging this file by simple loading into the browser, we won't be able to access env vars
-	Cc["@mozilla.org/process/environment;1"].getService(Ci.nsIEnvironment).set("TLSNOTARY_IRC_STARTED", "true");	 
-        //alert("You are now connected. The auditor is ready to start the auditing session. You may now open a new tab, type in a URL, navigate to a webpage you need, and press AUDIT THIS PAGE");
+	Cc["@mozilla.org/process/environment;1"].getService(Ci.nsIEnvironment).set("TLSNOTARY_IRC_STARTED", "true"+mode);	 
 
 }
 

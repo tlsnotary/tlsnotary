@@ -79,11 +79,10 @@ function pollEnvvar(){
 		document.getElementById("help").value = msg;
 	}
 	var envvarvalue = Cc["@mozilla.org/process/environment;1"].getService(Ci.nsIEnvironment).get("TLSNOTARY_IRC_STARTED");
-	if (envvarvalue != "true") {
+	if (!envvarvalue.startsWith("true")) {
 		setTimeout(pollEnvvar, 1000);
 		return;
 	}
-	
 	//else if envvar was set, init all global vars
 	help = document.getElementById("help");
 	button_record_enabled = document.getElementById("button_record_enabled");
@@ -95,7 +94,13 @@ function pollEnvvar(){
 	help.value = "Go to a page and press AUDIT THIS PAGE. Then wait for the page to reload automatically.";
 	button_record_disabled.hidden = true;
 	button_record_enabled.hidden = false;
-	popupShow("The connection to the auditor has been established. You may now open a new tab and go to a webpage. Please follow the instructions on the status bar below.")
+	var tmode = envvarvalue.charAt(envvarvalue.length -1)
+	if (tmode=='0'){
+	popupShow("The self testing audit connection is established. You may now open a new tab and go to a webpage. Please follow the instructions on the status bar below. ");
+	}
+	else {
+	popupShow("The connection to the auditor has been established. You may now open a new tab and go to a webpage. Please follow the instructions on the status bar below.");
+	}
 }
 
 function startListening(){
