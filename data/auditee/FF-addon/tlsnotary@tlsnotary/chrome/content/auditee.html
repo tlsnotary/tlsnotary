@@ -274,6 +274,7 @@ function startPressed(){
 	//or one of the recent keys. We still import it explicitely
 	//rather than relying on the backend to remember which keys were
 	//provided during the get_recent_keys() call. Makes life simpler.
+	
 	var textarea_auditorkey = document.getElementById("textarea_auditorkey");
     var auditorpubkey = textarea_auditorkey.value;
 	if (auditorpubkey.length != 172){setError("ERROR Wrong auditee pubkey length. Expected 172 characters");return;}
@@ -324,6 +325,10 @@ function startSelftest(){
 	var progress_bar_selftest = document.getElementById("progress_bar_selftest");
 	progress_bar_selftest.style.visibility = "visible";
 	selftest_button.setAttribute("disabled", "true");
+	var normalbutton = document.getElementById("option1")
+	normalbutton.setAttribute("disabled","true");
+	var advbutton = document.getElementById("option3");
+	advbutton.setAttribute("disabled","true");
 	setTimeout(progressBar, 1);
 	reqSelfTest = new XMLHttpRequest();
     reqSelfTest.onload = responseSelfTest;
@@ -357,6 +362,10 @@ function startPC(){
 		var button_new_keypair = document.getElementById("new_keypair");
 		var progress_bar = document.getElementById("progress_bar");
 		progress_bar.style.visibility = "visible";
+		var stbutton = document.getElementById("option2")
+		stbutton.setAttribute("disabled","true");
+		var advbutton = document.getElementById("option3");
+		advbutton.setAttribute("disabled","true");
 		button_start_button.setAttribute("disabled", "true");
 		button_new_keypair.setAttribute("disabled", "true");
 		progress_bar.setAttribute("disabled", "true");

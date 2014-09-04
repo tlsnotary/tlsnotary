@@ -106,21 +106,6 @@ def import_reliable_sites(d):
     for i,site in enumerate(sites):
         reliable_sites[site] = [ports[i]]
         reliable_sites[site].append(pubkeys[i])
-    
-def get_site_cert(site,port):
-    '''Do truncated handshake with site in order to grab
-    its certificate.'''
-    sSession = TLSNSSLClientSession(site,port)
-    tlssock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    tlssock.settimeout(int(config.get("General","tcp_socket_timeout")))
-    tlssock.connect((sSession.serverName, sSession.sslPort))
-    tlssock.send(sSession.handshakeMessages[0])
-    sSession.processServerHello(recv_socket(tlssock,isHandshake=True))
-    tlssock.close()
-    #TODO: fallback to alternatives if one site fails?
-    sModulus, sExponent = rsSession.extractModAndExp()
-    assert sModulus,"Failed to extract pubkey"
-    return (sModulus,sExponent)
 
 def checkCompleteRecords(d):
     '''Given a response d from a server,

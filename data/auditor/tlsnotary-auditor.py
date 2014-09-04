@@ -389,10 +389,6 @@ def new_keypair():
     my_pubkey_export = base64.b64encode(shared.bi2ba(myPubKey.n))
     return my_pubkey_export
 
-
-def verifyPubkey(pubkey, site, port):
-    return pubkey == shared.get_site_cert(site,port)
-
 #Thread to wait for arrival of auditee in peer messaging channel
 #and perform peer handshake according to tlsnotary messaging protocol
 def registerAuditeeThread():
