@@ -88,6 +88,7 @@ There is one case in which this process will fail, and it probably isn't very un
 ![](CertView2.png)
 
 enter the site name, and press Get Certificate. From here you will be able to see the two crucial facts: does Firefox trust the certificate, and does the public key inside it match the one provided in your `domain1` file. You'll see whether Firefox trusts the certificate in the main panel, and then you can click "View" to find the public key (in the same way as above).
+*At the end of this process, click 'Cancel' and not 'Confirm Security Exception'!*
 
 A final note: **remember that the audit cannot be considered to be completed successfully until you perform this certificate check**.
 
