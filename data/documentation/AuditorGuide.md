@@ -74,14 +74,34 @@ Notice the indication that decryption is successful. If it fails for any reason,
 
 Now that the audit session is finished, you can go to the indicated directory and check the decrypted html to conduct the 'human' part of the audit. In this, follow the instructions as above for [Test out TLSNotary](#test-out-tlsnotary).
 
+If the data in the html (which you can easily read in rendered format in the browser by removing the HTTP headers at the top) matches your expectations, there is one crucial manual checking step left before the audit is considered finished, as described in the next section.
+
+###Certificate Checking
+In this critical final step, you're going to check there's a proper match between: the name of the site that's being audited, the public key provided and Firefox's report of whether it trusts the certificate that contains that public key.
+
+Open the file `domain1` in the same `decrypted` folder as the html. This will give you a domain name and instructions on how to cross-check that the public key you see here is indeed valid. You should use Firefox (which you must have installed to run this software) and see a window like this if you follow the instructions:
+
+![](CertView1.png)
+
+There is one case in which this process will fail, and it probably isn't very uncommon. If your auditee has been accessing a site/domain which is not directly accessible without logging in, e.g. `loggedin.bank.com`. In many cases, attempting to access such a site without first logging in results in an automated redirect, e.g. to `loggedout.bank.com`. In this case, you clearly can't follow the procedure above, but you can do something else. From the Firefox menu, go to Tools->Certificate Manager->Servers->Add Exception, and in this window:
+
+![](CertView2.png)
+
+enter the site name, and press View Certificate. From here you will be able to see the two crucial facts: does Firefox trust the certificate, and does the public key inside it match the one provided in your `domain1` file. You can find the public key in just the same way as above.
+
+A final note: **remember that the audit cannot be considered to be completed successfully until you perform this certificate check**.
+
+*Technical background*: the attack we are defending against here is the possibility of the auditee creating a fake website, including TLS but with a certificate that's not signed by a trusted Certificate Authority. Firefox, like all browsers, keeps a database of the main Certificate Authorities who issue certificates to reputable companies and sites. So one aspect of our defence is to make sure that the site concerned has such a signed certificate. The other aspect is that we must make sure that the public key used in the asymmetric crypto stage of TLS (the encrypting and sending of the premaster secret from the client to the server) matches the one for this site, as reported by a Certificate Authority that Firefox trusts. (For those interested, 'reported' by the Cert Auth here actually means 'digitally signed by').
+It's true that it would *very* hard for an auditee to carry out this attack; because they would have to mess up *your* DNS records of the location of the site, if it's a famous bank, say. But there is no need for us to rely on DNS; it's not perfect, and we can get cryptographic proof outside it by using the CA system.
+
 ###Key management.
-Your TLSNotary public/private keypair is generated anew when you first start TLSNotary as auditor with the command:
-
-
-
-, and is stored in the folder `data/auditor/recentkeys/myprivkey` and `mypubkey`. Although keys can be regenerated, it's simplest to keep a backup of these keys securely and never change them. It goes without saying that you should practice good OS hygiene to make sure these keys cannot be stolen; keeping yourself un-hacked is part of your role as auditor.
+Your TLSNotary public/private keypair is generated anew when you first start TLSNotary as auditor, and is stored in the folder `data/auditor/recentkeys/myprivkey` and `mypubkey`. Although keys can be regenerated, it's simplest to keep a backup of these keys securely and never change them. It goes without saying that you should practice good OS hygiene to make sure these keys cannot be stolen; keeping yourself un-hacked is part of your role as auditor.
 
 You will also see a file `auditeepubkey` kept in that folder; it's probably self-explanatory, but it's kept for ease of use in case of multiple audits with the same auditee. Whenever you open the auditor window, the "Auditee key" field will be automatically populated with this key; you can of course override, and always check that you have the right key before starting the audit.
+
+
+###Respecting auditee privacy.
+Consider that the html provided by auditees to you for the purpose of audit may contain some sensitive data (including but not only bank transaction records). It would be sound practice to **delete the entire session directory** after (but definitely not before!) the audit decision has been reached and the final payment has been signed. Apart from this, you should of course make sure to only run TLSNotary in a highly secure environment; the details are of course your own responsibility.
 
 ##General advice.
 
@@ -100,5 +120,5 @@ If you've gone through all the above preparatory steps, and taken a good amount 
 
 1. Accept any form of 'evidence' that the auditee offers **in place of** TLSNotary audits (assuming this is not explicitly allowed in the contract).
 2. Accept the proof from a auditing session that has abnormally terminated, especially not after a long time, as the auditee might increase his chance to brute-force the secret in the extended period of time permitted.
-3. Release your escrow prematurely before you are absolutely certain about the outcome of the audit.
+3. Sign the final multisig redemption payment prematurely before you are absolutely certain about the outcome of the audit.
 
