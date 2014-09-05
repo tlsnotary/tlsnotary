@@ -33,7 +33,7 @@ If you were successful you should see a new Firefox window (separate from any ex
 
 ##User guide.##
 
-*This is a guide for a user who is to be audited. The guide for auditors will be produced separately.*
+*This is a guide for a user who is to be audited. The guide for auditors is* [here](/data/documentation/AuditorGuide.md).
 
 You still have a few things to do before you can use TLSNotary in a real life audit. Notice in the above screen there are two radio buttons 'Normal Mode', 'Selftest mode' and 'Advanced'. Leave the mode as 'Selftest' for now. 'Advanced' is currently only used for setting the communication channel (IRC) with the auditor, and you can leave it at the default settings.
 
