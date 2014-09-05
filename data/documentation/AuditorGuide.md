@@ -68,7 +68,7 @@ You'll notice:
 4. The auditee will then do his audit session in the way described in the main [User guide](https://github.com/tlsnotary/tlsnotary/blob/master/README.md#user-guide). During this period you don't need to do anything but wait for the prompts in the window.
 5. Once the audit has finished you should see indication of this in the Firefox tab. Here is an example of what you'll see:
 
-![](AuditorFinished.jpg)
+![](AuditorFinished.png)
 
 Notice the indication that decryption is successful. If it fails for any reason, you will get clear indication of it in the console window as well as on this screen. In that case, the audit, obviously, has failed, and you will have to try again or debug the problem.
 
@@ -83,4 +83,22 @@ Your TLSNotary public/private keypair is generated anew when you first start TLS
 
 You will also see a file `auditeepubkey` kept in that folder; it's probably self-explanatory, but it's kept for ease of use in case of multiple audits with the same auditee. Whenever you open the auditor window, the "Auditee key" field will be automatically populated with this key; you can of course override, and always check that you have the right key before starting the audit.
 
+##General advice.
+
+If you've gone through all the above preparatory steps, and taken a good amount of time educating yourself about how the whole process works, you are, in principle, ready to do real life auditing. Please consider these points of general advice -  a set of "DOs and DON'Ts":
+
+###DOs:
+
+1. Depending on the software or other environment you're working in, you may need to set out your terms of auditing explicitly with all auditees or perhaps each individual auditee; things like: the fee you charge, the quality of the proof you expect, the channel where the tlsnotary communication will take place, the banks that will be used, and possibility of demand for additional proof in case the first submission is unsatisfactory, in a form befitting a contract. Figure this out in advance, with the help of the software/website/service you're working with.
+2. Allow the auditee to make multiple runs if necessary. Auditees should not be stressed by the thought that a failed run means a failed audit; it emphatically does not. However, use your common sense in case an abnormally large number of tries is occurring; set a limit. If the audit has failed after 5 tries, then it has to be considered failed unless you have some other discretionary information.
+3. Double check **exactly** what is expected to be confirmed/refuted by the audit, e.g., the **amount**, **currency**, **date**, **sender** and **beneficiary** of the bank transfer (with parties identified unambiguously by account number). Whether the transaction indeed took place after the time agreed upon by both the buyer/seller is also especially important.
+4. Make yourself familiar with the bank/payment processors that will be used in your audits. It's recommended that you audit those banks/payment processors you already have an account with. Also, try to be aware of any banking institutions with dubious reputations.  
+5. Maintain all the records of auditing systematically in case there are further disputes.
+6. Set a timeout period for an *individual* audit session (not to be confused with 2, which refers to multiple sessions).
+
+###DON'Ts
+
+1. Accept any form of 'evidence' that the auditee offers **in place of** TLSNotary audits (assuming this is not explicitly allowed in the contract).
+2. Accept the proof from a auditing session that has abnormally terminated, especially not after a long time, as the auditee might increase his chance to brute-force the secret in the extended period of time permitted.
+3. Release your escrow prematurely before you are absolutely certain about the outcome of the audit.
 
