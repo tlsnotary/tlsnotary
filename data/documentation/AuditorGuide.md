@@ -48,9 +48,9 @@ In this initial testing phase, you need to check that the html you see in the `d
 
 In case any of the files or folders mentioned above are missing, you must assume that the audit is not valid. Check the console log for clues as to what might have gone wrong.
 
-###Try out normal mode.
+###How to run a real audit.
 
-Once all of the above is clear and working properly, the next step is to run tests with auditor and auditee on different machines. The other machine can be a VM if that's more convenient, although there's something to be said for testing out the process with a remote friend, as it will mirror real life conditions more accurately.
+Once all of the above is clear and working properly, the next step is to run tests with auditor and auditee on different machines a few times. The other machine can be a VM if that's more convenient, although there's something to be said for testing out the process with a remote friend, as it will mirror real life conditions more accurately. The main thing is to become fully confident of how the process works before using it for real.
 
 The auditor should be started with the command:
 
@@ -87,7 +87,7 @@ There is one case in which this process will fail, and it probably isn't very un
 
 ![](CertView2.png)
 
-enter the site name, and press View Certificate. From here you will be able to see the two crucial facts: does Firefox trust the certificate, and does the public key inside it match the one provided in your `domain1` file. You can find the public key in just the same way as above.
+enter the site name, and press Get Certificate. From here you will be able to see the two crucial facts: does Firefox trust the certificate, and does the public key inside it match the one provided in your `domain1` file. You'll see whether Firefox trusts the certificate in the main panel, and then you can click "View" to find the public key (in the same way as above).
 
 A final note: **remember that the audit cannot be considered to be completed successfully until you perform this certificate check**.
 
