@@ -3,10 +3,10 @@ TLSNotary Overview
 
 1. [For the generally curious - a FAQ](/data/documentation/TLSNotaryFAQ.md)
 2. [How to install and run](#how-to-install-and-run)
-2. [User Guide](#user-guide)
+2. [User Guide](#user-guide) and in detail, for auditor: [Auditor Guide](/data/documentation/AuditorGuide.md).
 3. [Video version of the above](https://www.youtube.com/playlist?list=PLnSCooZY6_w9j5tQ8jAeZtrl9l4NnL48G) for a more hands-on education style. This is a little out of date and will be updated soon.
 5. [Algorithm white paper](/data/documentation/TLSNotary.pdf)  (here be dragons).
-5. [Peer messaging protocol spec](/data/documentation/TLSNotary_messaging.md)
+5. [Peer messaging protocol spec](/data/documentation/TLSNotary_messaging.md) - technical details of auditor/auditee communication.
 
 
 ###Really, really short version: ###
@@ -35,23 +35,23 @@ If you were successful you should see a new Firefox window (separate from any ex
 
 *This is a guide for a user who is to be audited. The guide for auditors is* [here](/data/documentation/AuditorGuide.md).
 
-You still have a few things to do before you can use TLSNotary in a real life audit. Notice in the above screen there are two radio buttons 'Normal Mode', 'Selftest mode' and 'Advanced'. Leave the mode as 'Selftest' for now. 'Advanced' is currently only used for setting the communication channel (IRC) with the auditor, and you can leave it at the default settings.
+You still have a few things to do before you can use TLSNotary in a real life audit. Notice in the above screen there are three radio buttons 'Normal Mode', 'Selftest mode' and 'Advanced'. Leave the mode as 'Selftest' for now. 'Advanced' is currently only used for setting the communication channel (IRC) with the auditor, and you can leave it at the default settings for self test (when you do a real audit, your auditor will tell you which settings to put here).
 
 *Performing the self test*:
 This is an essential first step - doing this enables you to find out if (a) your chosen audit website (e.g. bank) works correctly with TLSNotary and (b) the data gathered is as you need it to be.
 
 * Click 'Start selftest' and wait for the 'ready' message to appear (the 'AUDIT THIS PAGE' button will also go blue).
-* Navigate to your intended website, log in as normal, and navigate to the page that you want to be audited (a message page, a bank statement page or similar).
+* You can browse normally (you are using a copy of your own version of Firefox). Navigate to your intended website, log in as normal, and navigate to the page that you want to be audited (a message page, a bank statement page or similar).
 * Click 'AUDIT THIS PAGE'. The audit will typically take 10-20 seconds. If the decryption is successful you'll see a screen something like this:
 
 ![](/data/documentation/decryptedOK.png)
 
-Notice two things: "Page decryption successful" in the status bar, and that a new tab has opened. That tab will contain the exact html page that you're goind to send to the auditor. It's recommended to set `prevent_render=1` (the default) in your `tlsnotary.ini` file. Then you will see the html in plaintext, as above. If you reset it to `prevent_render=0`, then this tab will show as an html page, although it won't look totally normal as you won't see images loaded. It's up to you to decide if the data in this page satisfies two criteria:
+Notice two things: "Page decryption successful" in the status bar, and that a new tab has opened. That tab will contain the exact html page that you're goind to send to the auditor. You'll also immediately notice that the page looks a bit different; it does not contain images. That's because you are being shown the "raw" version of the page, containing only the data your auditor will see. It's up to you to decide if the data in this page satisfies two criteria:
 
-1. It doesn't contain information that you don't want the auditor to see.
-2. It **does** contain data that proves what you want to prove (e.g. proves that you sent $100 on date:X to recipient:Y).
+1. It doesn't contain information that you don't want the auditor to see (*note: you can also view the html file in text form by opening the file in `data/auditee/sessions/<session timestamp>/commit/html-1` - this will also contain the HTTP headers, including any cookies*).
+2. It **does** contain data that proves what you want to prove (e.g. proves that you sent $100 on date:D from account X to recipient:Y - your auditor should tell you any details about what evidence you need).
 
-Once you're satisfied on these two points, you can click 'FINISH'. Note: in self-test mode, you are only "auditing yourself", so no one else will see the data at this stage. After a few seconds, you should see a message saying "Congratulations, the audit has acknowledged..." etc. This means the audit is succcessfully completed. Go to `tlsnotary/data/auditor/sessions/[session timestamp]/decrypted` and in that folder, you should see a decrypted copy of your chosen audited html page. It should be identical to what you see in the Firefox browser, as well as what's stored in `tlsnotary/data/auditee/sessions/[session timestamp]/commit`.
+Once you're satisfied on these two points, you can click 'FINISH'. Note: in self-test mode, you are only "auditing yourself", so **no one else will see the data at this stage**. After a few seconds, you should see a message saying "Congratulations, the audit has acknowledged..." etc. This means the audit is succcessfully completed. Go to `tlsnotary/data/auditor/sessions/[session timestamp]/decrypted` and in that folder, you should see a decrypted copy of your chosen audited html page. It should be identical to what you see in the Firefox browser, as well as what's stored in `tlsnotary/data/auditee/sessions/[session timestamp]/commit`.
 
 *Running an audit for real*:
 
@@ -59,8 +59,20 @@ In this case, an auditor will give you his public key. You should start up as be
 
 ![](/data/documentation/startreal.png)
 
-The rest of the audit process is exactly as for the 'Selftest mode' described above. Please note that, once you press "Finish" the html of the audited page is sent irretrievably to the auditor, so only press it once you're sure you're happy with that.
+The rest of the audit process is as for the 'self-test mode' described above.
 
+###Logging out
+An important security step for a real audit. In case the server is providing cookies (or equivalent session preserving data) in the response which you're about to send to the auditor, you don't want to give the auditor (even though they ought to be trustworthy for obvious reasons) any information that might let them login to your account, even temporarily. There is a simple solution. Follow these steps:
+
+1. Press AUDIT THIS PAGE
+2. Wait for the new tab to open as illustrated above.
+3. Check that the data in the html page is as you want (as described above).
+4. **LOG OUT** from your internet banking or other account that you're using.
+5. Press FINISH
+
+Please note that, once you press "Finish" **the html of the audited page is sent irretrievably to the auditor**, so only press it once you're sure you're happy with that.
+
+Finally, please note that the above instructions are only the technical instructions for how to run TLSNotary; they don't cover the other practical details of the audit, such as how any bitcoin payments/accounts are dealt with or timing restrictions. All of this will be covered in the trading software you're using (for example, [bitsquare](https://bitsquare.io)), and in any extra instructions given by your auditor.
 
 ###For historical reference###
 
@@ -68,5 +80,5 @@ The original idea started here: https://bitcointalk.org/index.php?topic=173220.0
 
 ###Contact###
 
-The authors (usernames dansmith_btc, waxwing and oakpacific) can be found on freenode.net IRC channel #bitsquare.io most of the time, and can also be contacted on reddit and bitcointalk.org.
+The authors (usernames dansmith_btc, waxwing and oakpacific) can be found on freenode.net IRC channel #bitsquare.io most of the time, and can also be contacted on reddit and bitcointalk.org. Alternatively, you can contact us at tlsnotarygroup~A~T~gmail.com.
 
