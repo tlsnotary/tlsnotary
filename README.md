@@ -37,7 +37,7 @@ If you were successful you should see a new Firefox window (separate from any ex
 
 You still have a few things to do before you can use TLSNotary in a real life audit. Notice in the above screen there are three radio buttons 'Normal Mode', 'Selftest mode' and 'Advanced'. Leave the mode as 'Selftest' for now. 'Advanced' is currently only used for setting the communication channel (IRC) with the auditor, and you can leave it at the default settings for self test (when you do a real audit, your auditor will tell you which settings to put here).
 
-*Performing the self test*:
+###Performing the self test###
 This is an essential first step - doing this enables you to find out if (a) your chosen audit website (e.g. bank) works correctly with TLSNotary and (b) the data gathered is as you need it to be.
 
 * Click 'Start selftest' and wait for the 'ready' message to appear (the 'AUDIT THIS PAGE' button will also go blue).
@@ -53,22 +53,26 @@ Notice two things: "Page decryption successful" in the status bar, and that a ne
 
 Once you're satisfied on these two points, you can click 'FINISH'. Note: in self-test mode, you are only "auditing yourself", so **no one else will see the data at this stage**. After a few seconds, you should see a message saying "Congratulations, the audit has acknowledged..." etc. This means the audit is succcessfully completed. Go to `tlsnotary/data/auditor/sessions/[session timestamp]/decrypted` and in that folder, you should see a decrypted copy of your chosen audited html page. It should be identical to what you see in the Firefox browser, as well as what's stored in `tlsnotary/data/auditee/sessions/[session timestamp]/commit`.
 
-*Running an audit for real*:
+###Logging out###
+An important security step for a real audit; but, you **must** know in advance that it will work, so you **must** do it in self-test first. 
 
-In this case, an auditor will give you his public key. You should start up as before, but now switch to 'Normal mode'. Paste the auditor's key into the given field and send your public key to the auditor. You will then, after waiting for confirmation that the auditor is ready, press "Connect" on a screen like this:
-
-![](/data/documentation/startreal.png)
-
-The rest of the audit process is as for the 'self-test mode' described above.
-
-###Logging out
-An important security step for a real audit. In case the server is providing cookies (or equivalent session preserving data) in the response which you're about to send to the auditor, you don't want to give the auditor (even though they ought to be trustworthy for obvious reasons) any information that might let them login to your account, even temporarily. There is a simple solution. Follow these steps:
+In case the server is providing cookies (or equivalent session preserving data) in the response which you're about to send to the auditor, you don't want to give the auditor (even though they ought to be trustworthy for obvious reasons) any information that might let them login to your account, even temporarily. There is a simple solution. Follow these steps (in self-test and real audits):
 
 1. Press AUDIT THIS PAGE
 2. Wait for the new tab to open as illustrated above.
 3. Check that the data in the html page is as you want (as described above).
 4. **LOG OUT** from your internet banking or other account that you're using.
 5. Press FINISH
+
+This way, any session cookies the auditor might see will no longer be valid. Also, don't forget that **because you are auditing an internal, logged in page, you are never going to send login credentials (passwords) to your auditor**. A nice sanity check is to open the html text file (as described above) and do a Ctrl-F find for any sensitive information such as passwords; if they're not there, you can be 100% sure you're not exposing them to your auditor, since that's the only data he/she will see.
+
+###Running an audit for real###
+
+In this case, an auditor will give you his public key. You should start up as before, but now switch to 'Normal mode'. Paste the auditor's key into the given field and send your public key to the auditor. You will then, after waiting for confirmation that the auditor is ready, press "Connect" on a screen like this:
+
+![](/data/documentation/startreal.png)
+
+The rest of the audit process is as for the 'self-test mode' described above.
 
 Please note that, once you press "Finish" **the html of the audited page is sent irretrievably to the auditor**, so only press it once you're sure you're happy with that.
 
