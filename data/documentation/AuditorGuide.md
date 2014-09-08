@@ -16,13 +16,13 @@ them. This is covered in some detail below.
 
 ###Setting up IRC.
 In the file `tlsnotary.ini` in the `data/shared` directory, there are three settings for IRC. We default to freenode,
-the most widely used IRC server, on the standard port 6667. However, you *should* practice to change the IRC channel to one that
+the most widely used IRC server, on the standard port 6667. However, you should probably change the IRC channel to one that
 you have created and registered. You need to register to enable voicing of new users. Here are the correct steps on freenode:
 
 ```
 /join #YourChanName
 /msg ChanServ REGISTER #YourChanName
-/msg ChanServ FLAGS #YourChanName V
+/msg ChanServ FLAGS #YourChanName *!*@* +V
 ```
 
 The correct steps can and will of course differ if you do not use freenode. Note that you need to tell your auditee the name of the channel you're using (and, if not the default freenode, also the server name and IRC port). They will be able to edit these settings in the Advanced tab in the auditee interface.
