@@ -172,8 +172,10 @@ class HandlerClass(SimpleHTTPServer.SimpleHTTPRequestHandler):
             tlssock.settimeout(int(shared.config.get("General","tcp_socket_timeout")))            
             tlsnSession = setUpTLSSession(pms_secret, pms_padding_secret,server_name,tlssock)
             verifyServer(processed_pk, tlsnSession)
-            negotiateCrippledSecrets(tlsnSession)
-            negotiateVerifyAndFinishHandshake(tlsnSession,tlssock)
+            retval = negotiateCrippledSecrets(tlsnSession)
+            if not retval == 'success': raise Exception(retval)
+            retval = negotiateVerifyAndFinishHandshake(tlsnSession,tlssock)
+            if not retval == 'success': raise Exception(retval)
             response = makeTLSNRequest(modified_headers,tlsnSession,tlssock)
             sf = str(len(cr_list))
             rv = decryptHTML(commitSession(tlsnSession, response,sf), tlsnSession, sf)
@@ -353,11 +355,11 @@ def negotiateCrippledSecrets(tlsnSession):
     ml = shared.ba2int(tlsnSession.serverModLength)
     RSA_PMS2 = rsapms_hmacms_hmacek[:ml]
     tlsnSession.encSecondHalfPMS = shared.ba2int(RSA_PMS2)
-    enc_pms = shared.bi2ba(tlsnSession.setEncryptedPMS()) #TODO: length? fixed argument
+    tlsnSession.setEncryptedPMS()
     tlsnSession.setMasterSecretHalf(half=2,providedPValue = rsapms_hmacms_hmacek[ml:ml+24])
     tlsnSession.pMasterSecretAuditor = rsapms_hmacms_hmacek[ml+24:ml+24+tlsnSession.cipherSuites[tlsnSession.chosenCipherSuite][-1]]
     tlsnSession.doKeyExpansion()    
-    return tlsnSession #accounts for state updates
+    return 'success'
 
 def negotiateVerifyAndFinishHandshake(tlsnSession,tlssock):
     '''Complete handshake (includes negotiation of verify data 
@@ -378,7 +380,7 @@ def negotiateVerifyAndFinishHandshake(tlsnSession,tlssock):
     if not reply[1].startswith('verify_hmac2:'):return("bad reply. Expected verify_hmac2:")
     if not tlsnSession.processServerCCSFinished(response,providedPValue = reply[1][len('verify_hmac2:'):]):
         raise Exception ("Could not finish handshake with server successfully. Audit aborted")
-    return tlsnSession
+    return 'success'
 
 def makeTLSNRequest(headers,tlsnSession,tlssock):
     '''Send TLS request including http headers and receive server response.'''
