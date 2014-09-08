@@ -245,7 +245,7 @@ function responseGetAdvanced(iteration){
 
 function responseGetRecentKeys(iteration){
     if (typeof iteration == "number"){
-        if (iteration > 5){setError("ERROR responseGetRecentKeys timed out");return;}
+        if (iteration > 20){setError("ERROR responseGetRecentKeys timed out");return;}
         if (!bGetRecentKeysResponded){ setTimeout(responseGetRecentKeys, 1000, ++iteration); }
         return;
     }
