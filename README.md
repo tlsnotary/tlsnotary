@@ -4,8 +4,8 @@ TLSNotary Overview
 1. [For the generally curious - a FAQ](/data/documentation/TLSNotaryFAQ.md)
 2. [How to install and run](#how-to-install-and-run)
 2. [User Guide](#user-guide) and in detail, for auditor: [Auditor Guide](/data/documentation/AuditorGuide.md).
-3. [Video version of the above](https://www.youtube.com/playlist?list=PLnSCooZY6_w9j5tQ8jAeZtrl9l4NnL48G) for a more hands-on education style. This is a little out of date and will be updated soon.
-5. [Algorithm white paper](/data/documentation/TLSNotary.pdf)  (here be dragons).
+3. [Video version of the above](https://www.youtube.com/watch?v=kKdEhuiXYz4&list=PLnSCooZY6_w9j5tQ8jAeZtrl9l4NnL48G&index=3) for a more hands-on education style.
+5. [Algorithm white paper](/data/documentation/TLSNotary.pdf)  (here be dragons). Discussion of algorithm in [video](https://www.youtube.com/watch?v=b4ukd4I8S9A&list=PLnSCooZY6_w9j5tQ8jAeZtrl9l4NnL48G&index=2).
 5. [Peer messaging protocol spec](/data/documentation/TLSNotary_messaging.md) - technical details of auditor/auditee communication.
 
 
