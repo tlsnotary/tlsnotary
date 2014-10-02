@@ -84,5 +84,5 @@ The original idea started here: https://bitcointalk.org/index.php?topic=173220.0
 
 ###Contact###
 
-The authors (usernames dansmith_btc, waxwing and oakpacific) can be found on freenode.net IRC channel #bitsquare.io most of the time, and can also be contacted on reddit and bitcointalk.org. Alternatively, you can contact us at tlsnotarygroup~A~T~gmail.com.
+The authors (usernames dansmith_btc, waxwing and oakpacific) can be found on freenode.net IRC channel #tlsnotary-chat most of the time, and can also be contacted on reddit and bitcointalk.org. Alternatively, you can contact us at tlsnotarygroup~A~T~gmail.com.
 
