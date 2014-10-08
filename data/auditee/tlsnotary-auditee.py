@@ -412,6 +412,7 @@ def commitSession(tlsnSession,response,sf):
             raise Exception ('bad reply. Expected sha1hmac_for_MS')    
     return reply[1][len('sha1hmac_for_MS:'):]
 
+
 def decryptHTML(sha1hmac, tlsnSession,sf):
     '''Receive correct server mac key and then decrypt server response (html),
     (includes authentication of response). Submit resulting html for browser
@@ -421,6 +422,7 @@ def decryptHTML(sha1hmac, tlsnSession,sf):
     tlsnSession.doKeyExpansion()
     plaintext,bad_mac = tlsnSession.processServerAppDataRecords(checkFinished=True)
     if bad_mac: print ("WARNING! Plaintext is not authenticated.")
+    plaintext = shared.dechunkHTTP(plaintext)
     with open(join(current_sessiondir,'session_dump'+sf),'wb') as f: f.write(tlsnSession.dump())
     commit_dir = join(current_sessiondir, 'commit')
     html_path = join(commit_dir,'html-'+sf)
