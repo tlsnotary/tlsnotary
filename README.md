@@ -11,7 +11,7 @@ TLSNotary Overview
 
 ###Really, really short version: ###
 
-TLSNotary allows the auditee to prove to the auditor that a certain https page is present in the auditee's browser.
+TLSNotary allows the auditee to prove to the auditor that a certain https page is present in the auditee's browser, without revealing passwords or credentials to the auditor.
 This can be used e.g. when the auditee must prove to an arbitrator that a bank transfer has been made.
 
 ##How to install and run##
