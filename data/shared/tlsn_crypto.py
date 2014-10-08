@@ -246,7 +246,9 @@ class TLSNSSLClientSession(object):
         self.serverRandom = self.handshakeMessages[1][11:43]
         #extract the cipher suite
         #if a session id was provided, it will be preceded by its length 32:
-        cs_start_byte = 43 if self.handshakeMessages[1][43] != '\x20' else 43+1+32
+        #note: 44 = 1 tls record type + 2 tls ver + 2 record length + 1 handshake type
+        # + 3 handshake length + 2 tls ver + 32 server random + 1 session id lenth (zero)
+        cs_start_byte = 44 if self.handshakeMessages[1][43] != '\x20' else 43+1+32
         if self.handshakeMessages[1][cs_start_byte] != '\x00' or \
            ord(self.handshakeMessages[1][cs_start_byte+1]) not in self.cipherSuites.keys():
             raise Exception("Could not locate cipher suite choice in server hello.")
