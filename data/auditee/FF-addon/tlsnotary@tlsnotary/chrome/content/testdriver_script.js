@@ -6,10 +6,9 @@ var tlsnCipherSuiteList;
 var tlsnLinkIndex=0;
 var tlsnCipherSuiteNames=["security.ssl3.rsa_aes_128_sha","security.ssl3.rsa_aes_256_sha","security.ssl3.rsa_rc4_128_md5","security.ssl3.rsa_rc4_128_sha"]
 //copied from https://developer.mozilla.org/en-US/docs/Code_snippets/Progress_Listeners
-//these const are already declared in script.js, if we declare them again, this script won't run
 const STATE_STOP = Ci.nsIWebProgressListener.STATE_STOP;
 const STATE_IS_WINDOW = Ci.nsIWebProgressListener.STATE_IS_WINDOW;
-//wait for the page to fully load before we press RECORD
+//wait for the page to fully load before we press AUDIT
 var tlsnLoadListener = {
 	QueryInterface: XPCOMUtils.generateQI(["nsIWebProgressListener",
 										   "nsISupportsWeakReference"]),
@@ -29,7 +28,7 @@ var tlsnLoadListener = {
 
 
 if ("true" == Cc["@mozilla.org/process/environment;1"].getService(Ci.nsIEnvironment).get("TLSNOTARY_TEST")){
-		setTimeout(tlsnInitTesting,3000); //allow some time for startIRC button to activate
+		setTimeout(tlsnInitTesting,3000); //allow some time for Connect button to activate
 		testingMode = true;
 }
 
@@ -89,16 +88,16 @@ function responseGetUrls(iteration){
     var cipherSuiteList = reqGetUrls.getResponseHeader("cs_list");
     linkArray = tlsnUrlList.split(',');
     tlsnCipherSuiteList = cipherSuiteList.split(',');
-    //urls received, start the connection over IRC
+    //urls received, start the p2p connection
     var btn = content.document.getElementById("start_button");
     tlsnSimulateClick(btn);
     //wait for status bar to show readiness.
-    waitForIRCStarted();
+    waitForP2PConnection();
 }
 
 
 //The main addon will put ERROR message on timeout
-function waitForIRCStarted(){
+function waitForP2PConnection(){
 	var helpmsg = document.getElementById("help").value;
 	if (helpmsg.startsWith("ERROR")){
 		tlsnSendErrorMsg("Error received in browser: "+helpmsg +
@@ -110,7 +109,7 @@ function waitForIRCStarted(){
 		setTimeout(waitForIRCStarted, 1000);
 		return;      
 	}
-	//else connected to IRC
+	//else connected to peer
 	openNextLink();
 }
 
@@ -153,7 +152,7 @@ function waitForRecordingToFinish(iteration){
     }
     if (!(helpmsg.startsWith("Page decryption successful."))) {    
 		if (iteration > 360){
-			tlsnSendErrorMsg("Timed out waiting for page to load and reload "
+			tlsnSendErrorMsg("Timed out waiting for page audit to finish"
 							 +linkArray[tlsnLinkIndex-1]+" and cipher suite: "+
 							 tlsnCipherSuiteNames[tlsnCipherSuiteList[tlsnLinkIndex-1]]);
 			return;

@@ -116,16 +116,6 @@ class HandlerClass(SimpleHTTPServer.SimpleHTTPRequestHandler):
         print ('minihttp received ' + self.path + ' request',end='\r\n')
         # example HEAD string "/command?parameter=124value1&para2=123value2"
         # we need to adhere to CORS and add extra Access-Control-* headers in server replies
-       
-        if self.path.startswith('/type_filepath'):
-            rv = type_filepath()
-            self.send_response(200)
-            self.send_header("Access-Control-Allow-Origin", "*")
-            self.send_header("Access-Control-Expose-Headers", "response, status")
-            self.send_header("response", "type_filepath")
-            self.send_header("status", rv)
-            self.end_headers()
-            return
 
         if self.path.startswith('/get_websites'):
             #'get websites' doubles as a request to start (note for now
@@ -158,14 +148,6 @@ class HandlerClass(SimpleHTTPServer.SimpleHTTPRequestHandler):
             perform_final_check()
             #we won't bother to respond
 
-
-def type_filepath():
-    retval = subprocess.check_output(['./xdotoolscript.sh'],shell=True)
-    #I *think* xdotool returns nothing on success; TODO check so as to be
-    #able to report something meaningful to the front end.
-    if not retval:
-        retval = 'success'
-    return retval
 
 def perform_final_check():
 
@@ -297,8 +279,6 @@ def start_auditee(parentthread):
 
 if __name__ == "__main__":
 
-    global website_list_file
-    global ffdir
     website_list_file = sys.argv[1]
     if len(sys.argv) > 2: ffdir = sys.argv[2]
 
