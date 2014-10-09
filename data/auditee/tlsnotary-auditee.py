@@ -44,7 +44,8 @@ rsModulus = None
 rsExponent = None
 rsChoice = None
 firefox_pid = selftest_pid = 0
-cr_list = [] #a list of all client_randoms used to index html files audited.
+audit_no = 0 #we may be auditing multiple URLs. This var keeps track of how many 
+#successful audits there were so far and is used to index html files audited.
 
 #RSA key management for peer messaging
 def import_auditor_pubkey(auditor_pubkey_b64modulus):
@@ -177,7 +178,9 @@ class HandlerClass(SimpleHTTPServer.SimpleHTTPRequestHandler):
             retval = negotiateVerifyAndFinishHandshake(tlsnSession,tlssock)
             if not retval == 'success': raise Exception(retval)
             response = makeTLSNRequest(modified_headers,tlsnSession,tlssock)
-            sf = str(len(cr_list))
+            global audit_no
+            audit_no += 1 #we want to increase only after server responded with data
+            sf = str(audit_no)
             rv = decryptHTML(commitSession(tlsnSession, response,sf), tlsnSession, sf)
             if rv[0] == 'success': html_paths = b64encode(rv[1])
             self.respond({'response':'prepare_pms', 'status':rv[0],'html_paths':html_paths})
@@ -323,7 +326,6 @@ def setUpTLSSession(pms_secret,pms_padding_secret,server_name,tlssock):
         response += shared.recv_socket(tlssock,isHandshake=True)
     if not tlsnSession.processServerHello(response):
         raise Exception("Failure in processing of server Hello from " + tlsnSession.serverName)
-    cr_list.append(tlsnSession.clientRandom)
     tlsnSession.extractModAndExp()    
     return tlsnSession
 
