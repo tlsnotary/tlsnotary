@@ -106,7 +106,7 @@ function waitForP2PConnection(){
 		return; //give up
 	}
 	if (!helpmsg.startsWith("Go to a page")){
-		setTimeout(waitForIRCStarted, 1000);
+		setTimeout(waitForP2PConnection, 1000);
 		return;      
 	}
 	//else connected to peer
