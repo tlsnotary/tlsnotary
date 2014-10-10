@@ -669,17 +669,24 @@ if __name__ == "__main__":
                 raise Exception ("Could not set firefox install path")
             firefox_install_path = '/usr/lib/firefox'
         elif OS=='mswin':
+            bFound = False
             prog64 = os.getenv('ProgramW6432')
             prog32 = os.getenv('ProgramFiles(x86)')
-            progxp = os.getenv('ProgramFiles')
-            if os.path.exists(join(prog64,'Mozilla Firefox')):
-                firefox_install_path = join(prog64,'Mozilla Firefox')
-            elif os.path.exists(join(prog32,'Mozilla Firefox')):
-                firefox_install_path = join(prog32,'Mozilla Firefox')
-            elif os.path.exists(join(progxp,'Mozilla Firefox')):
-                firefox_install_path = join(progxp,'Mozilla Firefox')
-            if not firefox_install_path:
-                raise Exception('Could not set firefox install path')
+            progxp = os.getenv('ProgramFiles')			
+            if prog64:
+                if os.path.exists(join(prog64,'Mozilla Firefox')):
+                    firefox_install_path = join(prog64,'Mozilla Firefox')
+                    bFound = True
+                if not bFound and prog32:
+                    if os.path.exists(join(prog32,'Mozilla Firefox')):
+                        firefox_install_path = join(prog32,'Mozilla Firefox')
+                        bFound = True
+                if not bFound and progxp:
+                    if os.path.exists(join(progxp,'Mozilla Firefox')):
+                        firefox_install_path = join(progxp,'Mozilla Firefox')
+                        bFound = True
+                if not bFound:
+                    raise Exception('Could not set firefox install path')
         elif OS=='macos':
             if not os.path.exists(join("/","Applications","Firefox.app")):
                 raise Exception("Could not set firefox install path")
