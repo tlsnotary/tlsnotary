@@ -210,19 +210,34 @@ class HandlerClass(SimpleHTTPServer.SimpleHTTPRequestHandler):
         #----------------------------------------------------------------------#
         if self.path.startswith('/prepare_pms'):
             arg_str = self.path.split('?',1)[1]
-            if not arg_str.startswith('b64headers='):
+            arg1, arg2 = arg_str.split('&')
+            if not arg1.startswith('b64dercert=') or not arg2.startswith('b64headers='):
                 self.respond({'response':'prepare_pms', 'status':'wrong HEAD parameter'})
                 return
-            b64headers = arg_str[len('b64headers='):]
-            sha1_and_headers = b64decode(b64headers)
-            raw_pk = sha1_and_headers[:59]
-            processed_pk = binascii.unhexlify(raw_pk.replace(':',''))
-            pms_secret,pms_padding_secret = prepare_pms()
-            server_name, modified_headers = parse_headers(sha1_and_headers[59:])
+            b64dercert = arg1[len('b64dercert='):]            
+            b64headers = arg2[len('b64headers='):]
+            dercert = b64decode(b64dercert)
+            headers = b64decode(b64headers)
+            pms_secret, pms_padding_secret = prepare_pms()
+            server_name, modified_headers = parse_headers(headers)
+
+            #make a dummy request just to get the certificate
+            #you will have to comment out the dercert= above if u want to use this
+            #dummytlssock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            #dummytlssock.settimeout(int(shared.config.get("General","tcp_socket_timeout")))
+            #dummytlsnSession = shared.TLSNSSLClientSession(server_name,ccs=5,audit=True)
+            #startTLSSession(dummytlsnSession, dummytlssock)
+            #dummytlsnSession.extractCertificate()
+            #dercert = dummytlsnSession.serverCertificate
+
+            tlsnSession = shared.TLSNSSLClientSession(server_name,ccs=5,audit=True)                        
+            prepare_encrypted_pms(tlsnSession, dercert, pms_secret, pms_padding_secret)
             tlssock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            tlssock.settimeout(int(shared.config.get("General","tcp_socket_timeout")))            
-            tlsnSession = setUpTLSSession(pms_secret, pms_padding_secret,server_name,tlssock)
-            verifyServer(processed_pk, tlsnSession)
+            tlssock.settimeout(int(shared.config.get("General","tcp_socket_timeout")))
+            startTLSSession(tlsnSession, tlssock)
+            #compare this ongoing audit's cert to the one 
+            #we used from the browser in prepare_encrypted_pms
+            verifyServer(dercert, tlsnSession)
             retval = negotiateCrippledSecrets(tlsnSession)
             if not retval == 'success': raise Exception(retval)
             retval = negotiateVerifyAndFinishHandshake(tlsnSession,tlssock)
@@ -330,6 +345,25 @@ def prepare_pms():
                      'double check that you are using a valid public key modulus for this site; '+\
                      'it may have expired.')
 
+
+def prepare_encrypted_pms(tlsnSession, certDER, pms_secret, pms_padding_secret):
+    tlsnSession.auditeeSecret, tlsnSession.auditeePaddingSecret = pms_secret, pms_padding_secret
+    n_int, e_int = tlsnSession.extractModAndExp(certDER)
+    n = shared.bi2ba(n_int)
+    e = shared.bi2ba(e_int)
+    len_n = shared.bi2ba(len(n))
+    reply = send_and_recv('n_e:'+len_n+n+e)
+    if reply[0] != 'success': return ('Failed to receive a reply for n_e:')
+    if not reply[1].startswith('rsapms:'):
+        return 'bad reply. Expected rsapms:'
+    rsapms = reply[1][len('rsapms:'):]
+    assert len(rsapms) == len(n)
+    tlsnSession.serverModulus = shared.ba2int(n)
+    tlsnSession.serverModLength = len_n
+    tlsnSession.encSecondHalfPMS = shared.ba2int(rsapms)
+    tlsnSession.setEncFirstHalfPMS()
+    tlsnSession.setEncryptedPMS()    
+
     
 #peer messaging protocol
 def send_and_recv (data,timeout=5):
@@ -371,12 +405,10 @@ def parse_headers(headers):
         
     return (server,modified_headers)
     
-def setUpTLSSession(pms_secret,pms_padding_secret,server_name,tlssock):
+def startTLSSession(tlsnSession, tlssock):
     '''Construct ssl client session object and do
     client hello, server hello, server hello done, certificate
     initial phase of handshake.'''
-    tlsnSession = shared.TLSNSSLClientSession(server_name,ccs=5,audit=True)
-    tlsnSession.auditeeSecret,tlsnSession.auditeePaddingSecret = pms_secret,pms_padding_secret
     tlssock.connect((tlsnSession.serverName, tlsnSession.sslPort))
     tlssock.send(tlsnSession.handshakeMessages[0])
     response = shared.recv_socket(tlssock,isHandshake=True)
@@ -387,13 +419,13 @@ def setUpTLSSession(pms_secret,pms_padding_secret,server_name,tlssock):
         response += shared.recv_socket(tlssock,isHandshake=True)
     if not tlsnSession.processServerHello(response):
         raise Exception("Failure in processing of server Hello from " + tlsnSession.serverName)
-    tlsnSession.extractModAndExp()    
-    return tlsnSession
 
-def verifyServer(claimed_cert_sha,tlsnSession):
+def verifyServer(claimed_cert, tlsnSession):
     '''Verify the server certificate by comparing that provided
     with the one that firefox already verified.'''
+    tlsnSession.extractCertificate()
     our_cert_sha = sha1(tlsnSession.serverCertificate).digest()
+    claimed_cert_sha = sha1(claimed_cert).digest()
     if not our_cert_sha == claimed_cert_sha:
         print ("Tlsnotary session certificate hash was:",binascii.hexlify(our_cert_sha))
         print ("Browser certificate hash was: ",binascii.hexlify(claimed_cert_sha))
@@ -406,21 +438,15 @@ def negotiateCrippledSecrets(tlsnSession):
     '''Negotiate with auditor in order to create valid session keys
     (except server mac is garbage as auditor withholds it)'''
     tlsnSession.setAuditeeSecret()
-    cr_sr_hmac_n_e= chr(tlsnSession.chosenCipherSuite)+tlsnSession.clientRandom+tlsnSession.serverRandom+ \
-                tlsnSession.pAuditee[:24]+tlsnSession.serverModLength+\
-                shared.bi2ba(tlsnSession.serverModulus)+\
-                shared.bi2ba(tlsnSession.serverExponent)
-    reply = send_and_recv('cr_sr_hmac_n_e:'+cr_sr_hmac_n_e)
-    if reply[0] != 'success': return ('Failed to receive a reply for cr_sr_hmac_n_e:')
-    if not reply[1].startswith('rsapms_hmacms_hmacek:'):
-        return 'bad reply. Expected rsapms_hmacms_hmacek:'
-    rsapms_hmacms_hmacek = reply[1][len('rsapms_hmacms_hmacek:'):]
-    ml = shared.ba2int(tlsnSession.serverModLength)
-    RSA_PMS2 = rsapms_hmacms_hmacek[:ml]
-    tlsnSession.encSecondHalfPMS = shared.ba2int(RSA_PMS2)
-    tlsnSession.setEncryptedPMS()
-    tlsnSession.setMasterSecretHalf(half=2,providedPValue = rsapms_hmacms_hmacek[ml:ml+24])
-    tlsnSession.pMasterSecretAuditor = rsapms_hmacms_hmacek[ml+24:ml+24+tlsnSession.cipherSuites[tlsnSession.chosenCipherSuite][-1]]
+    cr_sr_hmac= chr(tlsnSession.chosenCipherSuite)+tlsnSession.clientRandom+tlsnSession.serverRandom+ \
+                tlsnSession.pAuditee[:24]
+    reply = send_and_recv('cr_sr_hmac:'+cr_sr_hmac)
+    if reply[0] != 'success': return ('Failed to receive a reply for cr_sr_hmac:')
+    if not reply[1].startswith('hmacms_hmacek:'):
+        return 'bad reply. Expected hmacms_hmacek:'
+    hmacms_hmacek = reply[1][len('hmacms_hmacek:'):]
+    tlsnSession.setMasterSecretHalf(half=2,providedPValue = hmacms_hmacek[:24])
+    tlsnSession.pMasterSecretAuditor = hmacms_hmacek[24:24+tlsnSession.cipherSuites[tlsnSession.chosenCipherSuite][-1]]
     tlsnSession.doKeyExpansion()    
     return 'success'
 
