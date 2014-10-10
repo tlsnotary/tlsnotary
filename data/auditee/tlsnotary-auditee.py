@@ -512,7 +512,40 @@ def start_firefox(FF_to_backend_port, firefox_install_path):
         
     local_ff_copy = join(datadir,'Firefox.app') if OS=='macos' else join(datadir,'firefoxcopy')
     if not os.path.exists(local_ff_copy):
-        shutil.copytree(firefox_install_path,local_ff_copy) 
+        #on my fresh ubuntu 14.04 the file 'hyphenation' is a broken link which
+        #causes shutil.copytree to throw an Exception
+        #Some other links may be broken on other systems
+        #Let's find the list of all broken links anf ignore them when copying
+        broken_links = []
+        for root, dirs, files in os.walk(firefox_install_path):         
+            for name  in dirs+files:
+                path = join(root, name)
+                if not os.path.islink(path): continue
+                #check if link's broken
+                target_relpath = os.readlink(path)
+                target_path = os.path.realpath(join(root, target_relpath))
+                if not os.path.exists(path): broken_links.append(path)
+        if len(broken_links):
+            def ignore_callback(directory, files):
+                """Return a non-empty ignore list only for broken links"""
+                if not  files: #this is a callback for one directory only
+                    if directory in broken_links: return (directory)
+                    else: return ()
+                #else this is a callback for a list of files
+                files_fullpaths = [join(directory, onefile) for onefile in files]
+                ignore_fullpath = list(set(broken_links) & set(files_fullpaths))
+                if ignore_fullpath: #we need a list of basenames, not full paths
+                    return [os.path.basename(onepath) for onepath in ignore_fullpath]
+                else: return ()
+        try:
+            #enable the callback only if there is actually a broken link            
+            shutil.copytree(firefox_install_path, local_ff_copy, 
+                        ignore=ignore_callback if len(broken_links) else None)
+        except  Exception,e:   
+            #we dont want a half-copied dir. Delete everything and rethrow
+            shutil.rmtree(local_ff_copy)
+            raise e
+        
     firefox_exepath = join(*([local_ff_copy]+ffbinloc[OS]))
     
     logs_dir = join(datadir, 'logs')
