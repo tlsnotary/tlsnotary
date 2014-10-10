@@ -64,11 +64,11 @@ TSHARK_NOT_FOUND = 10
 def cleanup_and_exit():
     if testRetval != 0: #there was an error, leave the auditee's browser running for some post-mortem analysis
         os.kill(auditor_pid, signal.SIGTERM)
-        exit(1)
+        os._exit(1)
     else:
         os.kill(auditor_pid, signal.SIGTERM)
         os.kill(auditee_pid, signal.SIGTERM)
-        exit(0)
+        os._exit(0)
 
 
 #logging, primitively
@@ -305,17 +305,17 @@ if __name__ == "__main__":
             continue
         elif thread.retval[0] == 'failure':
             print ('Failed to start minihttpd server. Please investigate')
-            exit(MINIHTTPD_FAILURE)
+            sys.exit(MINIHTTPD_FAILURE)
         elif thread.retval[0] == 'success':
             bWasStarted = True
             break
         else:
             print ('Unexpected minihttpd server response. Please investigate')
-            exit(MINIHTTPD_WRONG_RESPONSE)
+            sys.exit(MINIHTTPD_WRONG_RESPONSE)
 
     if bWasStarted == False:
         print ('minihttpd failed to start in 10 secs. Please investigate')
-        exit(MINIHTTPD_START_TIMEOUT)
+        sys.exit(MINIHTTPD_START_TIMEOUT)
 
     while True:
         if testFinished == True:
