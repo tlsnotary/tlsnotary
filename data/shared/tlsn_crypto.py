@@ -260,14 +260,20 @@ class TLSNSSLClientSession(object):
     def setEncryptedPMS(self):
         assert (self.encFirstHalfPMS and self.encSecondHalfPMS and self.serverModulus), \
             'failed to set encpms, first half was: ' + str(self.encFirstHalfPMS) +\
-            ' second half was: ' + self.encSecondHalfPMS + ' modulus was: ' + self.serverModulus
+            ' second half was: ' + str(self.encSecondHalfPMS) + ' modulus was: ' + str(self.serverModulus)
         self.encPMS =  self.encFirstHalfPMS * self.encSecondHalfPMS % self.serverModulus
         return self.encPMS
 
+    def setEncFirstHalfPMS(self):
+        assert (self.serverModulus and not self.encFirstHalfPMS)
+        oneslength = 23            
+        pms1 = tlsver+self.auditeeSecret + ('\x00' * (24-2-self.nAuditeeEntropy))
+        self.encFirstHalfPMS = pow(ba2int('\x02'+('\x01'*(oneslength))+\
+        self.auditeePaddingSecret+'\x00'+pms1 +'\x00'*23 + '\x01'), self.serverExponent, self.serverModulus)
+     
     def setAuditeeSecret(self):
         '''Sets up the auditee's half of the preparatory
-        secret material to create the master secret, and
-        the encrypted premaster secret.'''
+        secret material to create the master secret.'''
         assert self.clientRandom and self.serverRandom,"one of client or server random not set"
         if not self.auditeeSecret:
             self.auditeeSecret = os.urandom(self.nAuditeeEntropy)             
@@ -277,18 +283,15 @@ class TLSNSSLClientSession(object):
         seed = self.clientRandom + self.serverRandom
         pms1 = tlsver+self.auditeeSecret + ('\x00' * (24-2-self.nAuditeeEntropy))
         self.pAuditee = TLS10PRF(label+seed,first_half = pms1)[0]
-        #we can construct the encrypted form if pubkey is known
-        if (self.serverModulus and not self.encFirstHalfPMS):
-            oneslength = 23            
-            self.encFirstHalfPMS = pow(ba2int('\x02'+('\x01'*(oneslength))+\
-        self.auditeePaddingSecret+'\x00'+pms1 +'\x00'*23 + '\x01'), self.serverExponent, self.serverModulus)
+        #encrypted PMS has already been calculated before the audit began
+        return (self.pAuditee)
 
-        #can construct the full encrypted pre master secret if
-        #the auditor's half is already calculated
-        if (self.encSecondHalfPMS):
-            self.setEncryptedPMS()
-
-        return (self.pAuditee,self.encPMS)
+    def setEncSecondHalfPMS(self):
+        assert (self.serverModulus and not self.encFirstHalfPMS)
+        oneslength = 103+ba2int(self.serverModLength)-256
+        pms2 =  self.auditorSecret + ('\x00' * (24-self.nAuditorEntropy-1)) + '\x01'
+        self.encSecondHalfPMS = pow( ba2int('\x01'+('\x01'*(oneslength))+\
+        self.auditorPaddingSecret+ ('\x00'*25)+pms2), self.serverExponent, self.serverModulus )
 
     def setAuditorSecret(self):
         '''Sets up the auditor's half of the preparatory
@@ -304,12 +307,7 @@ class TLSNSSLClientSession(object):
         seed = self.clientRandom + self.serverRandom
         pms2 =  self.auditorSecret + ('\x00' * (24-self.nAuditorEntropy-1)) + '\x01'
         self.pAuditor = TLS10PRF(label+seed,second_half = pms2)[1]
-        #we can construct the encrypted form if pubkey is known
-        if (self.serverModulus and not self.encSecondHalfPMS):
-            oneslength = 103+ba2int(self.serverModLength)-256
-            self.encSecondHalfPMS = pow( ba2int('\x01'+('\x01'*(oneslength))+\
-            self.auditorPaddingSecret+ ('\x00'*25)+pms2), self.serverExponent, self.serverModulus )
-        return (self.pAuditor,self.encSecondHalfPMS)
+        return (self.pAuditor)
 
     def extractCertificate(self):
         assert self.handshakeMessages[2], "Cannot extract certificate, no handshake message present."
@@ -318,14 +316,13 @@ class TLSNSSLClientSession(object):
         return self.serverCertificate
 
     def extractModAndExp(self,certDER=None):
-        if not certDER: self.extractCertificate()
+        if not certDER: 
+            self.extractCertificate()
+            DERdata = self.serverCertificate
+        else: DERdata = certDER
         assert (self.serverCertificate or certDER), "No server certificate, cannot extract pubkey"
-        if certDER:
-            rv  = decoder.decode(certDER, asn1Spec=univ.Sequence())
-            bitstring = rv[0].getComponentByPosition(1)
-        else:
-            rv  = decoder.decode(self.serverCertificate, asn1Spec=univ.Sequence())
-            bitstring = rv[0].getComponentByPosition(0).getComponentByPosition(6).getComponentByPosition(1)
+        rv  = decoder.decode(DERdata, asn1Spec=univ.Sequence())
+        bitstring = rv[0].getComponentByPosition(0).getComponentByPosition(6).getComponentByPosition(1)
         #bitstring is a list of ints, like [01110001010101000...]
         #convert it into into a string   '01110001010101000...'
         stringOfBits = ''
@@ -709,6 +706,7 @@ class TLSNSSLClientSession(object):
         self.setMasterSecretHalf() #default values means full MS created
         self.doKeyExpansion()
         self.encSecondHalfPMS = ba2int(rsapms2)
+        self.setEncFirstHalfPMS()
         self.setEncryptedPMS()
         return self.getCKECCSF()
         
