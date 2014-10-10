@@ -86,7 +86,7 @@ class HandlerClass(SimpleHTTPServer.SimpleHTTPRequestHandler):
     #HTTP/1.0 instead of HTTP/1.1 is crucial, otherwise the http server just keep hanging
     #https://mail.python.org/pipermail/python-list/2013-April/645128.html
     protocol_version = 'HTTP/1.0'      
-
+    
     def respond(self, headers):
         # we need to adhere to CORS and add extra Access-Control-* headers in server replies                
         keys = [k for k in headers]
@@ -98,7 +98,7 @@ class HandlerClass(SimpleHTTPServer.SimpleHTTPRequestHandler):
         self.end_headers()        
     
     def do_HEAD(self):      
-        print ('minihttp received ' + self.path + ' request',end='\r\n')
+        print ('minihttp received ' + self.path[:80] + ' request',end='\r\n')
         # example HEAD string "/command?parameter=124value1&para2=123value2"    
         if self.path.startswith('/get_recent_keys'):
             #the very first command from addon 
@@ -230,6 +230,17 @@ class HandlerClass(SimpleHTTPServer.SimpleHTTPRequestHandler):
         else:
             self.respond({'response':'unknown command'})
             return
+
+    #overriding BaseHTTPServer.py's method to cap the output
+    #FIXME::: This doesnt work however, despite various online examples
+    #https://code.google.com/p/selenium/source/browse/py/test/selenium/webdriver/common/webserver.py
+    #maybe has to do with this handler running in a thread
+    def log_message(self, format, *args):
+        sys.stderr.write("%s - - [%s] %s\n" %
+                                  (self.client_address[0],
+                                   self.log_date_time_string(),
+                                   (format%args)[:80]))
+        
 
 #Because there is a 1 in ? chance that the encrypted PMS will contain zero bytes in its
 #padding, we first try the encrypted PMS with a reliable site and see if it gets rejected.
