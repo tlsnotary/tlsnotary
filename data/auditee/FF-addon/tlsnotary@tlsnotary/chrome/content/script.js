@@ -188,6 +188,7 @@ function responsePreparePMS(iteration){
 
     //in new tlsnotary, perhaps there cannot be more than one html,
     //but kept in a loop just in case
+    go_offline_for_a_moment(); //prevents loading images from cache
     for (var i=0; i<html_paths.length; i++){
         var browser = gBrowser.getBrowserForTab(gBrowser.addTab(html_paths[i]));
     }
@@ -198,6 +199,15 @@ function responsePreparePMS(iteration){
     button_stop_disabled.hidden = true;
     button_stop_enabled.hidden = false;
 }
+
+
+function go_offline_for_a_moment(){
+	BrowserOffline.toggleOfflineStatus();
+	setTimeout(function(){
+		BrowserOffline.toggleOfflineStatus();
+		}, 3000)
+}
+
 
 function stopRecording(){
     help.value = "Preparing the data to be sent to the auditor"

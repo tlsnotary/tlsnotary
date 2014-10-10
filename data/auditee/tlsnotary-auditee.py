@@ -44,7 +44,8 @@ rsModulus = None
 rsExponent = None
 rsChoice = None
 firefox_pid = selftest_pid = 0
-cr_list = [] #a list of all client_randoms used to index html files audited.
+audit_no = 0 #we may be auditing multiple URLs. This var keeps track of how many 
+#successful audits there were so far and is used to index html files audited.
 
 #RSA key management for peer messaging
 def import_auditor_pubkey(auditor_pubkey_b64modulus):
@@ -177,7 +178,9 @@ class HandlerClass(SimpleHTTPServer.SimpleHTTPRequestHandler):
             retval = negotiateVerifyAndFinishHandshake(tlsnSession,tlssock)
             if not retval == 'success': raise Exception(retval)
             response = makeTLSNRequest(modified_headers,tlsnSession,tlssock)
-            sf = str(len(cr_list))
+            global audit_no
+            audit_no += 1 #we want to increase only after server responded with data
+            sf = str(audit_no)
             rv = decryptHTML(commitSession(tlsnSession, response,sf), tlsnSession, sf)
             if rv[0] == 'success': html_paths = b64encode(rv[1])
             self.respond({'response':'prepare_pms', 'status':rv[0],'html_paths':html_paths})
@@ -323,7 +326,6 @@ def setUpTLSSession(pms_secret,pms_padding_secret,server_name,tlssock):
         response += shared.recv_socket(tlssock,isHandshake=True)
     if not tlsnSession.processServerHello(response):
         raise Exception("Failure in processing of server Hello from " + tlsnSession.serverName)
-    cr_list.append(tlsnSession.clientRandom)
     tlsnSession.extractModAndExp()    
     return tlsnSession
 
@@ -412,6 +414,7 @@ def commitSession(tlsnSession,response,sf):
             raise Exception ('bad reply. Expected sha1hmac_for_MS')    
     return reply[1][len('sha1hmac_for_MS:'):]
 
+
 def decryptHTML(sha1hmac, tlsnSession,sf):
     '''Receive correct server mac key and then decrypt server response (html),
     (includes authentication of response). Submit resulting html for browser
@@ -421,6 +424,7 @@ def decryptHTML(sha1hmac, tlsnSession,sf):
     tlsnSession.doKeyExpansion()
     plaintext,bad_mac = tlsnSession.processServerAppDataRecords(checkFinished=True)
     if bad_mac: print ("WARNING! Plaintext is not authenticated.")
+    plaintext = shared.dechunkHTTP(plaintext)
     with open(join(current_sessiondir,'session_dump'+sf),'wb') as f: f.write(tlsnSession.dump())
     commit_dir = join(current_sessiondir, 'commit')
     html_path = join(commit_dir,'html-'+sf)
@@ -508,7 +512,40 @@ def start_firefox(FF_to_backend_port, firefox_install_path):
         
     local_ff_copy = join(datadir,'Firefox.app') if OS=='macos' else join(datadir,'firefoxcopy')
     if not os.path.exists(local_ff_copy):
-        shutil.copytree(firefox_install_path,local_ff_copy) 
+        #on my fresh ubuntu 14.04 the file 'hyphenation' is a broken link which
+        #causes shutil.copytree to throw an Exception
+        #Some other links may be broken on other systems
+        #Let's find the list of all broken links anf ignore them when copying
+        broken_links = []
+        for root, dirs, files in os.walk(firefox_install_path):         
+            for name  in dirs+files:
+                path = join(root, name)
+                if not os.path.islink(path): continue
+                #check if link's broken
+                target_relpath = os.readlink(path)
+                target_path = os.path.realpath(join(root, target_relpath))
+                if not os.path.exists(path): broken_links.append(path)
+        if len(broken_links):
+            def ignore_callback(directory, files):
+                """Return a non-empty ignore list only for broken links"""
+                if not  files: #this is a callback for one directory only
+                    if directory in broken_links: return (directory)
+                    else: return ()
+                #else this is a callback for a list of files
+                files_fullpaths = [join(directory, onefile) for onefile in files]
+                ignore_fullpath = list(set(broken_links) & set(files_fullpaths))
+                if ignore_fullpath: #we need a list of basenames, not full paths
+                    return [os.path.basename(onepath) for onepath in ignore_fullpath]
+                else: return ()
+        try:
+            #enable the callback only if there is actually a broken link            
+            shutil.copytree(firefox_install_path, local_ff_copy, 
+                        ignore=ignore_callback if len(broken_links) else None)
+        except  Exception,e:   
+            #we dont want a half-copied dir. Delete everything and rethrow
+            shutil.rmtree(local_ff_copy)
+            raise e
+        
     firefox_exepath = join(*([local_ff_copy]+ffbinloc[OS]))
     
     logs_dir = join(datadir, 'logs')
@@ -632,17 +669,24 @@ if __name__ == "__main__":
                 raise Exception ("Could not set firefox install path")
             firefox_install_path = '/usr/lib/firefox'
         elif OS=='mswin':
+            bFound = False
             prog64 = os.getenv('ProgramW6432')
             prog32 = os.getenv('ProgramFiles(x86)')
-            progxp = os.getenv('ProgramFiles')
-            if os.path.exists(join(prog64,'Mozilla Firefox')):
-                firefox_install_path = join(prog64,'Mozilla Firefox')
-            elif os.path.exists(join(prog32,'Mozilla Firefox')):
-                firefox_install_path = join(prog32,'Mozilla Firefox')
-            elif os.path.exists(join(progxp,'Mozilla Firefox')):
-                firefox_install_path = join(progxp,'Mozilla Firefox')
-            if not firefox_install_path:
-                raise Exception('Could not set firefox install path')
+            progxp = os.getenv('ProgramFiles')			
+            if prog64:
+                if os.path.exists(join(prog64,'Mozilla Firefox')):
+                    firefox_install_path = join(prog64,'Mozilla Firefox')
+                    bFound = True
+                if not bFound and prog32:
+                    if os.path.exists(join(prog32,'Mozilla Firefox')):
+                        firefox_install_path = join(prog32,'Mozilla Firefox')
+                        bFound = True
+                if not bFound and progxp:
+                    if os.path.exists(join(progxp,'Mozilla Firefox')):
+                        firefox_install_path = join(progxp,'Mozilla Firefox')
+                        bFound = True
+                if not bFound:
+                    raise Exception('Could not set firefox install path')
         elif OS=='macos':
             if not os.path.exists(join("/","Applications","Firefox.app")):
                 raise Exception("Could not set firefox install path")

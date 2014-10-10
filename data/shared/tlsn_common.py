@@ -208,4 +208,23 @@ def bigint_to_list(bigint):
 def ba2int(byte_array):
     return int(str(byte_array).encode('hex'), 16)
         
-
+def dechunkHTTP(http_data):
+    '''Dechunk only if http_data is chunked otherwise return http_data unmodified'''
+    header_len = http_data.find('\r\n\r\n')+len('\r\n\r\n')+1
+    if not ('Transfer-Encoding: chunked') in http_data[:header_len-1] : return http_data #nothing to dechunk
+    http_body = http_data[header_len-1:]
+    
+    dechunked = http_data[:header_len-1]
+    cur_offset = 0
+    chunk_len = -1 #initialize with a non-zero value
+    while True:  
+        new_offset = http_body[cur_offset:].find('\r\n')
+        if new_offset==-1:  #pre-caution against endless looping
+            raise Exception('Incorrectly formed chunked http detected')
+        chunk_len_hex  = http_body[cur_offset:cur_offset+new_offset]
+        chunk_len = int(chunk_len_hex, 16)
+        if chunk_len ==0: break #for properly-formed html we should break here
+        cur_offset += new_offset+len('\r\n')   
+        dechunked += http_body[cur_offset:cur_offset+chunk_len]
+        cur_offset += chunk_len+len('\r\n')    
+    return dechunked
