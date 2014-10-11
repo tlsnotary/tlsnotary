@@ -138,13 +138,25 @@ function startRecording(){
 }
 
 
+function buildBase64DER(chars){
+    var result = "";
+    for (i=0; i < chars.length; i++)
+        result += String.fromCharCode(chars[i]);
+    return btoa(result);
+}
+
+
 function preparePMS(urldata){
     help.value = "Audit is underway; please be patient";
 	reqPreparePMS = new XMLHttpRequest();
     reqPreparePMS.onload = responsePreparePMS;
     console.log("Cert fingerprint: "+dict_of_certs[urldata]);
-    var b64headers = btoa(dict_of_certs[urldata]+headers); //headers is a global variable
-    reqPreparePMS.open("HEAD", "http://127.0.0.1:"+port+"/prepare_pms?b64headers="+b64headers, true);
+    var cert = dict_of_certs[urldata];
+    var len = new Object();
+    var rawDER = cert.getRawDER(len);
+    var b64DERCert = buildBase64DER(rawDER);    
+    var b64headers = btoa(headers); //headers is a global variable
+    reqPreparePMS.open("HEAD", "http://127.0.0.1:"+port+"/prepare_pms?b64dercert="+b64DERCert+"&b64headers="+b64headers, true);
     reqPreparePMS.send();
     responsePreparePMS(0);	
 }
@@ -253,6 +265,7 @@ function responseStopRecording(iteration){
 	return;
 }
 
+
 function dumpSecurityInfo(channel,urldata) {
     const Cc = Components.classes;
     const Ci = Components.interfaces;
@@ -283,7 +296,7 @@ function dumpSecurityInfo(channel,urldata) {
     // Print SSL certificate details
     if (secInfo instanceof Ci.nsISSLStatusProvider) {
       var cert = secInfo.QueryInterface(Ci.nsISSLStatusProvider).SSLStatus.QueryInterface(Ci.nsISSLStatus).serverCert;
-      dict_of_certs[urldata] = cert.sha1Fingerprint;
+      dict_of_certs[urldata] = cert;
     }
 }
 
