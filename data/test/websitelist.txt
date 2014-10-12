@@ -6,7 +6,6 @@ https://www.wordpress.org 0,1,3
 https://www.blogspot.com 0,1,3
 https://www.wikipedia.org 0,1,3
 https://www.linkedin.com 0,1,3
-https://www.wordpress.com 0,1,3
 https://www.yahoo.com 0,1,3
 https://www.flickr.com 0,1,3
 https://www.pinterest.com 0,1,3
@@ -19,10 +18,10 @@ https://i.bankuralsib.ru  2,3
 https://www.debian.org/  0,1,3
 https://play.google.com/store 0,1,2,3
 https://www.okpay.com/en/index.html 0,1,2,3
-https://personalbank.cib.com.cn/pers/main/login.do 0,1,3
-https://pbank.psbc.com/pweb/prelogin.do?_locale=zh_CN&BankId=9999 0,1,2,3
-https://ibsbjstar.ccb.com.cn/app/V5/CN/STY1/login.jsp 0,1,3
-https://ebsnew.boc.cn/boc15/login.html 0,1,2,3
+https://personalbank.cib.com.cn/pers/main/login.do 0,1
+https://pbank.psbc.com/pweb/prelogin.do?_locale=zh_CN&BankId=9999 0,1
+https://ibsbjstar.ccb.com.cn/app/V5/CN/STY1/login.jsp 0,1
+https://ebsnew.boc.cn/boc15/login.html 0,1
 https://www.delicious.com 0,1,3
 https://www.blogger.com 0,1,3
 https://www.gov.uk 0,1,3

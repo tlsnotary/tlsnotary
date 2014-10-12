@@ -1,4 +1,5 @@
-to test, place testdriver@testdriver into data/auditee/FF-addon
-remove folders data/auditee/FF-profile data/auditee/firefoxcopy, so that the new addon can be picked up
+From within tlsnotary's root folder run
+python data/tlnotary-auditee.py test
 
-python tlsnotary-test.py websitelist.txt
+
+By default the testdriver uses the file called websitelist.txt

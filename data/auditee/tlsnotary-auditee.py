@@ -44,8 +44,15 @@ rsModulus = None
 rsExponent = None
 rsChoice = None
 firefox_pid = selftest_pid = 0
-audit_no = 0 #we may be auditing multiple URLs. This var keeps track of how many 
+audit_no = 0 #we may be auditing multiple URLs. This var keeps track of how many
 #successful audits there were so far and is used to index html files audited.
+
+#TESTING only vars
+testing = False #toggled when we are running a test suite (developer only)
+aes_ciphertext_Queue = Queue.Queue() #testing only: receive one ciphertext 
+aes_cleartext_Queue = Queue.Queue() #testing only: and put one cleartext
+bAwaitingCleartext = False #testing only: used for sanity check on HandlerClass_aes
+
 
 #RSA key management for peer messaging
 def import_auditor_pubkey(auditor_pubkey_b64modulus):
@@ -80,6 +87,49 @@ def newkeys():
     with open(join(datadir, 'recentkeys', 'mypubkey'), 'wb') as f: f.write(my_pem_pubkey)
     pubkey_export = b64encode(shared.bi2ba(myPubKey.n))
     return pubkey_export
+
+
+#Receive AES cleartext and send ciphertext to browser
+class HandlerClass_aes(SimpleHTTPServer.SimpleHTTPRequestHandler):
+    #Using HTTP/1.0 instead of HTTP/1.1 is crucial, otherwise the minihttpd just keep hanging
+    #https://mail.python.org/pipermail/python-list/2013-April/645128.html
+    protocol_version = "HTTP/1.0"      
+    
+    def do_HEAD(self):
+        print ('aes_http received ' + self.path + ' request',end='\r\n')
+        # example HEAD string "/command?parameter=124value1&para2=123value2"
+        # we need to adhere to CORS and add extra Access-Control-* headers in server replies
+
+        if self.path.startswith('/ready_to_decrypt'):
+            self.send_response(200)
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.send_header("Access-Control-Expose-Headers", "response, ciphertext, key, iv")
+            self.send_header("response", "ready_to_decrypt")
+            #wait for sth to appear in the queue
+            ciphertext, key, iv = aes_ciphertext_Queue.get()
+            self.send_header("ciphertext", b64encode(ciphertext))
+            self.send_header("key", b64encode(key))
+            self.send_header("iv", b64encode(iv))
+            global bAwaitingCleartext
+            bAwaitingCleartext = True            
+            self.end_headers()
+            return
+        
+        if self.path.startswith('/cleartext='):
+            if not bAwaitingCleartext:
+                print ('OUT OF ORDER:' + self.path)
+                raise Exception ('received a cleartext request out of order')
+            self.send_response(200)
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.send_header("Access-Control-Expose-Headers", "response")
+            self.send_header("response", "cleartext")
+            cleartext = b64decode(self.path[len('/cleartext='):])
+            aes_cleartext_Queue.put(cleartext)
+            global bAwaitingCleartext            
+            bAwaitingCleartext = False            
+            self.end_headers()
+            return            
+
 
 #Receive HTTP HEAD requests from FF addon
 class HandlerClass(SimpleHTTPServer.SimpleHTTPRequestHandler):
@@ -433,8 +483,21 @@ def decryptHTML(sha1hmac, tlsnSession,sf):
     tlsnSession.pAuditor = sha1hmac
     tlsnSession.setMasterSecretHalf() #without arguments sets the whole MS
     tlsnSession.doKeyExpansion()
-    plaintext,bad_mac = tlsnSession.processServerAppDataRecords(checkFinished=True)
-    if bad_mac: print ("WARNING! Plaintext is not authenticated.")
+    
+    if not testing or not tlsnSession.chosenCipherSuite in [47,53]:
+        plaintext,bad_mac = tlsnSession.processServerAppDataRecords(checkFinished=True)
+        if bad_mac: print ("WARNING! Plaintext is not authenticated.")        
+    else: #we are both testing and our CS is AES
+        ciphertexts = tlsnSession.getCiphertexts()
+        raw_plaintexts = []
+        for one_ciphertext in ciphertexts:
+            aes_ciphertext_Queue.put(one_ciphertext)
+            raw_plaintext = aes_cleartext_Queue.get()
+            #crypto-js knows only how to remove pkcs7 padding but not cbc padding
+            #which is one byte longer than pkcs7. We remove it manually
+            raw_plaintexts.append(raw_plaintext[:-1])
+        plaintext = tlsnSession.macCheckPlaintexts(raw_plaintexts)
+             
     plaintext = shared.dechunkHTTP(plaintext)
     with open(join(current_sessiondir,'session_dump'+sf),'wb') as f: f.write(tlsnSession.dump())
     commit_dir = join(current_sessiondir, 'commit')
@@ -579,7 +642,7 @@ def start_firefox(FF_to_backend_port, firefox_install_path):
     os.putenv('FF_to_backend_port', str(FF_to_backend_port))
     os.putenv('FF_first_window', 'true')   #prevents addon confusion when websites open multiple FF windows
 
-    if ('test' in sys.argv): 
+    if testing:
         print ('****************************TESTING MODE********************************')
         os.putenv('TLSNOTARY_TEST', 'true')
     
@@ -614,6 +677,36 @@ def http_server(parentthread):
     print ('Serving HTTP on', sa[0], 'port', sa[1], '...',end='\r\n')
     httpd.serve_forever()
     return
+
+
+#Used only for testing
+#use miniHTTP server to receive commands from Firefox addon and respond to them
+def aes_decryption_thread(parentthread):    
+    #allow three attempts to start mini httpd in case if the port is in use
+    bWasStarted = False
+    for i in range(3):
+        AES_decryption_port = 37777 #random.randint(1025,65535)
+        print ('Starting AES decryption server')
+        try:
+            aes_httpd = shared.StoppableHttpServer(('127.0.0.1', AES_decryption_port), HandlerClass_aes)
+            bWasStarted = True
+            break
+        except Exception, e:
+            print ('Error starting AES decryption server. Maybe the port is in use?', e,end='\r\n')
+            continue
+    if bWasStarted == False:
+        #retval is a var that belongs to our parent class which is ThreadWithRetval
+        parentthread.retval = ('failure',)
+        return
+    #elif minihttpd started successfully
+    #Let the invoking thread know that we started successfully
+    parentthread.retval = ('success', AES_decryption_port)
+    sa = aes_httpd.socket.getsockname()
+    print ("decrypting AES on", sa[0], "port", sa[1], "...",end='\r\n')
+    aes_httpd.serve_forever()
+    return
+
+
 
 #Sending links (urls) to files passed from auditee to
 #auditor over peer messaging
@@ -651,8 +744,47 @@ def first_run_check(modname,modhash):
         tar = tarfile.open(join(datadir, 'python', modname+'.tar.gz'), 'r:gz')
         tar.extractall()
         tar.close()
-   
+
+
+#Used during testing only.
+#It is best to start testing from this file rather than a standalone one.
+#This will increase the likelihood of debugger stopping on breakpoints
+def start_testing():
+    import subprocess    
+    #initiate an auditor window in daemon mode
+    print ("TESTING: starting auditor")    
+    auditor_py = os.path.join(installdir, 'data', 'auditor', 'tlsnotary-auditor.py')
+    auditor_proc = subprocess.Popen(['python', auditor_py,'daemon'])
+    auditor_pid = auditor_proc.pid    
+    print ("TESTING: starting testdriver")
+    testdir = join(installdir, 'data', 'test')
+    test_py = join(testdir, 'tlsnotary-test.py')
+    site_list = join (testdir, 'smalllist')
+    #testdriver kills ee/or when test ends, passing PIDs
+    test_proc = subprocess.Popen(filter(None,['python', test_py, site_list, str(os.getpid()), str(auditor_pid)]))
+            
+    #We want AES decryption to be done fast in browser's JS instead of in python.
+    #We start a server which sends ciphertexts to browser                
+    thread_aes = shared.ThreadWithRetval(target=aes_decryption_thread)
+    thread_aes.daemon = True
+    thread_aes.start()            
+    #wait for minihttpd thread to indicate its status  
+    bWasStarted = False
+    for i in range(10):
+        time.sleep(1)        
+        if thread_aes.retval == '': continue
+        #else
+        if thread_aes.retval[0] != 'success': raise Exception (
+            'Failed to start minihttpd server. Please investigate')
+        #else
+        bWasStarted = True
+        break
+    if bWasStarted == False:
+        raise Exception ('minihttpd failed to start in 10 secs. Please investigate')    
+
+ 
 if __name__ == "__main__":
+    if ('test' in sys.argv): testing = True    
     #for md5 hash, see https://pypi.python.org/pypi/<module name>/<module version>
     modules_to_load = {'rsa-3.1.4':'b6b1c80e1931d4eba8538fd5d4de1355',\
                        'pyasn1-0.1.7':'2cbd80fcd4c7b1c82180d3d76fee18c8',\
@@ -733,6 +865,9 @@ if __name__ == "__main__":
     firefox_pid = ff_proc.pid    
     
     signal.signal(signal.SIGTERM, quit)
+
+    if testing: start_testing()
+
     try:
         while True:
             time.sleep(1)

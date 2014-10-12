@@ -260,37 +260,13 @@ def start_run():
     log_to_file("************************************")
     website_num = len(website_list)
 
-def start_auditor(parentthread):
-    global auditor_pid
-    global auditee_pid
-    print ("Starting the auditor")
-    #initiate an auditor window in daemon mode
-    auditor_py = os.path.join(installdir, 'data', 'auditor', 'tlsnotary-auditor.py')
-    auditor_proc = subprocess.Popen(['python', auditor_py,'daemon'])
-    auditor_pid = auditor_proc.pid
-
-
-def start_auditee(parentthread):
-    global auditee_pid    
-    print ("Starting the auditee")
-    auditee_py = os.path.join(installdir, 'data', 'auditee', 'tlsnotary-auditee.py')
-    auditee_proc = subprocess.Popen(filter(None,['python', auditee_py, ffdir,'test']))
-    auditee_pid = auditee_proc.pid
 
 if __name__ == "__main__":
 
     website_list_file = sys.argv[1]
     if len(sys.argv) > 2: ffdir = sys.argv[2]
-
-    #start auditor
-    thread_auditor = ThreadWithRetval(target= start_auditor)
-    thread_auditor.daemon = True
-    thread_auditor.start()
-
-    #start auditee
-    thread_auditee = ThreadWithRetval(target= start_auditee)
-    thread_auditee.daemon = True
-    thread_auditee.start()
+    if len(sys.argv) > 3: auditee_pid = int(sys.argv[3])
+    if len(sys.argv) > 4: auditor_pid = int(sys.argv[4])
 
     #start backend http server
     thread = ThreadWithRetval(target= minihttp_thread)

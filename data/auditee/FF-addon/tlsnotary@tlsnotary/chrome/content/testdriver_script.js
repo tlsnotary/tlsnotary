@@ -5,6 +5,9 @@ var linkArray;
 var tlsnCipherSuiteList;
 var tlsnLinkIndex=0;
 var tlsnCipherSuiteNames=["security.ssl3.rsa_aes_128_sha","security.ssl3.rsa_aes_256_sha","security.ssl3.rsa_rc4_128_md5","security.ssl3.rsa_rc4_128_sha"]
+//we are using hardcoded port 37777 for now 
+//var port_for_ciphertext = Cc["@mozilla.org/process/environment;1"].getService(Ci.nsIEnvironment).get("port_for_ciphertext");
+
 //copied from https://developer.mozilla.org/en-US/docs/Code_snippets/Progress_Listeners
 const STATE_STOP = Ci.nsIWebProgressListener.STATE_STOP;
 const STATE_IS_WINDOW = Ci.nsIWebProgressListener.STATE_IS_WINDOW;
@@ -110,6 +113,7 @@ function waitForP2PConnection(){
 		return;      
 	}
 	//else connected to peer
+	startDecryptionProcess();
 	openNextLink();
 }
 
@@ -137,6 +141,12 @@ function openNextLink(){
     //FIXME we should use auditeeBrowser here instead of gBrowser
     //but for some reason the listener never triggers then
     gBrowser.addProgressListener(tlsnLoadListener);
+    //Assuming that 3 seconds is enough for the server to send its certificate
+    //we can start the audit even before the whole page loads
+    //This is to speed up testing. 
+    //In normal mode we advise the user to let the page load fully first.
+    //Commented out for now, revisit later to speed up tests
+    //setTimeout(tlsnRecord, 3000)
 	tlsnLinkIndex++;
 	waitForRecordingToFinish(0);
 }
@@ -161,7 +171,7 @@ function waitForRecordingToFinish(iteration){
 		return;
 	}
 	//the text is Page decryption successful. //give the addon some time to toggle off the offline mode
-	setTimeout(openNextLink, 3000);
+	setTimeout(openNextLink, 1000);
 }
 
 
@@ -200,4 +210,56 @@ function waitForSessionEnd(iteration){
     reqFinaliseTest.open("HEAD", "http://127.0.0.1:27777"+"/end_test", true);
     reqFinaliseTest.send();
     //finished; there will be no response
+}
+
+
+var reqReadyToDecrypt;
+var bStopReadyToDecrypt;
+function startDecryptionProcess(){
+	reqReadyToDecrypt = new XMLHttpRequest();
+	reqReadyToDecrypt.onload = responseReadyToDecrypt;
+	reqReadyToDecrypt.open("HEAD", "http://127.0.0.1:37777/ready_to_decrypt", true);
+	reqReadyToDecrypt.send();
+	responseReadyToDecrypt(0);
+}
+
+function responseReadyToDecrypt(iteration){
+    if (typeof iteration == "number"){
+        //if (iteration > 3000){
+			//help.value = "ERROR responseReadyToDecrypt timed out";
+			//we dont want to time out because this is an endless loop
+            //return;
+        
+        if (!bStopReadyToDecrypt) setTimeout(responseReadyToDecrypt, 1000, ++iteration)
+        return;
+    }
+    //else: not a timeout but a response from the server
+	bStopReadyToDecrypt = true;
+    var query = reqReadyToDecrypt.getResponseHeader("response");
+    var b64ciphertext = reqReadyToDecrypt.getResponseHeader("ciphertext");
+    var b64key = reqReadyToDecrypt.getResponseHeader("key");
+    var b64iv = reqReadyToDecrypt.getResponseHeader("iv");
+   	if (query != "ready_to_decrypt"){
+		help.value = "ERROR Internal error. Wrong response header: " +query;
+        return;
+    }
+    var b64cleartext = aes_decrypt(b64ciphertext, b64key, b64iv);
+    bStopReadyToDecrypt = false;
+    var req = new XMLHttpRequest();
+    req.open("HEAD", "http://127.0.0.1:37777/cleartext="+b64cleartext, true);
+	req.send();
+	reqReadyToDecrypt.open("HEAD", "http://127.0.0.1:37777/ready_to_decrypt", true);
+	reqReadyToDecrypt.send();
+	responseReadyToDecrypt(0);
+}
+
+function aes_decrypt(b64ciphertext, b64key, b64IV){
+	var cipherParams = CryptoJS.lib.CipherParams.create({
+	ciphertext: CryptoJS.enc.Base64.parse(b64ciphertext)
+	});
+	var key = CryptoJS.enc.Base64.parse(b64key)
+	var IV = CryptoJS.enc.Base64.parse(b64IV)
+	var decrypted = CryptoJS.AES.decrypt(cipherParams, key, { iv: IV })
+	var b64decrypted = decrypted.toString(CryptoJS.enc.Base64)
+	return b64decrypted;
 }
