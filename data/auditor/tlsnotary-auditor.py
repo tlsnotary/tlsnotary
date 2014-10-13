@@ -91,7 +91,8 @@ def process_messages():
             tlsnSession.serverRandom = cr_sr_hmac[33:65]
             tlsnSession.chosenCipherSuite = int(cr_sr_hmac[:1].encode('hex'),16)
             md5hmac1_for_MS=cr_sr_hmac[65:89] #half of MS's 48 bytes
-            if not tlsnSession.auditorSecret: raise Exception("Auditor PMS secret data should have already been set.")
+            if not tlsnSession.auditorSecret: 
+                raise Exception("Auditor PMS secret data should have already been set.")
             tlsnSession.setAuditorSecret()
             tlsnSession.setMasterSecretHalf(half=1,providedPValue=md5hmac1_for_MS)         
             garbageizedHMAC = tlsnSession.getPValueMS('auditor',[2]) #withhold the server mac
@@ -111,7 +112,8 @@ def process_messages():
             tlsnSession.serverModulus = int(n.encode('hex'),16)
             tlsnSession.serverExponent = int(e.encode('hex'),16)
             tlsnSession.serverModLength = shared.bi2ba(n_len_int)
-            if not tlsnSession.auditorSecret: raise Exception("Auditor PMS secret data should have already been set.")
+            if not tlsnSession.auditorSecret: 
+                raise Exception("Auditor PMS secret data should have already been set.")
             tlsnSession.setEncSecondHalfPMS() #will set the enc PMS second half
             rsapms =  shared.bi2ba(tlsnSession.encSecondHalfPMS)
             send_message('rsapms:'+ rsapms)
@@ -198,7 +200,8 @@ def process_messages():
             for one_response in adir_list:
                 if not one_response.startswith('response'): continue
                 try: this_seqno = int(one_response[len('response'):])
-                except: raise Exception ('WARNING: Could not cast response\'s tail to int')
+                except: 
+                    raise Exception ('WARNING: Could not cast response\'s tail to int')
                 if this_seqno in seqnos: 
                     raise Exception ('WARNING: multiple responsefiles names detected')
                 saved_hash_path = os.path.join(commit_dir, 'responsehash'+str(this_seqno))
@@ -568,12 +571,15 @@ if __name__ == "__main__":
     for i in range(10):
         time.sleep(1)        
         if thread.retval == '': continue
-        elif thread.retval[0] == 'failure': raise Exception('MINIHTTPD_FAILURE')
+        elif thread.retval[0] == 'failure': 
+            raise Exception('MINIHTTPD_FAILURE')
         elif thread.retval[0] == 'success':
             bWasStarted = True
             break
-        else: raise Exception('MINIHTTPD_WRONG_RESPONSE')
-    if bWasStarted == False: raise Exception('MINIHTTPD_START_TIMEOUT')
+        else: 
+            raise Exception('MINIHTTPD_WRONG_RESPONSE')
+    if bWasStarted == False: 
+        raise Exception('MINIHTTPD_START_TIMEOUT')
     FF_to_backend_port = thread.retval[1]
     
     daemon_mode = False
@@ -596,7 +602,8 @@ if __name__ == "__main__":
         if progxp:
             ff32 = os.path.join(progxp, "Mozilla Firefox",  "firefox.exe" )
             if os.path.isfile(ff32): browser_exepath = ff32
-        if not daemon_mode and browser_exepath == '': raise Exception(
+        if not daemon_mode and browser_exepath == '': 
+            raise Exception(
             'Failed to find Firefox in your Program Files location')     
     elif OS=='linux':
         if not daemon_mode: browser_exepath = 'firefox'
@@ -625,12 +632,14 @@ if __name__ == "__main__":
         elif auditee_pubkey_b64modulus != '':
             print ('Reusing his key from previous session:')
             print (auditee_pubkey_b64modulus)
-        else: raise Exception ('You need to provide his key using hiskey=')
+        else: 
+            raise Exception ('You need to provide his key using hiskey=')
         start_peer_messaging()
     else:#not a daemon mode
         try: ff_proc = subprocess.Popen([browser_exepath, os.path.join(
             'http://127.0.0.1:' + str(FF_to_backend_port) + '/auditor.html')])
-        except: raise Exception('BROWSER_START_ERROR')
+        except: 
+            raise Exception('BROWSER_START_ERROR')
     
     try:
         while True:

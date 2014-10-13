@@ -246,9 +246,11 @@ class HandlerClass(SimpleHTTPServer.SimpleHTTPRequestHandler):
             #we used from the browser in prepare_encrypted_pms
             verifyServer(dercert, tlsnSession)
             retval = negotiateCrippledSecrets(tlsnSession)
-            if not retval == 'success': raise Exception(retval)
+            if not retval == 'success': 
+                raise Exception(retval)
             retval = negotiateVerifyAndFinishHandshake(tlsnSession,tlssock)
-            if not retval == 'success': raise Exception(retval)
+            if not retval == 'success': 
+                raise Exception(retval)
             print ('Getting data from server')            
             response = makeTLSNRequest(modified_headers,tlsnSession,tlssock)
             global audit_no
@@ -322,7 +324,8 @@ def prepare_pms():
     for i in range(7): #try 7 times until reliable site check succeeds
         #first 4 bytes of client random are unix time
         pmsSession = shared.TLSNSSLClientSession(rsChoice,shared.reliable_sites[rsChoice][0], ccs=53)
-        if not pmsSession: raise Exception("Client session construction failed in prepare_pms")
+        if not pmsSession: 
+            raise Exception("Client session construction failed in prepare_pms")
         tlssock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         tlssock.settimeout(int(shared.config.get("General","tcp_socket_timeout")))
         tlssock.connect((pmsSession.serverName, pmsSession.sslPort))
@@ -330,7 +333,8 @@ def prepare_pms():
         if not pmsSession.processServerHello(shared.recv_socket(tlssock,isHandshake=True)):
             raise Exception("Failure in processing of server Hello from " + pmsSession.serverName)
         reply = send_and_recv('rcr_rsr:'+pmsSession.clientRandom+pmsSession.serverRandom)
-        if reply[0] != 'success': raise Exception ('Failed to receive a reply for rcr_rsr:')
+        if reply[0] != 'success': 
+            raise Exception ('Failed to receive a reply for rcr_rsr:')
         if not reply[1].startswith('rrsapms_rhmac:'):
             raise Exception ('bad reply. Expected rrsapms_rhmac:')
         rrsapms_rhmac = reply[1][len('rrsapms_rhmac:'):]
@@ -484,7 +488,8 @@ def makeTLSNRequest(headers,tlsnSession,tlssock):
     headers += '\r\n'
     tlssock.send(tlsnSession.buildRequest(headers))
     response = shared.recv_socket(tlssock) #not handshake flag means we wait on timeout
-    if not response: raise Exception ("Received no response to request, cannot continue audit.")
+    if not response: 
+        raise Exception ("Received no response to request, cannot continue audit.")
     tlsnSession.storeServerAppDataRecords(response)
     tlssock.close()    
     return response 
@@ -504,9 +509,10 @@ def commitSession(tlsnSession,response,sf):
     commit_hash = sha256(response).digest()
     md5hmac_hash = sha256(tlsnSession.pAuditee).digest()
     reply = send_and_recv('commit_hash:'+commit_hash+md5hmac_hash)
-    if reply[0] != 'success': raise Exception ('Failed to receive a reply') 
+    if reply[0] != 'success': 
+        raise Exception ('Failed to receive a reply') 
     if not reply[1].startswith('sha1hmac_for_MS:'):
-            raise Exception ('bad reply. Expected sha1hmac_for_MS')    
+        raise Exception ('bad reply. Expected sha1hmac_for_MS')    
     return reply[1][len('sha1hmac_for_MS:'):]
 
 
@@ -598,7 +604,8 @@ def peer_handshake():
                         auditor_nick = returned_auditor_nick
                         bIsAuditorRegistered = True
                         print ('Auditor successfully verified')
-                    except: raise
+                    except: 
+                        raise
                             #return ('Failed to verify the auditor. Are you sure you have the correct auditor\'s pubkey?')
 
     if not bIsAuditorRegistered:
@@ -816,7 +823,8 @@ def start_testing():
         time.sleep(1)        
         if thread_aes.retval == '': continue
         #else
-        if thread_aes.retval[0] != 'success': raise Exception (
+        if thread_aes.retval[0] != 'success': 
+            raise Exception (
             'Failed to start minihttpd server. Please investigate')
         #else
         bWasStarted = True
@@ -880,7 +888,8 @@ if __name__ == "__main__":
             raise Exception("Unrecognised operating system.")
         
     print ("Firefox install path is: ",firefox_install_path)
-    if not os.path.exists(firefox_install_path): raise Exception ("Could not find Firefox installation")
+    if not os.path.exists(firefox_install_path): 
+        raise Exception ("Could not find Firefox installation")
     
     thread = shared.ThreadWithRetval(target= http_server)
     thread.daemon = True
@@ -891,7 +900,8 @@ if __name__ == "__main__":
         time.sleep(1)        
         if thread.retval == '': continue
         #else
-        if thread.retval[0] != 'success': raise Exception (
+        if thread.retval[0] != 'success': 
+            raise Exception (
             'Failed to start minihttpd server. Please investigate')
         #else
         bWasStarted = True
@@ -901,7 +911,8 @@ if __name__ == "__main__":
     FF_to_backend_port = thread.retval[1]
         
     ff_retval = start_firefox(FF_to_backend_port, firefox_install_path)
-    if ff_retval[0] != 'success': raise Exception (
+    if ff_retval[0] != 'success': 
+        raise Exception (
         'Error while starting Firefox: '+ ff_retval[0])
     ff_proc = ff_retval[1]
     firefox_pid = ff_proc.pid    

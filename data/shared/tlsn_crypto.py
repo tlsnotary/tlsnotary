@@ -204,7 +204,8 @@ class TLSNSSLClientSession(object):
     def processServerHello(self,sh_cert_shd):
         shd = hs + tlsver + bi2ba(4,fixed=2) + h_shd + bi2ba(0,fixed=3)
         sh_magic = re.compile(hs + tlsver + '..' + h_sh,re.DOTALL)
-        if not re.match(sh_magic, sh_cert_shd): raise Exception ('Invalid server hello')
+        if not re.match(sh_magic, sh_cert_shd): 
+            raise Exception ('Invalid server hello')
         if not sh_cert_shd.endswith(shd[-4:]): 
             with open('handbg','wb') as f: f.write(binascii.hexlify(sh_cert_shd))
             raise Exception ('invalid server hello done')
