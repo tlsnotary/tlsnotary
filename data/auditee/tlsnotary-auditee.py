@@ -210,14 +210,16 @@ class HandlerClass(SimpleHTTPServer.SimpleHTTPRequestHandler):
         #----------------------------------------------------------------------#
         if self.path.startswith('/prepare_pms'):
             arg_str = self.path.split('?',1)[1]
-            arg1, arg2 = arg_str.split('&')
-            if not arg1.startswith('b64dercert=') or not arg2.startswith('b64headers='):
+            arg1, arg2, arg3 = arg_str.split('&')
+            if not arg1.startswith('b64dercert=') or not arg2.startswith('b64headers=') or not arg3.startswith('ciphersuite='):
                 self.respond({'response':'prepare_pms', 'status':'wrong HEAD parameter'})
                 return
             b64dercert = arg1[len('b64dercert='):]            
             b64headers = arg2[len('b64headers='):]
+            cs = arg3[len('ciphersuite='):] #used for testing, empty otherwise        
             dercert = b64decode(b64dercert)
             headers = b64decode(b64headers)
+            print ('Preparing encPMS')
             pms_secret, pms_padding_secret = prepare_pms()
             server_name, modified_headers = parse_headers(headers)
 
@@ -225,13 +227,18 @@ class HandlerClass(SimpleHTTPServer.SimpleHTTPRequestHandler):
             #you will have to comment out the dercert= above if u want to use this
             #dummytlssock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             #dummytlssock.settimeout(int(shared.config.get("General","tcp_socket_timeout")))
-            #dummytlsnSession = shared.TLSNSSLClientSession(server_name,ccs=5,audit=True)
+            #if testing: dummytlsnSession = shared.TLSNSSLClientSession(server_name, ccs=int(cs))
+            #else: dummytlsnSession = shared.TLSNSSLClientSession(server_name)
             #startTLSSession(dummytlsnSession, dummytlssock)
             #dummytlsnSession.extractCertificate()
             #dercert = dummytlsnSession.serverCertificate
 
-            tlsnSession = shared.TLSNSSLClientSession(server_name,ccs=5,audit=True)                        
+            if testing: 
+                tlsnSession = shared.TLSNSSLClientSession(server_name, ccs=int(cs))
+            else: 
+                tlsnSession = shared.TLSNSSLClientSession(server_name)                        
             prepare_encrypted_pms(tlsnSession, dercert, pms_secret, pms_padding_secret)
+            print ('Peforming handshake with server')
             tlssock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             tlssock.settimeout(int(shared.config.get("General","tcp_socket_timeout")))
             startTLSSession(tlsnSession, tlssock)
@@ -242,6 +249,7 @@ class HandlerClass(SimpleHTTPServer.SimpleHTTPRequestHandler):
             if not retval == 'success': raise Exception(retval)
             retval = negotiateVerifyAndFinishHandshake(tlsnSession,tlssock)
             if not retval == 'success': raise Exception(retval)
+            print ('Getting data from server')            
             response = makeTLSNRequest(modified_headers,tlsnSession,tlssock)
             global audit_no
             audit_no += 1 #we want to increase only after server responded with data
@@ -313,7 +321,7 @@ class HandlerClass(SimpleHTTPServer.SimpleHTTPRequestHandler):
 def prepare_pms():
     for i in range(7): #try 7 times until reliable site check succeeds
         #first 4 bytes of client random are unix time
-        pmsSession = shared.TLSNSSLClientSession(rsChoice,shared.reliable_sites[rsChoice][0])
+        pmsSession = shared.TLSNSSLClientSession(rsChoice,shared.reliable_sites[rsChoice][0], ccs=53)
         if not pmsSession: raise Exception("Client session construction failed in prepare_pms")
         tlssock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         tlssock.settimeout(int(shared.config.get("General","tcp_socket_timeout")))

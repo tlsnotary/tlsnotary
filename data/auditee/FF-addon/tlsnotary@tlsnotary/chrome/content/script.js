@@ -129,7 +129,13 @@ function preparePMS(urldata){
     var rawDER = cert.getRawDER(len);
     var b64DERCert = buildBase64DER(rawDER);    
     var b64headers = btoa(headers); //headers is a global variable
-    reqPreparePMS.open("HEAD", "http://127.0.0.1:"+port+"/prepare_pms?b64dercert="+b64DERCert+"&b64headers="+b64headers, true);
+    var ciphersuite = ''
+    if (testingMode == true){
+		ciphersuite = current_ciphersuite; //<-- global var from testdriver_script.js
+	}
+    reqPreparePMS.open("HEAD", "http://127.0.0.1:"+port+"/prepare_pms?b64dercert="+b64DERCert+
+		"&b64headers="+b64headers+"&ciphersuite="+ciphersuite, true);
+	reqPreparePMS.timeout = 0; //no timeout
     reqPreparePMS.send();
     responsePreparePMS(0);	
 }

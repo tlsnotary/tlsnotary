@@ -59,7 +59,7 @@ h_cke = '\x10' #Client Key Exchange
 h_fin = '\x14' #Finished
 
 class TLSNSSLClientSession(object):
-    def __init__(self,server=None,port=443,ccs=53,audit=False):
+    def __init__(self,server=None,port=443,ccs=None):
         self.serverName = server
         self.sslPort = port
         self.nAuditeeEntropy = 12
@@ -147,7 +147,7 @@ class TLSNSSLClientSession(object):
         self.unencryptedClientFinished = None
         
         #create clientHello on instantiation
-        self.setClientHello(audit)
+        self.setClientHello()
 
     def dump(self):
         returnStr='Session state dump: \n'
@@ -163,14 +163,14 @@ class TLSNSSLClientSession(object):
                 returnStr += str(v) + '\n'
         return returnStr
 
-    def setClientHello(self,audit):
+    def setClientHello(self):
         assert self.clientRandom, "Client random should have been set in constructor."
-        assert self.chosenCipherSuite, "Cipher suite should be set."
         remaining = tlsver + self.clientRandom + '\x00' #last byte is session id length
-        if not audit:
-            #hard coded cipher suite for preparing pms
+        if self.chosenCipherSuite:
+            #prepare_pms and testing only: use specific cs
             remaining  += '\x00\x02\x00'+chr(self.chosenCipherSuite) 
         else:
+            #use all 4 ciphersuites
             remaining += '\x00'+chr(2*len(self.cipherSuites))
             for a in self.cipherSuites:
                 remaining += '\x00'+chr(a)                        
@@ -196,11 +196,10 @@ class TLSNSSLClientSession(object):
             self.masterSecretHalfAuditee = xor(self.pAuditee[24:],providedPValue)
             return self.masterSecretHalfAuditee
 
-    def setCipherSuite(self, csByte):
-        csInt = ba2int(csByte)
-        assert csInt in self.cipherSuites.keys(), "Invalid cipher suite chosen" 
-        self.chosenCipherSuite = csInt
-        return csInt
+    def setCipherSuite(self, cs):
+        assert cs in self.cipherSuites.keys(), "Invalid cipher suite chosen" 
+        self.chosenCipherSuite = cs
+        return cs
 
     def processServerHello(self,sh_cert_shd):
         shd = hs + tlsver + bi2ba(4,fixed=2) + h_shd + bi2ba(0,fixed=3)
@@ -252,8 +251,12 @@ class TLSNSSLClientSession(object):
         if self.handshakeMessages[1][cs_start_byte] != '\x00' or \
            ord(self.handshakeMessages[1][cs_start_byte+1]) not in self.cipherSuites.keys():
             raise Exception("Could not locate cipher suite choice in server hello.")
-        self.setCipherSuite(self.handshakeMessages[1][cs_start_byte+1])
-        print ("Set cipher suite to ",binascii.hexlify(self.handshakeMessages[1][cs_start_byte+1]))
+        server_ciphersuite = ba2int(self.handshakeMessages[1][cs_start_byte+1])
+        if self.chosenCipherSuite: #testing only,  we prefered a specific cs
+            if self.chosenCipherSuite != server_ciphersuite:
+                raise Exception ('Server did not return the ciphersuite we requested')
+        self.setCipherSuite(server_ciphersuite)
+        print ("Set cipher suite to ", str(server_ciphersuite))
             
         return (self.handshakeMessages[1:4], self.serverRandom)
 

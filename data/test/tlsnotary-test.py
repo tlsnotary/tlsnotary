@@ -126,7 +126,11 @@ class HandlerClass(SimpleHTTPServer.SimpleHTTPRequestHandler):
             self.send_header("Access-Control-Allow-Origin", "*")
             self.send_header("Access-Control-Expose-Headers", "response, status")
             self.send_header("response", "get_websites")
-            print ('website list is:',website_list)
+            print ('website list is: ')
+            printlist = ''
+            for idx,site in enumerate(website_list):
+                printlist += site + ' ' + cs_list[idx]+ '; '
+            print (printlist)
             self.send_header("url_list", ','.join(website_list))
             self.send_header("cs_list",','.join(cs_list))
             self.end_headers()
@@ -213,7 +217,7 @@ def minihttp_thread(parentthread):
     bWasStarted = False
     for i in range(3):
         FF_to_backend_port = 27777 #random.randint(1025,65535)
-        print ('Starting mini http server to communicate with Firefox plugin')
+        print ('Testdriver: starting mini http server to communicate with browser')
         try:
             httpd = StoppableHttpServer(('127.0.0.1', FF_to_backend_port), HandlerClass)
             bWasStarted = True

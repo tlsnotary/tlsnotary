@@ -4,7 +4,9 @@ var reqGetUrls;
 var linkArray;
 var tlsnCipherSuiteList;
 var tlsnLinkIndex=0;
-var tlsnCipherSuiteNames=["security.ssl3.rsa_aes_128_sha","security.ssl3.rsa_aes_256_sha","security.ssl3.rsa_rc4_128_md5","security.ssl3.rsa_rc4_128_sha"]
+var tlsnCipherSuiteNames={"47":"security.ssl3.rsa_aes_128_sha","53":"security.ssl3.rsa_aes_256_sha",
+	"4":"security.ssl3.rsa_rc4_128_md5","5":"security.ssl3.rsa_rc4_128_sha"};
+var current_ciphersuite=''; //Testing only: used by script.js to tell backend which CS to use 
 //we are using hardcoded port 37777 for now 
 //var port_for_ciphertext = Cc["@mozilla.org/process/environment;1"].getService(Ci.nsIEnvironment).get("port_for_ciphertext");
 
@@ -108,8 +110,8 @@ function waitForP2PConnection(){
 	var helpmsg = document.getElementById("help").value;
 	if (helpmsg.startsWith("ERROR")){
 		tlsnSendErrorMsg("Error received in browser: "+helpmsg +
-						 "for site: "+linkArray[tlsnLinkIndex-1] +
-						 " and cipher suite: "+tlsnCipherSuiteNames[tlsnCipherSuiteList[tlsnLinkIndex-1]]);
+						 "for site: "+linkArray[tlsnLinkIndex] +
+						 " and cipher suite: "+tlsnCipherSuiteNames[tlsnCipherSuiteList[tlsnLinkIndex]]);
 		return; //give up
 	}
 	if (!helpmsg.startsWith("Go to a page")){
@@ -123,29 +125,30 @@ function waitForP2PConnection(){
 
 
 function openNextLink(){
-	if (tlsnLinkIndex > linkArray.length -1){
+	if (tlsnLinkIndex >= linkArray.length){
         tlsnStopRecord();
         return;
     }
     //set the cipher suite to be ONLY that in the given argument
     var prefs = Cc["@mozilla.org/preferences-service;1"].getService(Ci.nsIPrefService);
-    var cs_int = parseInt(tlsnCipherSuiteList[tlsnLinkIndex]);
-    for (var i=0;i<4;i++){
-        if (i==cs_int){
-            prefs.setBoolPref(tlsnCipherSuiteNames[i], true);
+    var cs = tlsnCipherSuiteList[tlsnLinkIndex];
+    //iterate over keys of associative array
+    for (var key in tlsnCipherSuiteNames){
+        if (key==cs){
+            prefs.setBoolPref(tlsnCipherSuiteNames[key], true);
         }
         else {
-            prefs.setBoolPref(tlsnCipherSuiteNames[i], false);
+            prefs.setBoolPref(tlsnCipherSuiteNames[key], false);
         }
     }
     
+    current_ciphersuite = cs;
     auditeeBrowser = gBrowser.addTab(linkArray[tlsnLinkIndex]);
     gBrowser.removeAllTabsBut(auditeeBrowser);
     document.getElementById("help").value = "Loading page..."
     //FIXME we should use auditeeBrowser here instead of gBrowser
     //but for some reason the listener never triggers then
     gBrowser.addProgressListener(tlsnLoadListener);
-	tlsnLinkIndex++;
 	waitForRecordingToFinish(0);
 }
 
@@ -154,21 +157,22 @@ function waitForRecordingToFinish(iteration){
    var helpmsg = document.getElementById("help").value;
     if (helpmsg.startsWith("ERROR")){
         tlsnSendErrorMsg("Error received in browser: "+helpmsg +
-                         "for site: "+linkArray[tlsnLinkIndex-1] +
-                         " and cipher suite: "+tlsnCipherSuiteNames[tlsnCipherSuiteList[tlsnLinkIndex-1]]);
+                         "for site: "+linkArray[tlsnLinkIndex] +
+                         " and cipher suite: "+tlsnCipherSuiteNames[tlsnCipherSuiteList[tlsnLinkIndex]]);
         return; //give up
     }
     if (!(helpmsg.startsWith("Page decryption successful."))) {    
 		if (iteration > 360){
 			tlsnSendErrorMsg("Timed out waiting for page audit to finish"
-							 +linkArray[tlsnLinkIndex-1]+" and cipher suite: "+
-							 tlsnCipherSuiteNames[tlsnCipherSuiteList[tlsnLinkIndex-1]]);
+							 +linkArray[tlsnLinkIndex]+" and cipher suite: "+
+							 tlsnCipherSuiteNames[tlsnCipherSuiteList[tlsnLinkIndex]]);
 			return;
 		}
 		setTimeout(waitForRecordingToFinish, 1000, ++iteration);
 		return;
 	}
 	//the text is Page decryption successful. //give the addon some time to toggle off the offline mode
+	tlsnLinkIndex++;
 	setTimeout(openNextLink, 1000);
 }
 
@@ -247,6 +251,7 @@ function responseReadyToDecrypt(iteration){
     req.open("HEAD", "http://127.0.0.1:37777/cleartext="+b64cleartext, true);
 	req.send();
 	reqReadyToDecrypt.open("HEAD", "http://127.0.0.1:37777/ready_to_decrypt", true);
+	reqReadyToDecrypt.timeout = 0; //no timeout
 	reqReadyToDecrypt.send();
 	responseReadyToDecrypt(0);
 }
