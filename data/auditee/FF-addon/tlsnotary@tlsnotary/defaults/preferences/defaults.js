@@ -1,4 +1,4 @@
-//We only need RSA-AES128&256
+//We only need RSA ciphers AES128/256/RC4MD5/RC4SHA 
 pref("security.ssl3.dhe_dss_aes_128_sha", false);
 pref("security.ssl3.dhe_dss_aes_256_sha",false);
 pref("security.ssl3.dhe_dss_camellia_128_sha",false);
@@ -17,10 +17,12 @@ pref("security.ssl3.ecdh_rsa_aes_128_sha",false);
 pref("security.ssl3.ecdh_rsa_aes_256_sha",false);
 pref("security.ssl3.ecdh_rsa_des_ede3_sha",false);
 pref("security.ssl3.ecdh_rsa_rc4_128_sha",false);
+pref("security.ssl3.ecdhe_ecdsa_aes_128_gcm_sha256",false);
 pref("security.ssl3.ecdhe_ecdsa_aes_128_sha",false);
 pref("security.ssl3.ecdhe_ecdsa_aes_256_sha",false);
 pref("security.ssl3.ecdhe_ecdsa_des_ede3_sha",false);
 pref("security.ssl3.ecdhe_ecdsa_rc4_128_sha",false);
+pref("security.ssl3.ecdhe_rsa_aes_128_gcm_sha256",false);
 pref("security.ssl3.ecdhe_rsa_aes_128_sha",false);
 pref("security.ssl3.ecdhe_rsa_aes_256_sha",false);
 pref("security.ssl3.ecdhe_rsa_des_ede3_sha",false);
