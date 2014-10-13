@@ -128,7 +128,7 @@ function openNextLink(){
         return;
     }
     //set the cipher suite to be ONLY that in the given argument
-    /*var prefs = Cc["@mozilla.org/preferences-service;1"].getService(Ci.nsIPrefService);
+    var prefs = Cc["@mozilla.org/preferences-service;1"].getService(Ci.nsIPrefService);
     var cs_int = parseInt(tlsnCipherSuiteList[tlsnLinkIndex]);
     for (var i=0;i<4;i++){
         if (i==cs_int){
@@ -138,7 +138,7 @@ function openNextLink(){
             prefs.setBoolPref(tlsnCipherSuiteNames[i], false);
         }
     }
-    */
+    
     auditeeBrowser = gBrowser.addTab(linkArray[tlsnLinkIndex]);
     gBrowser.removeAllTabsBut(auditeeBrowser);
     document.getElementById("help").value = "Loading page..."
