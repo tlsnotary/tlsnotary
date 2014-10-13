@@ -9,7 +9,6 @@ var port;
 var tab_url_full = "";//full URL at the time when AUDIT* is pressed
 var tab_url = ""; //the URL at the time when AUDIT* is pressed (only the domain part up to the first /)
 var session_path = "";
-var observer;
 var audited_browser; //the FF's internal browser which contains the audited HTML
 var help;
 var button_record_enabled;
@@ -21,39 +20,13 @@ var testingMode = false;
 var headers="";
 var dict_of_certs = {};
 var dict_of_status = {};
+var dict_of_httpchannels = {};
 
 port = Cc["@mozilla.org/process/environment;1"].getService(Ci.nsIEnvironment).get("FF_to_backend_port");
 //setting homepage should be done from here rather than defaults.js in order to have the desired effect. FF's quirk.
 Cc["@mozilla.org/preferences-service;1"].getService(Ci.nsIPrefService).getBranch("browser.startup.").setCharPref("homepage", "chrome://tlsnotary/content/auditee.html");
 Components.utils.import("resource://gre/modules/PopupNotifications.jsm");
 
-function myObserver() {}
-myObserver.prototype = {
-  observe: function(aSubject, topic, data) {
-     var httpChannel = aSubject.QueryInterface(Ci.nsIHttpChannel);
-     var url = httpChannel.URI.spec;
-     aSubject.cancel(Components.results.NS_BINDING_ABORTED);
-       if (tab_url_full == url){
-            observer.unregister();
-       }
-     //if for some weird reason the tab url is not the first
-     //url requested, the wrong headers will be set; but then
-     //they will be overridden because we do not unregister
-     console.log("allowed url: " + url);
-     headers = "";
-     headers += httpChannel.requestMethod + " /" + tab_url + " HTTP/1.1" + "\r\n";
-     aSubject.visitRequestHeaders(function(header,value){
-                                  headers += header +": " + value + "\r\n";});
-  },
-  register: function() {
-    var observerService = Cc["@mozilla.org/observer-service;1"].getService(Ci.nsIObserverService);
-    observerService.addObserver(this, "http-on-modify-request", false);
-  },
-  unregister: function() {
-    var observerService = Cc["@mozilla.org/observer-service;1"].getService(Ci.nsIObserverService);
-    observerService.removeObserver(this, "http-on-modify-request");
-  }
-}
 
 function popupShow(text) {
 	PopupNotifications.show(gBrowser.selectedBrowser, "tlsnotary-popup", text,
@@ -130,11 +103,12 @@ function startRecording(){
 	button_spinner.hidden = false;
 	button_stop_disabled.hidden = false;
 	button_stop_enabled.hidden = true;
-    observer = new myObserver();
-    observer.register();
-    audited_browser.reloadWithFlags(Ci.nsIWebNavigation.LOAD_FLAGS_BYPASS_CACHE);
-	help.value = "Initializing the recording software"
-    setTimeout(preparePMS,500, tab_url_full);
+    var httpChannel = dict_of_httpchannels[tab_url_full]
+	headers = "";
+	headers += httpChannel.requestMethod + " /" + tab_url + " HTTP/1.1" + "\r\n";
+	httpChannel.visitRequestHeaders(function(header,value){
+                                  headers += header +": " + value + "\r\n";});
+    preparePMS(tab_url_full);
 }
 
 
@@ -150,7 +124,6 @@ function preparePMS(urldata){
     help.value = "Audit is underway; please be patient";
 	reqPreparePMS = new XMLHttpRequest();
     reqPreparePMS.onload = responsePreparePMS;
-    console.log("Cert fingerprint: "+dict_of_certs[urldata]);
     var cert = dict_of_certs[urldata];
     var len = new Object();
     var rawDER = cert.getRawDER(len);
@@ -288,6 +261,7 @@ function dumpSecurityInfo(channel,urldata) {
             latest_tab_sec_state = "unknown";
 	    
 	dict_of_status[urldata] = latest_tab_sec_state;
+	dict_of_httpchannels[urldata]  = channel.QueryInterface(Ci.nsIHttpChannel);
 	
     }
     else {
@@ -327,6 +301,7 @@ var myListener =
             if (aRequest instanceof Ci.nsIChannel)
             {
                 dumpSecurityInfo(aRequest,gBrowser.selectedBrowser.contentWindow.location.href);
+                
             }
         }    
     }
