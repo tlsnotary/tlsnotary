@@ -631,7 +631,11 @@ class TLSNSSLClientSession(object):
             recordLen = ba2int(response[3:5])
             if self.chosenCipherSuite in [47,53] and recordLen %16: 
                 raise Exception('Invalid ciphertext length for App Data')
-            self.serverResponseCiphertexts.append(response[5:5+recordLen])
+            one_record = response[5:5+recordLen]
+            if len(one_record) != recordLen:
+                #TODO - we may want to rerun the audit for this page
+                raise Exception ('Invalid record length')
+            self.serverResponseCiphertexts.append(one_record)
             #prepare for next record, if there is one:
             if len(response) == 5+len(self.serverResponseCiphertexts[-1]):
                 break
