@@ -11,22 +11,26 @@ var tlsnCipherSuiteNames=["security.ssl3.rsa_aes_128_sha","security.ssl3.rsa_aes
 //copied from https://developer.mozilla.org/en-US/docs/Code_snippets/Progress_Listeners
 const STATE_STOP = Ci.nsIWebProgressListener.STATE_STOP;
 const STATE_IS_WINDOW = Ci.nsIWebProgressListener.STATE_IS_WINDOW;
-//wait for the page to fully load before we press AUDIT
+
+//wait for the page to become secure before we press AUDIT
 var tlsnLoadListener = {
 	QueryInterface: XPCOMUtils.generateQI(["nsIWebProgressListener",
 										   "nsISupportsWeakReference"]),
 
-	onStateChange: function(aWebProgress, aRequest, aFlag, aStatus) {
-		if ((aFlag & STATE_STOP) && (aFlag & STATE_IS_WINDOW) && (aWebProgress.DOMWindow == aWebProgress.DOMWindow.top)) {
-			// This fires when the load finishes
-			gBrowser.removeProgressListener(this);
-			tlsnRecord();
-		}
-	},
+	onStateChange: function(aWebProgress, aRequest, aFlag, aStatus) {},
 	onLocationChange: function(aProgress, aRequest, aURI) {},
 	onProgressChange: function(aWebProgress, aRequest, curSelf, maxSelf, curTot, maxTot) {},
 	onStatusChange: function(aWebProgress, aRequest, aStatus, aMessage) {},
-	onSecurityChange: function(aWebProgress, aRequest, aState) {}
+	onSecurityChange: function(aWebProgress, aRequest, aState)
+	 {
+        // check if the state is secure or not
+        if(aState & Ci.nsIWebProgressListener.STATE_IS_SECURE)
+        {
+			//begin recording as soon as the page turns into https
+			gBrowser.removeProgressListener(this);
+			tlsnRecord();
+        }    
+    }
 }
 
 
@@ -141,12 +145,6 @@ function openNextLink(){
     //FIXME we should use auditeeBrowser here instead of gBrowser
     //but for some reason the listener never triggers then
     gBrowser.addProgressListener(tlsnLoadListener);
-    //Assuming that 3 seconds is enough for the server to send its certificate
-    //we can start the audit even before the whole page loads
-    //This is to speed up testing. 
-    //In normal mode we advise the user to let the page load fully first.
-    //Commented out for now, revisit later to speed up tests
-    //setTimeout(tlsnRecord, 3000)
 	tlsnLinkIndex++;
 	waitForRecordingToFinish(0);
 }
