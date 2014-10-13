@@ -199,8 +199,8 @@ function tlsnStopRecord(){
 function waitForSessionEnd(iteration){
 	var helpmsg = document.getElementById("help").value;
     if (!helpmsg.startsWith("Auditing session ended successfully")){
-        if (iteration > 200){
-                tlsnSendErrorMsg("Timed out waiting to receive input from the keyboard to select the trace file.");
+        if (iteration > 2000){
+                tlsnSendErrorMsg("Timed out waiting for auditor to signal the verdict.");
                 return;
          }
          setTimeout(waitForSessionEnd, 1000, ++iteration);
