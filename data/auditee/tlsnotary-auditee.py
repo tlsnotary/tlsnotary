@@ -52,7 +52,8 @@ testing = False #toggled when we are running a test suite (developer only)
 aes_ciphertext_Queue = Queue.Queue() #testing only: receive one ciphertext 
 aes_cleartext_Queue = Queue.Queue() #testing only: and put one cleartext
 bAwaitingCleartext = False #testing only: used for sanity check on HandlerClass_aes
-
+test_driver_pid = 0 #testing only: testdriver's PID used to kill it at quit()
+test_auditor_pid = 0 #testing only: auditor's PID used to kill it at quit()
 
 #RSA key management for peer messaging
 def import_auditor_pubkey(auditor_pubkey_b64modulus):
@@ -125,7 +126,6 @@ class HandlerClass_aes(SimpleHTTPServer.SimpleHTTPRequestHandler):
             self.send_header("response", "cleartext")
             cleartext = b64decode(self.path[len('/cleartext='):])
             aes_cleartext_Queue.put(cleartext)
-            global bAwaitingCleartext            
             bAwaitingCleartext = False            
             self.end_headers()
             return            
@@ -357,7 +357,7 @@ def prepare_encrypted_pms(tlsnSession, certDER, pms_secret, pms_padding_secret):
     if not reply[1].startswith('rsapms:'):
         return 'bad reply. Expected rsapms:'
     rsapms = reply[1][len('rsapms:'):]
-    assert len(rsapms) == len(n)
+    assert len(rsapms) == len(n) #TODO i once saw rsapms of size 255
     tlsnSession.serverModulus = shared.ba2int(n)
     tlsnSession.serverModLength = len_n
     tlsnSession.encSecondHalfPMS = shared.ba2int(rsapms)
@@ -749,6 +749,11 @@ def send_link(filelink):
 
 #cleanup
 def quit(sig=0, frame=0):
+    if testing:
+        try: os.kill(test_auditor_pid, signal.SIGTERM)
+        except: pass #happens when test termnated itself
+        try: os.kill(test_driver_pid, signal.SIGTERM)
+        except: pass #happens when test termnated itself
     if firefox_pid != 0:
         try: os.kill(firefox_pid, signal.SIGTERM)
         except: pass #firefox not runnng
@@ -781,13 +786,16 @@ def start_testing():
     print ("TESTING: starting auditor")    
     auditor_py = os.path.join(installdir, 'data', 'auditor', 'tlsnotary-auditor.py')
     auditor_proc = subprocess.Popen(['python', auditor_py,'daemon'])
-    auditor_pid = auditor_proc.pid    
+    global test_auditor_pid 
+    test_auditor_pid = auditor_proc.pid    
     print ("TESTING: starting testdriver")
     testdir = join(installdir, 'data', 'test')
     test_py = join(testdir, 'tlsnotary-test.py')
-    site_list = join (testdir, 'smalllist')
+    site_list = join (testdir, 'websitelist.txt')
     #testdriver kills ee/or when test ends, passing PIDs
-    test_proc = subprocess.Popen(filter(None,['python', test_py, site_list, str(os.getpid()), str(auditor_pid)]))
+    test_proc = subprocess.Popen(filter(None,['python', test_py, site_list, str(os.getpid()), str(test_auditor_pid)]))
+    global test_driver_pid
+    test_driver_pid = test_proc.pid
             
     #We want AES decryption to be done fast in browser's JS instead of in python.
     #We start a server which sends ciphertexts to browser                
