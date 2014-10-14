@@ -97,7 +97,7 @@ class HandlerClass_aes(SimpleHTTPServer.SimpleHTTPRequestHandler):
     protocol_version = "HTTP/1.0"      
     
     def do_HEAD(self):
-        print ('aes_http received ' + self.path + ' request',end='\r\n')
+        print ('aes_http received ' + self.path[:80] + ' request',end='\r\n')
         # example HEAD string "/command?parameter=124value1&para2=123value2"
         # we need to adhere to CORS and add extra Access-Control-* headers in server replies
 
@@ -128,7 +128,14 @@ class HandlerClass_aes(SimpleHTTPServer.SimpleHTTPRequestHandler):
             aes_cleartext_Queue.put(cleartext)
             bAwaitingCleartext = False            
             self.end_headers()
-            return            
+            return
+        
+    #overriding BaseHTTPServer.py's method to cap the output
+    def log_message(self, format, *args):
+        sys.stderr.write("%s - - [%s] %s\n" %
+                                  (self.client_address[0],
+                                   self.log_date_time_string(),
+                                   (format%args)[:80]))        
 
 
 #Receive HTTP HEAD requests from FF addon
@@ -307,9 +314,6 @@ class HandlerClass(SimpleHTTPServer.SimpleHTTPRequestHandler):
             return
 
     #overriding BaseHTTPServer.py's method to cap the output
-    #FIXME::: This doesnt work however, despite various online examples
-    #https://code.google.com/p/selenium/source/browse/py/test/selenium/webdriver/common/webserver.py
-    #maybe has to do with this handler running in a thread
     def log_message(self, format, *args):
         sys.stderr.write("%s - - [%s] %s\n" %
                                   (self.client_address[0],
@@ -467,7 +471,7 @@ def negotiateVerifyAndFinishHandshake(tlsnSession,tlssock):
     with auditor).'''
     sha_digest,md5_digest = tlsnSession.getHandshakeHashes()
     reply = send_and_recv('verify_md5sha:'+md5_digest+sha_digest)
-    if reply[0] != 'success': return ('Failed to receive a reply')
+    if reply[0] != 'success': return ('Failed to receive a reply for verify_md5sha')
     if not reply[1].startswith('verify_hmac:'): return ('bad reply. Expected verify_hmac:')
     data =  tlsnSession.getCKECCSF(providedPValue=reply[1][len('verify_hmac:'):])
     tlssock.send(data)
@@ -477,7 +481,7 @@ def negotiateVerifyAndFinishHandshake(tlsnSession,tlssock):
         response += shared.recv_socket(tlssock,isHandshake=True)
     sha_digest2,md5_digest2 = tlsnSession.getHandshakeHashes(isForServer = True)
     reply = send_and_recv('verify_md5sha2:'+md5_digest2+sha_digest2)
-    if reply[0] != 'success':return("Failed to receive a reply")
+    if reply[0] != 'success':return("Failed to receive a reply for verify_md5sha2")
     if not reply[1].startswith('verify_hmac2:'):return("bad reply. Expected verify_hmac2:")
     if not tlsnSession.processServerCCSFinished(response,providedPValue = reply[1][len('verify_hmac2:'):]):
         raise Exception ("Could not finish handshake with server successfully. Audit aborted")
@@ -766,9 +770,9 @@ def send_link(filelink):
 def quit(sig=0, frame=0):
     if testing:
         try: os.kill(test_auditor_pid, signal.SIGTERM)
-        except: pass #happens when test termnated itself
+        except: pass #happens when test terminated itself
         try: os.kill(test_driver_pid, signal.SIGTERM)
-        except: pass #happens when test termnated itself
+        except: pass #happens when test terminated itself
     if firefox_pid != 0:
         try: os.kill(firefox_pid, signal.SIGTERM)
         except: pass #firefox not runnng
