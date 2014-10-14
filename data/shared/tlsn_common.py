@@ -167,6 +167,7 @@ class StoppableHttpServer (BaseHTTPServer.HTTPServer):
         while not self.stop:
                 self.handle_request()
         return self.retval;
+ 
 
 #processes each http request in a separate thread
 #we need threading in order to send progress updates to the frontend in a non-blocking manner

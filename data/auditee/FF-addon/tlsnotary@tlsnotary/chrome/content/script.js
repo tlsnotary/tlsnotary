@@ -205,7 +205,7 @@ function go_offline_for_a_moment(){
 	BrowserOffline.toggleOfflineStatus();
 	setTimeout(function(){
 		BrowserOffline.toggleOfflineStatus();
-		}, 3000)
+		}, 1000)
 }
 
 

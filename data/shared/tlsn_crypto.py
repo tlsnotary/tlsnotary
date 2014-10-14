@@ -641,6 +641,37 @@ class TLSNSSLClientSession(object):
             response = response[5+recordLen:]
         print ("We got this many record ciphertexts:",len(self.serverResponseCiphertexts))
 
+
+#used only during testing. Get ciphertexts which will be shipped off to browser
+#for AES decryption
+    def getCiphertexts(self):
+        assert len(self.serverResponseCiphertexts),"Could not process the server response, no ciphertext found."
+        if not self.chosenCipherSuite in [47,53]: #AES-CBC
+            raise Exception("non-AES cipher suite.")                    
+        ciphertexts = [] #each item contains a tuple (ciphertext, encryption_key, iv)
+        for ciphertext in self.serverResponseCiphertexts:
+            ciphertexts.append( (ciphertext, self.serverEncKey, self.lastServerCiphertextBlock) )
+            self.lastServerCiphertextBlock = ciphertext[-16:] #ready for next record
+        return ciphertexts
+
+
+#used only during testing. Check mac on each plaintext and return the combined plaintexts
+#with macs stripped
+    def macCheckPlaintexts(self, plaintexts):
+        mac_stripped_plaintext = ''
+        for idx,raw_plaintext in enumerate(plaintexts):
+            #need correct sequence number for macs            
+            self.serverSeqNo += 1
+            hash_len = sha1_hash_len if self.chosenCipherSuite in [5,47,53] else md5_hash_len
+            received_mac = raw_plaintext[-hash_len:]
+            check_mac = self.buildRecordMac(True,raw_plaintext[:-hash_len],appd)
+            if received_mac != check_mac:
+                raise Exception ("Warning, record mac check failed. in index:" + str(idx))
+            mac_stripped_plaintext += raw_plaintext[:-hash_len]
+        return mac_stripped_plaintext
+        
+        
+ 
     def processServerAppDataRecords(self,checkFinished=False):
         '''Using the encrypted records in self.serverResponseCiphertexts, 
         containing the response from
@@ -662,12 +693,10 @@ class TLSNSSLClientSession(object):
             if self.decryptedServerFinished[1] != check_mac:
                 print ("Warning, record mac check failed from server Finished message.")
                 bad_record_mac += 1
-                return None        #TODO - exception here?
-        
+                return None        #TODO - exception here?        
         plaintext = ''
         
-        assert len(self.serverResponseCiphertexts),\
-               "Could not process the server response, no ciphertext found."
+        assert len(self.serverResponseCiphertexts),"Could not process the server response, no ciphertext found."
         
         for ciphertext in self.serverResponseCiphertexts:
             #need correct sequence number for macs
@@ -693,8 +722,8 @@ class TLSNSSLClientSession(object):
             received_mac = raw_plaintext[-hash_len:]
             check_mac = self.buildRecordMac(True,raw_plaintext[:-hash_len],appd)
             if received_mac != check_mac:
-                print ("Warning, record mac check failed.")
-                bad_record_mac += 1
+                raise Exception ("Warning, record mac check failed.")
+                #bad_record_mac += 1
             plaintext += raw_plaintext[:-hash_len]
 
         return (plaintext, bad_record_mac)
