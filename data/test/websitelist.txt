@@ -1,3 +1,4 @@
+https://www.wellsfargo.com/  47,53,5
 https://www.pinterest.com 47,53,5
 https://www.chase.com/ 47,53,5
 https://www.bankofamerica.com/ 47,53,5
@@ -17,7 +18,6 @@ https://www.vimeo.com 47,53,5
 https://www.bawagpsk.com 47,53
 https://banking.dkb.de 47,53,5
 https://www.deutsche-bank.es/pbct/loginDNIe.doLoginConnection.db 47,53,5
-https://www.wellsfargo.com/  47,53,5
 https://i.bankuralsib.ru  4,5
 https://www.debian.org/  47,53
 https://www.okpay.com/en/index.html 47,53,4,5
