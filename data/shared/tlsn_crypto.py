@@ -59,7 +59,7 @@ h_cke = '\x10' #Client Key Exchange
 h_fin = '\x14' #Finished
 
 class TLSNSSLClientSession(object):
-    def __init__(self,server=None,port=443,ccs=53,audit=False):
+    def __init__(self,server=None,port=443,ccs=None):
         self.serverName = server
         self.sslPort = port
         self.nAuditeeEntropy = 12
@@ -147,7 +147,7 @@ class TLSNSSLClientSession(object):
         self.unencryptedClientFinished = None
         
         #create clientHello on instantiation
-        self.setClientHello(audit)
+        self.setClientHello()
 
     def dump(self):
         returnStr='Session state dump: \n'
@@ -163,14 +163,14 @@ class TLSNSSLClientSession(object):
                 returnStr += str(v) + '\n'
         return returnStr
 
-    def setClientHello(self,audit):
+    def setClientHello(self):
         assert self.clientRandom, "Client random should have been set in constructor."
-        assert self.chosenCipherSuite, "Cipher suite should be set."
         remaining = tlsver + self.clientRandom + '\x00' #last byte is session id length
-        if not audit:
-            #hard coded cipher suite for preparing pms
+        if self.chosenCipherSuite:
+            #prepare_pms and testing only: use specific cs
             remaining  += '\x00\x02\x00'+chr(self.chosenCipherSuite) 
         else:
+            #use all 4 ciphersuites
             remaining += '\x00'+chr(2*len(self.cipherSuites))
             for a in self.cipherSuites:
                 remaining += '\x00'+chr(a)                        
@@ -196,16 +196,16 @@ class TLSNSSLClientSession(object):
             self.masterSecretHalfAuditee = xor(self.pAuditee[24:],providedPValue)
             return self.masterSecretHalfAuditee
 
-    def setCipherSuite(self, csByte):
-        csInt = ba2int(csByte)
-        assert csInt in self.cipherSuites.keys(), "Invalid cipher suite chosen" 
-        self.chosenCipherSuite = csInt
-        return csInt
+    def setCipherSuite(self, cs):
+        assert cs in self.cipherSuites.keys(), "Invalid cipher suite chosen" 
+        self.chosenCipherSuite = cs
+        return cs
 
     def processServerHello(self,sh_cert_shd):
         shd = hs + tlsver + bi2ba(4,fixed=2) + h_shd + bi2ba(0,fixed=3)
         sh_magic = re.compile(hs + tlsver + '..' + h_sh,re.DOTALL)
-        if not re.match(sh_magic, sh_cert_shd): raise Exception ('Invalid server hello')
+        if not re.match(sh_magic, sh_cert_shd): 
+            raise Exception ('Invalid server hello')
         if not sh_cert_shd.endswith(shd[-4:]): 
             with open('handbg','wb') as f: f.write(binascii.hexlify(sh_cert_shd))
             raise Exception ('invalid server hello done')
@@ -252,22 +252,32 @@ class TLSNSSLClientSession(object):
         if self.handshakeMessages[1][cs_start_byte] != '\x00' or \
            ord(self.handshakeMessages[1][cs_start_byte+1]) not in self.cipherSuites.keys():
             raise Exception("Could not locate cipher suite choice in server hello.")
-        self.setCipherSuite(self.handshakeMessages[1][cs_start_byte+1])
-        print ("Set cipher suite to ",binascii.hexlify(self.handshakeMessages[1][cs_start_byte+1]))
+        server_ciphersuite = ba2int(self.handshakeMessages[1][cs_start_byte+1])
+        if self.chosenCipherSuite: #testing only,  we prefered a specific cs
+            if self.chosenCipherSuite != server_ciphersuite:
+                raise Exception ('Server did not return the ciphersuite we requested')
+        self.setCipherSuite(server_ciphersuite)
+        print ("Set cipher suite to ", str(server_ciphersuite))
             
         return (self.handshakeMessages[1:4], self.serverRandom)
 
     def setEncryptedPMS(self):
         assert (self.encFirstHalfPMS and self.encSecondHalfPMS and self.serverModulus), \
             'failed to set encpms, first half was: ' + str(self.encFirstHalfPMS) +\
-            ' second half was: ' + self.encSecondHalfPMS + ' modulus was: ' + self.serverModulus
+            ' second half was: ' + str(self.encSecondHalfPMS) + ' modulus was: ' + str(self.serverModulus)
         self.encPMS =  self.encFirstHalfPMS * self.encSecondHalfPMS % self.serverModulus
         return self.encPMS
 
+    def setEncFirstHalfPMS(self):
+        assert (self.serverModulus and not self.encFirstHalfPMS)
+        oneslength = 23            
+        pms1 = tlsver+self.auditeeSecret + ('\x00' * (24-2-self.nAuditeeEntropy))
+        self.encFirstHalfPMS = pow(ba2int('\x02'+('\x01'*(oneslength))+\
+        self.auditeePaddingSecret+'\x00'+pms1 +'\x00'*23 + '\x01'), self.serverExponent, self.serverModulus)
+     
     def setAuditeeSecret(self):
         '''Sets up the auditee's half of the preparatory
-        secret material to create the master secret, and
-        the encrypted premaster secret.'''
+        secret material to create the master secret.'''
         assert self.clientRandom and self.serverRandom,"one of client or server random not set"
         if not self.auditeeSecret:
             self.auditeeSecret = os.urandom(self.nAuditeeEntropy)             
@@ -277,18 +287,15 @@ class TLSNSSLClientSession(object):
         seed = self.clientRandom + self.serverRandom
         pms1 = tlsver+self.auditeeSecret + ('\x00' * (24-2-self.nAuditeeEntropy))
         self.pAuditee = TLS10PRF(label+seed,first_half = pms1)[0]
-        #we can construct the encrypted form if pubkey is known
-        if (self.serverModulus and not self.encFirstHalfPMS):
-            oneslength = 23            
-            self.encFirstHalfPMS = pow(ba2int('\x02'+('\x01'*(oneslength))+\
-        self.auditeePaddingSecret+'\x00'+pms1 +'\x00'*23 + '\x01'), self.serverExponent, self.serverModulus)
+        #encrypted PMS has already been calculated before the audit began
+        return (self.pAuditee)
 
-        #can construct the full encrypted pre master secret if
-        #the auditor's half is already calculated
-        if (self.encSecondHalfPMS):
-            self.setEncryptedPMS()
-
-        return (self.pAuditee,self.encPMS)
+    def setEncSecondHalfPMS(self):
+        assert (self.serverModulus and not self.encFirstHalfPMS)
+        oneslength = 103+ba2int(self.serverModLength)-256
+        pms2 =  self.auditorSecret + ('\x00' * (24-self.nAuditorEntropy-1)) + '\x01'
+        self.encSecondHalfPMS = pow( ba2int('\x01'+('\x01'*(oneslength))+\
+        self.auditorPaddingSecret+ ('\x00'*25)+pms2), self.serverExponent, self.serverModulus )
 
     def setAuditorSecret(self):
         '''Sets up the auditor's half of the preparatory
@@ -304,12 +311,7 @@ class TLSNSSLClientSession(object):
         seed = self.clientRandom + self.serverRandom
         pms2 =  self.auditorSecret + ('\x00' * (24-self.nAuditorEntropy-1)) + '\x01'
         self.pAuditor = TLS10PRF(label+seed,second_half = pms2)[1]
-        #we can construct the encrypted form if pubkey is known
-        if (self.serverModulus and not self.encSecondHalfPMS):
-            oneslength = 103+ba2int(self.serverModLength)-256
-            self.encSecondHalfPMS = pow( ba2int('\x01'+('\x01'*(oneslength))+\
-            self.auditorPaddingSecret+ ('\x00'*25)+pms2), self.serverExponent, self.serverModulus )
-        return (self.pAuditor,self.encSecondHalfPMS)
+        return (self.pAuditor)
 
     def extractCertificate(self):
         assert self.handshakeMessages[2], "Cannot extract certificate, no handshake message present."
@@ -318,14 +320,13 @@ class TLSNSSLClientSession(object):
         return self.serverCertificate
 
     def extractModAndExp(self,certDER=None):
-        if not certDER: self.extractCertificate()
+        if not certDER: 
+            self.extractCertificate()
+            DERdata = self.serverCertificate
+        else: DERdata = certDER
         assert (self.serverCertificate or certDER), "No server certificate, cannot extract pubkey"
-        if certDER:
-            rv  = decoder.decode(certDER, asn1Spec=univ.Sequence())
-            bitstring = rv[0].getComponentByPosition(1)
-        else:
-            rv  = decoder.decode(self.serverCertificate, asn1Spec=univ.Sequence())
-            bitstring = rv[0].getComponentByPosition(0).getComponentByPosition(6).getComponentByPosition(1)
+        rv  = decoder.decode(DERdata, asn1Spec=univ.Sequence())
+        bitstring = rv[0].getComponentByPosition(0).getComponentByPosition(6).getComponentByPosition(1)
         #bitstring is a list of ints, like [01110001010101000...]
         #convert it into into a string   '01110001010101000...'
         stringOfBits = ''
@@ -634,7 +635,11 @@ class TLSNSSLClientSession(object):
             recordLen = ba2int(response[3:5])
             if self.chosenCipherSuite in [47,53] and recordLen %16: 
                 raise Exception('Invalid ciphertext length for App Data')
-            self.serverResponseCiphertexts.append(response[5:5+recordLen])
+            one_record = response[5:5+recordLen]
+            if len(one_record) != recordLen:
+                #TODO - we may want to rerun the audit for this page
+                raise Exception ('Invalid record length')
+            self.serverResponseCiphertexts.append(one_record)
             #prepare for next record, if there is one:
             if len(response) == 5+len(self.serverResponseCiphertexts[-1]):
                 break
@@ -738,6 +743,7 @@ class TLSNSSLClientSession(object):
         self.setMasterSecretHalf() #default values means full MS created
         self.doKeyExpansion()
         self.encSecondHalfPMS = ba2int(rsapms2)
+        self.setEncFirstHalfPMS()
         self.setEncryptedPMS()
         return self.getCKECCSF()
         

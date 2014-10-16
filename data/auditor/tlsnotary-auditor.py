@@ -68,6 +68,7 @@ def process_messages():
             #TODO currently can only handle 2048 bit keys for 'reliable site'
             rspSession.serverModLength = shared.bi2ba(256)
             rspSession.setAuditorSecret()
+            rspSession.setEncSecondHalfPMS()
             rrsapms = shared.bi2ba(rspSession.encSecondHalfPMS)
             send_message('rrsapms_rhmac:'+ rrsapms+rspSession.pAuditor)
             #we keep resetting so that the final, successful choice of secrets are stored
@@ -75,35 +76,49 @@ def process_messages():
             tlsnSession.auditorPaddingSecret = rspSession.auditorPaddingSecret
             continue
         #---------------------------------------------------------------------#
-        #cr_sr_hmac_n_e : sent by auditee at the start of the real audit.
-        #client random, server random, md5 hmac of auditee's PMS half, modulus and exponent.
+        #cr_sr_hmac : sent by auditee at the start of the real audit.
+        #client random, server random, md5 hmac of auditee's PMS half.
         #Then construct master secret half and hmac for expanded keys; note that the 
         #HMAC is 'garbageized', meaning some bytes are set as random garbage, so that 
         #the auditee's expanded keys will be invalid for that section (specifically -
-        #the server mac key). Finally send back to auditee the encrypted premaster secret half,
-        #the hmac half for the master secret half and the hmac for the expanded keys (message
-        #rsapms_hmacms_hmacek).
-        elif msg.startswith('cr_sr_hmac_n_e:'): 
+        #the server mac key). Finally send back to auditee the hmac half for the
+        #master secret half and the hmac for the expanded keys (message
+        #rhmacms_hmacek).
+        elif msg.startswith('cr_sr_hmac:'): 
             progressQueue.put(time.strftime('%H:%M:%S', time.localtime()) + ': Processing data from the auditee.')
-            cr_sr_hmac_n_e = msg[len('cr_sr_hmac_n_e:'):]
-            tlsnSession.clientRandom = cr_sr_hmac_n_e[1:33]
-            tlsnSession.serverRandom = cr_sr_hmac_n_e[33:65]
-            tlsnSession.chosenCipherSuite = int(cr_sr_hmac_n_e[:1].encode('hex'),16)
-            md5hmac1_for_MS=cr_sr_hmac_n_e[65:89] #half of MS's 48 bytes
-            n_len_int = int(cr_sr_hmac_n_e[89:91].encode('hex'),16)
-            n = cr_sr_hmac_n_e[91:91+n_len_int]
-            e = cr_sr_hmac_n_e[91+n_len_int:91+n_len_int+3]
+            cr_sr_hmac = msg[len('cr_sr_hmac:'):]
+            tlsnSession.clientRandom = cr_sr_hmac[1:33]
+            tlsnSession.serverRandom = cr_sr_hmac[33:65]
+            tlsnSession.chosenCipherSuite = int(cr_sr_hmac[:1].encode('hex'),16)
+            md5hmac1_for_MS=cr_sr_hmac[65:89] #half of MS's 48 bytes
+            if not tlsnSession.auditorSecret: 
+                raise Exception("Auditor PMS secret data should have already been set.")
+            tlsnSession.setAuditorSecret()
+            tlsnSession.setMasterSecretHalf(half=1,providedPValue=md5hmac1_for_MS)         
+            garbageizedHMAC = tlsnSession.getPValueMS('auditor',[2]) #withhold the server mac
+            #rsapms_hmacms_hmacek = shared.bi2ba(tlsnSession.encSecondHalfPMS)+tlsnSession.pAuditor[24:]+garbageizedHMAC
+            hmacms_hmacek = tlsnSession.pAuditor[24:]+garbageizedHMAC
+            send_message('hmacms_hmacek:'+ hmacms_hmacek)
+            continue
+        #---------------------------------------------------------------------#
+        #n_e: Server pubkey's modulus and exponent used to construct the
+        #second half of encrypted PMS
+        #This is done before the audit starts to cut down online time
+        elif msg.startswith('n_e:'): 
+            n_e = msg[len('n_e:'):]
+            n_len_int = int(n_e[:2].encode('hex'),16)
+            n = n_e[2:2+n_len_int]
+            e = n_e[2+n_len_int:2+n_len_int+3]
             tlsnSession.serverModulus = int(n.encode('hex'),16)
             tlsnSession.serverExponent = int(e.encode('hex'),16)
             tlsnSession.serverModLength = shared.bi2ba(n_len_int)
-            if not tlsnSession.auditorSecret: raise Exception("Auditor PMS secret data should have already been set.")
-            tlsnSession.setAuditorSecret() #will set the enc PMS second half
-            tlsnSession.setMasterSecretHalf(half=1,providedPValue=md5hmac1_for_MS)
-            garbageizedHMAC = tlsnSession.getPValueMS('auditor',[2]) #withhold the server mac
-            rsapms_hmacms_hmacek = shared.bi2ba(tlsnSession.encSecondHalfPMS)+tlsnSession.pAuditor[24:]+garbageizedHMAC
-            send_message('rsapms_hmacms_hmacek:'+ rsapms_hmacms_hmacek)
+            if not tlsnSession.auditorSecret: 
+                raise Exception("Auditor PMS secret data should have already been set.")
+            tlsnSession.setEncSecondHalfPMS() #will set the enc PMS second half
+            rsapms =  shared.bi2ba(tlsnSession.encSecondHalfPMS)
+            send_message('rsapms:'+ rsapms)
             continue
-        #---------------------------------------------------------------------#
+
         #Receive from the auditee the client handshake hashes (md5 and sha) and return
         #auditor's half of the HMAC needed to construct the PRF output for the verify data
         #which is needed to construct the Client Finished handshake final message.
@@ -185,7 +200,8 @@ def process_messages():
             for one_response in adir_list:
                 if not one_response.startswith('response'): continue
                 try: this_seqno = int(one_response[len('response'):])
-                except: raise Exception ('WARNING: Could not cast response\'s tail to int')
+                except: 
+                    raise Exception ('WARNING: Could not cast response\'s tail to int')
                 if this_seqno in seqnos: 
                     raise Exception ('WARNING: multiple responsefiles names detected')
                 saved_hash_path = os.path.join(commit_dir, 'responsehash'+str(this_seqno))
@@ -555,12 +571,15 @@ if __name__ == "__main__":
     for i in range(10):
         time.sleep(1)        
         if thread.retval == '': continue
-        elif thread.retval[0] == 'failure': raise Exception('MINIHTTPD_FAILURE')
+        elif thread.retval[0] == 'failure': 
+            raise Exception('MINIHTTPD_FAILURE')
         elif thread.retval[0] == 'success':
             bWasStarted = True
             break
-        else: raise Exception('MINIHTTPD_WRONG_RESPONSE')
-    if bWasStarted == False: raise Exception('MINIHTTPD_START_TIMEOUT')
+        else: 
+            raise Exception('MINIHTTPD_WRONG_RESPONSE')
+    if bWasStarted == False: 
+        raise Exception('MINIHTTPD_START_TIMEOUT')
     FF_to_backend_port = thread.retval[1]
     
     daemon_mode = False
@@ -583,7 +602,8 @@ if __name__ == "__main__":
         if progxp:
             ff32 = os.path.join(progxp, "Mozilla Firefox",  "firefox.exe" )
             if os.path.isfile(ff32): browser_exepath = ff32
-        if not daemon_mode and browser_exepath == '': raise Exception(
+        if not daemon_mode and browser_exepath == '': 
+            raise Exception(
             'Failed to find Firefox in your Program Files location')     
     elif OS=='linux':
         if not daemon_mode: browser_exepath = 'firefox'
@@ -612,12 +632,14 @@ if __name__ == "__main__":
         elif auditee_pubkey_b64modulus != '':
             print ('Reusing his key from previous session:')
             print (auditee_pubkey_b64modulus)
-        else: raise Exception ('You need to provide his key using hiskey=')
+        else: 
+            raise Exception ('You need to provide his key using hiskey=')
         start_peer_messaging()
     else:#not a daemon mode
         try: ff_proc = subprocess.Popen([browser_exepath, os.path.join(
             'http://127.0.0.1:' + str(FF_to_backend_port) + '/auditor.html')])
-        except: raise Exception('BROWSER_START_ERROR')
+        except: 
+            raise Exception('BROWSER_START_ERROR')
     
     try:
         while True:

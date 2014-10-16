@@ -9,7 +9,6 @@ var port;
 var tab_url_full = "";//full URL at the time when AUDIT* is pressed
 var tab_url = ""; //the URL at the time when AUDIT* is pressed (only the domain part up to the first /)
 var session_path = "";
-var observer;
 var audited_browser; //the FF's internal browser which contains the audited HTML
 var help;
 var button_record_enabled;
@@ -21,39 +20,13 @@ var testingMode = false;
 var headers="";
 var dict_of_certs = {};
 var dict_of_status = {};
+var dict_of_httpchannels = {};
 
 port = Cc["@mozilla.org/process/environment;1"].getService(Ci.nsIEnvironment).get("FF_to_backend_port");
 //setting homepage should be done from here rather than defaults.js in order to have the desired effect. FF's quirk.
 Cc["@mozilla.org/preferences-service;1"].getService(Ci.nsIPrefService).getBranch("browser.startup.").setCharPref("homepage", "chrome://tlsnotary/content/auditee.html");
 Components.utils.import("resource://gre/modules/PopupNotifications.jsm");
 
-function myObserver() {}
-myObserver.prototype = {
-  observe: function(aSubject, topic, data) {
-     var httpChannel = aSubject.QueryInterface(Ci.nsIHttpChannel);
-     var url = httpChannel.URI.spec;
-     aSubject.cancel(Components.results.NS_BINDING_ABORTED);
-       if (tab_url_full == url){
-            observer.unregister();
-       }
-     //if for some weird reason the tab url is not the first
-     //url requested, the wrong headers will be set; but then
-     //they will be overridden because we do not unregister
-     console.log("allowed url: " + url);
-     headers = "";
-     headers += httpChannel.requestMethod + " /" + tab_url + " HTTP/1.1" + "\r\n";
-     aSubject.visitRequestHeaders(function(header,value){
-                                  headers += header +": " + value + "\r\n";});
-  },
-  register: function() {
-    var observerService = Cc["@mozilla.org/observer-service;1"].getService(Ci.nsIObserverService);
-    observerService.addObserver(this, "http-on-modify-request", false);
-  },
-  unregister: function() {
-    var observerService = Cc["@mozilla.org/observer-service;1"].getService(Ci.nsIObserverService);
-    observerService.removeObserver(this, "http-on-modify-request");
-  }
-}
 
 function popupShow(text) {
 	PopupNotifications.show(gBrowser.selectedBrowser, "tlsnotary-popup", text,
@@ -130,11 +103,20 @@ function startRecording(){
 	button_spinner.hidden = false;
 	button_stop_disabled.hidden = false;
 	button_stop_enabled.hidden = true;
-    observer = new myObserver();
-    observer.register();
-    audited_browser.reloadWithFlags(Ci.nsIWebNavigation.LOAD_FLAGS_BYPASS_CACHE);
-	help.value = "Initializing the recording software"
-    setTimeout(preparePMS,500, tab_url_full);
+    var httpChannel = dict_of_httpchannels[tab_url_full]
+	headers = "";
+	headers += httpChannel.requestMethod + " /" + tab_url + " HTTP/1.1" + "\r\n";
+	httpChannel.visitRequestHeaders(function(header,value){
+                                  headers += header +": " + value + "\r\n";});
+    preparePMS(tab_url_full);
+}
+
+
+function buildBase64DER(chars){
+    var result = "";
+    for (i=0; i < chars.length; i++)
+        result += String.fromCharCode(chars[i]);
+    return btoa(result);
 }
 
 
@@ -142,9 +124,18 @@ function preparePMS(urldata){
     help.value = "Audit is underway; please be patient";
 	reqPreparePMS = new XMLHttpRequest();
     reqPreparePMS.onload = responsePreparePMS;
-    console.log("Cert fingerprint: "+dict_of_certs[urldata]);
-    var b64headers = btoa(dict_of_certs[urldata]+headers); //headers is a global variable
-    reqPreparePMS.open("HEAD", "http://127.0.0.1:"+port+"/prepare_pms?b64headers="+b64headers, true);
+    var cert = dict_of_certs[urldata];
+    var len = new Object();
+    var rawDER = cert.getRawDER(len);
+    var b64DERCert = buildBase64DER(rawDER);    
+    var b64headers = btoa(headers); //headers is a global variable
+    var ciphersuite = ''
+    if (testingMode == true){
+		ciphersuite = current_ciphersuite; //<-- global var from testdriver_script.js
+	}
+    reqPreparePMS.open("HEAD", "http://127.0.0.1:"+port+"/prepare_pms?b64dercert="+b64DERCert+
+		"&b64headers="+b64headers+"&ciphersuite="+ciphersuite, true);
+	reqPreparePMS.timeout = 0; //no timeout
     reqPreparePMS.send();
     responsePreparePMS(0);	
 }
@@ -225,7 +216,9 @@ function stopRecording(){
 
 function responseStopRecording(iteration){
     if (typeof iteration == "number"){
-        if (iteration > 100){
+		var timeout = 100;
+		if (testingMode == True) timeout = 2000;
+        if (iteration > timeout){
 			help.value = "ERROR responseStopRecording timed out ";
             return;
         }
@@ -253,6 +246,7 @@ function responseStopRecording(iteration){
 	return;
 }
 
+
 function dumpSecurityInfo(channel,urldata) {
     const Cc = Components.classes;
     const Ci = Components.interfaces;
@@ -275,6 +269,7 @@ function dumpSecurityInfo(channel,urldata) {
             latest_tab_sec_state = "unknown";
 	    
 	dict_of_status[urldata] = latest_tab_sec_state;
+	dict_of_httpchannels[urldata]  = channel.QueryInterface(Ci.nsIHttpChannel);
 	
     }
     else {
@@ -283,7 +278,7 @@ function dumpSecurityInfo(channel,urldata) {
     // Print SSL certificate details
     if (secInfo instanceof Ci.nsISSLStatusProvider) {
       var cert = secInfo.QueryInterface(Ci.nsISSLStatusProvider).SSLStatus.QueryInterface(Ci.nsISSLStatus).serverCert;
-      dict_of_certs[urldata] = cert.sha1Fingerprint;
+      dict_of_certs[urldata] = cert;
     }
 }
 
@@ -314,6 +309,7 @@ var myListener =
             if (aRequest instanceof Ci.nsIChannel)
             {
                 dumpSecurityInfo(aRequest,gBrowser.selectedBrowser.contentWindow.location.href);
+                
             }
         }    
     }
