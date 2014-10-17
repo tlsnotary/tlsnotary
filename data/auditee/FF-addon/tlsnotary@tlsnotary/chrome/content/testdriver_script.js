@@ -28,9 +28,10 @@ var tlsnLoadListener = {
         // check if the state is secure or not
         if(aState & Ci.nsIWebProgressListener.STATE_IS_SECURE)
         {
-			//begin recording as soon as the page turns into https
 			gBrowser.removeProgressListener(this);
-			tlsnRecord();
+			//begin recording as soon as the page turns into https, but not immediately, because
+			//send_certificate request must go out first
+			setTimeout(tlsnRecord, 1000);
         }    
     }
 }
@@ -120,7 +121,8 @@ function waitForP2PConnection(){
 	}
 	//else connected to peer
 	startDecryptionProcess();
-	openNextLink();
+	//give auditor time to run checks and start the receiving thread
+	setTimeout(openNextLink, 2000);
 }
 
 
