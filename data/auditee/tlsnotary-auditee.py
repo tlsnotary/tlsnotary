@@ -588,10 +588,11 @@ def decryptHTML(sha1hmac, tlsnSession,sf):
     tlsnSession.setMasterSecretHalf() #without arguments sets the whole MS
     tlsnSession.doKeyExpansion()
     
-    if not testing or not tlsnSession.chosenCipherSuite in [47,53]:
+    if int(shared.config.get("General","decrypt_with_slowaes")) or not tlsnSession.chosenCipherSuite in [47,53]:
+        #either using slowAES or a RC4 ciphersuite
         plaintext,bad_mac = tlsnSession.processServerAppDataRecords(checkFinished=True)
         if bad_mac: print ("WARNING! Plaintext is not authenticated.")        
-    else: #we are both testing and our CS is AES
+    else: #AES ciphersuite and not using slowaes
         ciphertexts = tlsnSession.getCiphertexts()
         raw_plaintexts = []
         for one_ciphertext in ciphertexts:
@@ -686,7 +687,7 @@ def peer_handshake():
 
 #Make a local copy of firefox, find the binary, install the new profile
 #and start up firefox with that profile.
-def start_firefox(FF_to_backend_port, firefox_install_path):
+def start_firefox(FF_to_backend_port, firefox_install_path, AES_decryption_port):
     #find the binary *before* copying; acts as sanity check
     ffbinloc = {'linux':['firefox'],'mswin':['firefox.exe'],'macos':['Contents','MacOS','firefox']}
     assert os.path.isfile(join(*([firefox_install_path]+ffbinloc[OS]))),\
@@ -749,6 +750,9 @@ def start_firefox(FF_to_backend_port, firefox_install_path):
             shutil.copytree(join(datadir, 'FF-addon', ext_dir),join(bundles_dir, ext_dir))                  
     os.putenv('FF_to_backend_port', str(FF_to_backend_port))
     os.putenv('FF_first_window', 'true')   #prevents addon confusion when websites open multiple FF windows
+    if int(shared.config.get("General","decrypt_with_slowaes")) == 0:
+        os.putenv('TLSNOTARY_USING_BROWSER_AES_DECRYPTION', 'true')
+        os.putenv('TLSNOTARY_AES_DECRYPTION_PORT', str(AES_decryption_port))
 
     if testing:
         print ('****************************TESTING MODE********************************')
@@ -793,7 +797,7 @@ def aes_decryption_thread(parentthread):
     #allow three attempts to start mini httpd in case if the port is in use
     bWasStarted = False
     for i in range(3):
-        AES_decryption_port = 37777 #random.randint(1025,65535)
+        AES_decryption_port = random.randint(1025,65535)
         print ('Starting AES decryption server')
         try:
             aes_httpd = shared.StoppableHttpServer(('127.0.0.1', AES_decryption_port), HandlerClass_aes)
@@ -879,25 +883,6 @@ def start_testing():
     global test_driver_pid
     test_driver_pid = test_proc.pid
             
-    #We want AES decryption to be done fast in browser's JS instead of in python.
-    #We start a server which sends ciphertexts to browser                
-    thread_aes = shared.ThreadWithRetval(target=aes_decryption_thread)
-    thread_aes.daemon = True
-    thread_aes.start()            
-    #wait for minihttpd thread to indicate its status  
-    bWasStarted = False
-    for i in range(10):
-        time.sleep(1)        
-        if thread_aes.retval == '': continue
-        #else
-        if thread_aes.retval[0] != 'success': 
-            raise Exception (
-            'Failed to start minihttpd server. Please investigate')
-        #else
-        bWasStarted = True
-        break
-    if bWasStarted == False:
-        raise Exception ('minihttpd failed to start in 10 secs. Please investigate')    
 
  
 if __name__ == "__main__":
@@ -979,15 +964,41 @@ if __name__ == "__main__":
     
     thread = threading.Thread(target=process_certificate_queue)
     thread.daemon = True
-    thread.start()    
-        
-    ff_retval = start_firefox(FF_to_backend_port, firefox_install_path)
+    thread.start()
+    
+    AES_decryption_port = None
+    if int(shared.config.get("General","decrypt_with_slowaes")) == 0:
+        #We want AES decryption to be done fast in browser's JS instead of in python.
+        #We start a server which sends ciphertexts to browser                
+        thread_aes = shared.ThreadWithRetval(target=aes_decryption_thread)
+        thread_aes.daemon = True
+        thread_aes.start()            
+        #wait for minihttpd thread to indicate its status  
+        bWasStarted = False
+        for i in range(10):
+            time.sleep(1)        
+            if thread_aes.retval == '': continue
+            #else
+            if thread_aes.retval[0] != 'success': 
+                raise Exception (
+                'Failed to start minihttpd server. Please investigate')
+            #else
+            bWasStarted = True
+            AES_decryption_port = thread_aes.retval[1]
+            break
+        if bWasStarted == False:
+            raise Exception ('minihttpd failed to start in 10 secs. Please investigate')        
+          
+    ff_retval = start_firefox(FF_to_backend_port, firefox_install_path, AES_decryption_port)
     if ff_retval[0] != 'success': 
         raise Exception (
         'Error while starting Firefox: '+ ff_retval[0])
     ff_proc = ff_retval[1]
     firefox_pid = ff_proc.pid    
     
+   
+        
+        
     signal.signal(signal.SIGTERM, quit)
 
     if testing: start_testing()

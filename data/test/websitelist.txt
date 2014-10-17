@@ -1,5 +1,11 @@
-https://www.wellsfargo.com/  47,53,5
 https://www.pinterest.com 47,53,5
+https://www.pnc.com/en/personal-banking.html 47,53,5,4
+https://online.citibank.com/US/JPS/portal/NoCookie.do 47,53,5,4
+https://www.wellsfargo.com/  47,53,5
+https://www.security.us.hsbc.com 47,53,5
+https://usbank.com 47,53,5
+https://thepiratebay.se 47,53
+https://citizenfourfilm.com 4,5,47,53 
 https://www.chase.com/ 47,53,5
 https://www.bankofamerica.com/ 47,53,5
 https://www.wikipedia.org 47,53,5
@@ -16,13 +22,12 @@ https://www.yahoo.com 47,53,5
 https://www.flickr.com 47,53,5
 https://www.vimeo.com 47,53,5
 https://www.bawagpsk.com 47,53
-https://banking.dkb.de 47,53,5
+https://banking.dkb.de 47,53
 https://www.deutsche-bank.es/pbct/loginDNIe.doLoginConnection.db 47,53,5
 https://i.bankuralsib.ru  4,5
 https://www.debian.org/  47,53
 https://www.okpay.com/en/index.html 47,53,4,5
 https://www.delicious.com 47,53,5
-https://www.blogger.com 47,53,5
 https://www.gov.uk 47,53,5
 https://www.cloudflare.com 47,53,5
 https://www.drupal.org 47,53
