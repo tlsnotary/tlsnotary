@@ -119,8 +119,6 @@ function waitForP2PConnection(){
 		setTimeout(waitForP2PConnection, 1000);
 		return;      
 	}
-	//else connected to peer
-	startDecryptionProcess();
 	//give auditor time to run checks and start the receiving thread
 	setTimeout(openNextLink, 2000);
 }

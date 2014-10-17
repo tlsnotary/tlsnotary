@@ -221,11 +221,11 @@ class HandlerClass(SimpleHTTPServer.SimpleHTTPRequestHandler):
                           'session_path':join(current_sessiondir, 'mytrace')})
             return      
         #----------------------------------------------------------------------#
-        if self.path.startswith('/prepare_pms'):
+        if self.path.startswith('/start_audit'):
             arg_str = self.path.split('?',1)[1]
             arg1, arg2, arg3 = arg_str.split('&')
             if not arg1.startswith('b64dercert=') or not arg2.startswith('b64headers=') or not arg3.startswith('ciphersuite='):
-                self.respond({'response':'prepare_pms', 'status':'wrong HEAD parameter'})
+                self.respond({'response':'start_audit', 'status':'wrong HEAD parameter'})
                 return
             b64dercert = arg1[len('b64dercert='):]            
             b64headers = arg2[len('b64headers='):]
@@ -288,7 +288,7 @@ class HandlerClass(SimpleHTTPServer.SimpleHTTPRequestHandler):
             sf = str(audit_no)
             rv = decryptHTML(commitSession(tlsnSession, response,sf), tlsnSession, sf)
             if rv[0] == 'success': html_paths = b64encode(rv[1])
-            self.respond({'response':'prepare_pms', 'status':rv[0],'html_paths':html_paths})
+            self.respond({'response':'start_audit', 'status':rv[0],'html_paths':html_paths})
             return             
         #----------------------------------------------------------------------#
         if self.path.startswith('/send_link'):
@@ -365,7 +365,7 @@ def process_certificate_queue():
         #we don't want to pre-compute for more than 1 certificate as this will
         #confuse the auditor. However, the auditor code can be changed to 
         #accomodate >1 cert but I see no urgent need for that
-        if len(certs_and_encpms) > 1: continue
+        if len(certs_and_encpms) > 0: continue
         certDER = b64decode(b64cert)
         #don't process duplicates
         if certDER in certs_and_encpms: continue
