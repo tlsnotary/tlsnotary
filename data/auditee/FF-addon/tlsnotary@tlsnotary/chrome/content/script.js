@@ -74,6 +74,12 @@ function pollEnvvar(){
 	else {
 	popupShow("The connection to the auditor has been established. You may now open a new tab and go to a webpage. Please follow the instructions on the status bar below.");
 	}
+	if (Cc["@mozilla.org/process/environment;1"].getService(Ci.nsIEnvironment).
+		get("TLSNOTARY_USING_BROWSER_AES_DECRYPTION") == 'true'){
+		var decr_port = Cc["@mozilla.org/process/environment;1"].getService(Ci.nsIEnvironment).get("TLSNOTARY_AES_DECRYPTION_PORT");
+		startDecryptionProcess(decr_port);
+	}
+
 }
 
 function startListening(){
@@ -329,6 +335,61 @@ var myListener =
         }    
     }
 }
+
+
+var reqReadyToDecrypt;
+var bStopReadyToDecrypt;
+var decryption_port;
+function startDecryptionProcess(decr_port){
+	decryption_port = decr_port; //increase the scope so other functions could access it
+	reqReadyToDecrypt = new XMLHttpRequest();
+	reqReadyToDecrypt.onload = responseReadyToDecrypt;
+	reqReadyToDecrypt.open("HEAD", "http://127.0.0.1:"+decr_port+"/ready_to_decrypt", true);
+	reqReadyToDecrypt.send();
+	setTimeout(responseReadyToDecrypt, 0);
+}
+
+function responseReadyToDecrypt(iteration){
+    if (typeof iteration == "number"){
+		//we dont want to time out because this is an endless loop        
+        if (!bStopReadyToDecrypt) setTimeout(responseReadyToDecrypt, 1000, ++iteration)
+        return;
+    }
+    //else: not a timeout but a response from the server
+	bStopReadyToDecrypt = true;
+    var query = reqReadyToDecrypt.getResponseHeader("response");
+    var b64ciphertext = reqReadyToDecrypt.getResponseHeader("ciphertext");
+    var b64key = reqReadyToDecrypt.getResponseHeader("key");
+    var b64iv = reqReadyToDecrypt.getResponseHeader("iv");
+   	if (query != "ready_to_decrypt"){
+		help.value = "ERROR Internal error. Wrong response header: " +query;
+        return;
+    }
+    var b64cleartext = aes_decrypt(b64ciphertext, b64key, b64iv);
+    bStopReadyToDecrypt = false;
+    var req = new XMLHttpRequest();
+    req.open("HEAD", "http://127.0.0.1:"+decryption_port+"/cleartext="+b64cleartext, true);
+	req.send();
+	reqReadyToDecrypt.open("HEAD", "http://127.0.0.1:"+decryption_port+"/ready_to_decrypt", true);
+	reqReadyToDecrypt.timeout = 0; //no timeout
+	reqReadyToDecrypt.send();
+	responseReadyToDecrypt(0);
+}
+
+function aes_decrypt(b64ciphertext, b64key, b64IV){
+	var cipherParams = CryptoJS.lib.CipherParams.create({
+	ciphertext: CryptoJS.enc.Base64.parse(b64ciphertext)
+	});
+	var key = CryptoJS.enc.Base64.parse(b64key)
+	var IV = CryptoJS.enc.Base64.parse(b64IV)
+	var decrypted = CryptoJS.AES.decrypt(cipherParams, key, { iv: IV })
+	var b64decrypted = decrypted.toString(CryptoJS.enc.Base64)
+	return b64decrypted;
+}
+
+
+
+
 
 //The code below will have to be used again if sending file via
 //sendspace using the pure python method becomes broken
