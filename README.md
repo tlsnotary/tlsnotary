@@ -1,20 +1,36 @@
-TLSNotary Overview
-==================
+TLSNotary is a browser addon allowing the user (auditee) to submit non-forgeable web page captures. The third party (auditor) can verify the contents of the web page based on the HMAC signatures on HTTPS (TLS) encrypted traffic. The non-forgeable proof comes from the signature of the server SSL certificate and splitting up the encrypted connection secret between the auditee and the auditor.
 
-1. [For the generally curious - a FAQ](/data/documentation/TLSNotaryFAQ.md)
-2. [How to install and run](#how-to-install-and-run)
-2. [User Guide](#user-guide) and in detail, for auditor: [Auditor Guide](/data/documentation/AuditorGuide.md).
-3. [Video version of the above](https://www.youtube.com/watch?v=kKdEhuiXYz4&list=PLnSCooZY6_w9j5tQ8jAeZtrl9l4NnL48G&index=3) for a more hands-on education style.
-5. [Algorithm white paper](/data/documentation/TLSNotary.pdf)  (here be dragons). Discussion of algorithm in [video](https://www.youtube.com/watch?v=b4ukd4I8S9A&list=PLnSCooZY6_w9j5tQ8jAeZtrl9l4NnL48G&index=2).
-5. [Peer messaging protocol spec](/data/documentation/TLSNotary_messaging.md) - technical details of auditor/auditee communication.
+Use cases 
+
+- Proof of online banking payment
+- Proof of identity on a third party site
+
+## Contents
+
+1. [How TLSNotary works](#how-tlsnotary-works)
+1. [Installation](#installation)
+1. [User guide for auditees](#user-guide)  
+1. [User guide for auditees (video)](https://www.youtube.com/watch?v=kKdEhuiXYz4&list=PLnSCooZY6_w9j5tQ8jAeZtrl9l4NnL48G&index=3)- more educational
+2. [User guide for auditors](/data/documentation/AuditorGuide.md)
+1. [FAQ](/data/documentation/TLSNotaryFAQ.md)
+1. [Algorithm white paper](/data/documentation/TLSNotary.pdf) 
+2. [Discussion of algorithm (video)](https://www.youtube.com/watch?v=b4ukd4I8S9A&list=PLnSCooZY6_w9j5tQ8jAeZtrl9l4NnL48G&index=2)
+5. [Peer messaging protocol spec](/data/documentation/TLSNotary_messaging.md) - technical details of auditor/auditee communication
+
+## How TLSNotary works
+
+1. The auditee does not need to give up any login details, cookies or other sensitive information - TLSNotary does not do any kind of man-in-the-middle inspection for secure traffic. 
+1. The auditor wishes the auditee to show a web page capture from their browser and they give the auditee the key for this operation.
+1. The auditee goes to the web page they wish to show and then choose to create TLSNotary capture of this page.
+1. The auditee enters they key given by auditor. This key is used as the part of the secret token for TLS connection. 
+1. The TLSNotary browser addon then creates a new secure connection to the server to fetch the page. 
+1. The server signs the page for secure connection, as it is needed for HTTPS traffic. The signature is calculated from  auditee key, auditor key and server public SSL certificate.
+2. The auditee logs out, invalidating any session data the captured web page may contain.
+1. The auditee delivers the page and the signature to the auditor.
+1. Because the signature is partially based on the public certificate of the server and the auditor key, the auditor can verify that the auditee did not tamper with the page and can trust its content.
 
 
-###Really, really short version: ###
-
-TLSNotary allows the auditee to prove to the auditor that a certain https page is present in the auditee's browser, without revealing passwords or credentials to the auditor.
-This can be used e.g. when the auditee must prove to an arbitrator that a bank transfer has been made.
-
-##How to install and run##
+##Installation##
 
 TLSNotary can run on Linux, Mac and Windows and has only two dependencies:
 
@@ -31,7 +47,7 @@ If you were successful you should see a new Firefox window (separate from any ex
 
 ![](/data/documentation/startwindow.png)
 
-##User guide.##
+##User guide##
 
 *This is a guide for a user who is to be audited. The guide for auditors is* [here](/data/documentation/AuditorGuide.md).
 
