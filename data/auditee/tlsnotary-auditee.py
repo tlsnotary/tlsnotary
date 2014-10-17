@@ -459,7 +459,7 @@ def negotiateCrippledSecrets(tlsnSession):
     reply = send_and_recv('cr_sr_hmac:'+cr_sr_hmac)
     if reply[0] != 'success': return ('Failed to receive a reply for cr_sr_hmac:')
     if not reply[1].startswith('hmacms_hmacek:'):
-        return 'bad reply. Expected hmacms_hmacek:'
+        return 'bad reply. Expected hmacms_hmacek: but got reply[1]'
     hmacms_hmacek = reply[1][len('hmacms_hmacek:'):]
     tlsnSession.setMasterSecretHalf(half=2,providedPValue = hmacms_hmacek[:24])
     tlsnSession.pMasterSecretAuditor = hmacms_hmacek[24:24+tlsnSession.cipherSuites[tlsnSession.chosenCipherSuite][-1]]
@@ -541,8 +541,11 @@ def decryptHTML(sha1hmac, tlsnSession,sf):
             #which is one byte longer than pkcs7. We remove it manually
             raw_plaintexts.append(raw_plaintext[:-1])
         plaintext = tlsnSession.macCheckPlaintexts(raw_plaintexts)
-             
+
     plaintext = shared.dechunkHTTP(plaintext)
+    if int(shared.config.get("General","gzip_disabled")) == 0:    
+        plaintext = shared.gunzipHTTP(plaintext)
+
     with open(join(current_sessiondir,'session_dump'+sf),'wb') as f: f.write(tlsnSession.dump())
     commit_dir = join(current_sessiondir, 'commit')
     html_path = join(commit_dir,'html-'+sf)
@@ -874,16 +877,16 @@ if __name__ == "__main__":
                 if os.path.exists(join(prog64,'Mozilla Firefox')):
                     firefox_install_path = join(prog64,'Mozilla Firefox')
                     bFound = True
-                if not bFound and prog32:
-                    if os.path.exists(join(prog32,'Mozilla Firefox')):
-                        firefox_install_path = join(prog32,'Mozilla Firefox')
-                        bFound = True
-                if not bFound and progxp:
-                    if os.path.exists(join(progxp,'Mozilla Firefox')):
-                        firefox_install_path = join(progxp,'Mozilla Firefox')
-                        bFound = True
-                if not bFound:
-                    raise Exception('Could not set firefox install path')
+            if not bFound and prog32:
+                if os.path.exists(join(prog32,'Mozilla Firefox')):
+                    firefox_install_path = join(prog32,'Mozilla Firefox')
+                    bFound = True
+            if not bFound and progxp:
+                if os.path.exists(join(progxp,'Mozilla Firefox')):
+                    firefox_install_path = join(progxp,'Mozilla Firefox')
+                    bFound = True
+            if not bFound:
+                raise Exception('Could not set firefox install path')
         elif OS=='macos':
             if not os.path.exists(join("/","Applications","Firefox.app")):
                 raise Exception("Could not set firefox install path")
