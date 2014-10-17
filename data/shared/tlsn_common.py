@@ -214,12 +214,11 @@ def gunzipHTTP(http_data):
     import gzip
     import StringIO
     http_header = http_data[:http_data.find('\r\n\r\n')+len('\r\n\r\n')]
-    if any( ('Content-Encoding: deflate' in http_header, 'content-encoding: deflate' in http_header, 
-             'Content-encoding: deflate' in http_header) ):
+    #\s* below means any amount of whitespaces
+    if re.search(r'content-encoding:\s*deflate', http_header, re.IGNORECASE):
         #TODO manually resend the request with compression disabled
-        raise Exception('Please set gzip_disabled = 1 in tlsnotary.ini and rerun the audit')   
-    if not any( ('Content-Encoding: gzip' in http_header, 'content-encoding: gzip' in http_header, 
-                 'Content-Encoding: gzip' in http_header) ):
+        raise Exception('Please set gzip_disabled = 1 in tlsnotary.ini and rerun the audit')
+    if not re.search(r'content-encoding:\s*gzip', http_header, re.IGNORECASE):
         return http_data #nothing to gunzip
     http_body = http_data[len(http_header):]
     ungzipped = http_header
@@ -232,8 +231,8 @@ def gunzipHTTP(http_data):
 def dechunkHTTP(http_data):
     '''Dechunk only if http_data is chunked otherwise return http_data unmodified'''
     http_header = http_data[:http_data.find('\r\n\r\n')+len('\r\n\r\n')]
-    if not any( ('Transfer-Encoding: chunked' in http_header, 'transfer-encoding: chunked' in http_header, 
-                 'Transfer-encoding: chunked' in http_header) ):
+    #\s* below means any amount of whitespaces
+    if not re.search(r'transfer-encoding:\s*chunked', http_header, re.IGNORECASE):
         return http_data #nothing to dechunk
     http_body = http_data[len(http_header):]
     

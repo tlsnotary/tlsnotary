@@ -279,8 +279,23 @@ function dumpSecurityInfo(channel,urldata) {
     if (secInfo instanceof Ci.nsISSLStatusProvider) {
       var cert = secInfo.QueryInterface(Ci.nsISSLStatusProvider).SSLStatus.QueryInterface(Ci.nsISSLStatus).serverCert;
       dict_of_certs[urldata] = cert;
+      //send the cert immediately to backend to prepare encrypted PMS
+	  send_cert_to_backend(cert);
     }
+	
 }
+
+
+function send_cert_to_backend(cert){
+    var len = new Object();
+    var rawDER = cert.getRawDER(len);
+    var b64DERCert = buildBase64DER(rawDER);    
+	var reqSendCertificate = new XMLHttpRequest();
+    reqSendCertificate.open("HEAD", "http://127.0.0.1:"+port+"/send_certificate?"+b64DERCert, true);
+    reqSendCertificate.send();
+    //we don't care about the response
+}
+
 
 var myListener =
 {
