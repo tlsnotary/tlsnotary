@@ -208,14 +208,36 @@ def bigint_to_list(bigint):
 #convert bytearray into int
 def ba2int(byte_array):
     return int(str(byte_array).encode('hex'), 16)
-        
+    
+    
+def gunzipHTTP(http_data):
+    import gzip
+    import StringIO
+    http_header = http_data[:http_data.find('\r\n\r\n')+len('\r\n\r\n')]
+    if any( ('Content-Encoding: deflate' in http_header, 'content-encoding: deflate' in http_header, 
+             'Content-encoding: deflate' in http_header) ):
+        #TODO manually resend the request with compression disabled
+        raise Exception('Please set gzip_disabled = 1 in tlsnotary.ini and rerun the audit')   
+    if not any( ('Content-Encoding: gzip' in http_header, 'content-encoding: gzip' in http_header, 
+                 'Content-Encoding: gzip' in http_header) ):
+        return http_data #nothing to gunzip
+    http_body = http_data[len(http_header):]
+    ungzipped = http_header
+    gzipped = StringIO.StringIO(http_body)
+    f = gzip.GzipFile(fileobj=gzipped, mode="rb")
+    ungzipped += f.read()    
+    return ungzipped
+    
+       
 def dechunkHTTP(http_data):
     '''Dechunk only if http_data is chunked otherwise return http_data unmodified'''
-    header_len = http_data.find('\r\n\r\n')+len('\r\n\r\n')+1
-    if not ('Transfer-Encoding: chunked') in http_data[:header_len-1] : return http_data #nothing to dechunk
-    http_body = http_data[header_len-1:]
+    http_header = http_data[:http_data.find('\r\n\r\n')+len('\r\n\r\n')]
+    if not any( ('Transfer-Encoding: chunked' in http_header, 'transfer-encoding: chunked' in http_header, 
+                 'Transfer-encoding: chunked' in http_header) ):
+        return http_data #nothing to dechunk
+    http_body = http_data[len(http_header):]
     
-    dechunked = http_data[:header_len-1]
+    dechunked = http_header
     cur_offset = 0
     chunk_len = -1 #initialize with a non-zero value
     while True:  

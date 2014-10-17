@@ -259,7 +259,8 @@ def process_messages():
                 if bad_mac:
                     print ("AUDIT FAILURE - invalid mac")
                     link_response = 'false'
-                plaintext = shared.dechunkHTTP(plaintext)                
+                plaintext = shared.dechunkHTTP(plaintext)
+                plaintext = shared.gunzipHTTP(plaintext)
                 path = os.path.join(decr_dir, 'html-'+seqno)
                 with open(path, 'wb') as f: f.write(plaintext) #TODO maybe strip headers?
                 #also create a file where the auditor can see the domain and pubkey

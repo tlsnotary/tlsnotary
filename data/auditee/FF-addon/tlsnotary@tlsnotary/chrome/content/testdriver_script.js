@@ -144,11 +144,11 @@ function openNextLink(){
     
     current_ciphersuite = cs;
     auditeeBrowser = gBrowser.addTab(linkArray[tlsnLinkIndex]);
+    gBrowser.addProgressListener(tlsnLoadListener);
     gBrowser.removeAllTabsBut(auditeeBrowser);
     document.getElementById("help").value = "Loading page..."
     //FIXME we should use auditeeBrowser here instead of gBrowser
     //but for some reason the listener never triggers then
-    gBrowser.addProgressListener(tlsnLoadListener);
 	waitForRecordingToFinish(0);
 }
 
