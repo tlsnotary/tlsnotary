@@ -524,10 +524,10 @@ def negotiateCrippledSecrets(tlsnSession, tlssock):
         return 'bad reply. Expected hmacms_hmacek_hmacverify: but got reply[1]'
     reply_data = reply[1][len('hmacms_hmacek_hmacverify:'):]
     expanded_key_len = tlsnSession.cipherSuites[tlsnSession.chosenCipherSuite][-1]
-    assert len(reply_data) == 24+140+12
+    assert len(reply_data) == 24+expanded_key_len+12
     hmacms = reply_data[:24]    
-    hmacek = reply_data[24:24 + 140][:expanded_key_len]
-    hmacverify = reply_data[24 + 140:24 + 140+12]   
+    hmacek = reply_data[24:24 + expanded_key_len]
+    hmacverify = reply_data[24 + expanded_key_len:24 + expanded_key_len+12]   
     tlsnSession.setMasterSecretHalf(half=2,providedPValue = hmacms)
     tlsnSession.pMasterSecretAuditor = hmacek
     tlsnSession.doKeyExpansion()

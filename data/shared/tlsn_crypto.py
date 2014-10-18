@@ -369,10 +369,11 @@ class TLSNSSLClientSession(object):
                "server random, client random or cipher suite not set."
         label = 'key expansion'
         seed = self.serverRandom + self.clientRandom
+        expkeys_len = self.cipherSuites[self.chosenCipherSuite][-1]        
         if ctrprty == 'auditor':
-            self.pMasterSecretAuditor = TLS10PRF(label+seed,req_bytes=140,first_half=self.masterSecretHalfAuditor)[0]
+            self.pMasterSecretAuditor = TLS10PRF(label+seed,req_bytes=expkeys_len,first_half=self.masterSecretHalfAuditor)[0]
         else:
-            self.pMasterSecretAuditee = TLS10PRF(label+seed,req_bytes=140,second_half=self.masterSecretHalfAuditee)[1]
+            self.pMasterSecretAuditee = TLS10PRF(label+seed,req_bytes=expkeys_len,second_half=self.masterSecretHalfAuditee)[1]
 
         tmp = self.pMasterSecretAuditor if ctrprty=='auditor' else self.pMasterSecretAuditee
         for k in garbage:
@@ -399,13 +400,14 @@ class TLSNSSLClientSession(object):
         seed = self.serverRandom + self.clientRandom
         #for maximum flexibility, we will compute the sha1 or md5 hmac
         #or the full keys, based on what secrets currently exist in this object
+        expkeys_len = self.cipherSuites[self.chosenCipherSuite][-1]                
         if self.masterSecretHalfAuditee:
-            self.pMasterSecretAuditee = TLS10PRF(label+seed,req_bytes=140,second_half=self.masterSecretHalfAuditee)[1]
+            self.pMasterSecretAuditee = TLS10PRF(label+seed,req_bytes=expkeys_len,second_half=self.masterSecretHalfAuditee)[1]
         if self.masterSecretHalfAuditor:
-            self.pMasterSecretAuditor = TLS10PRF(label+seed,req_bytes=140,first_half=self.masterSecretHalfAuditor)[0]
+            self.pMasterSecretAuditor = TLS10PRF(label+seed,req_bytes=expkeys_len,first_half=self.masterSecretHalfAuditor)[0]
 
         if self.masterSecretHalfAuditee and self.masterSecretHalfAuditor:
-            keyExpansion = TLS10PRF(label+seed,req_bytes=140,full_secret=self.masterSecretHalfAuditor+\
+            keyExpansion = TLS10PRF(label+seed,req_bytes=expkeys_len,full_secret=self.masterSecretHalfAuditor+\
                                                                                 self.masterSecretHalfAuditee)[2]
         elif self.pMasterSecretAuditee and self.pMasterSecretAuditor:
             keyExpansion = xor(self.pMasterSecretAuditee,self.pMasterSecretAuditor)
