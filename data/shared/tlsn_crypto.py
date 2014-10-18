@@ -74,6 +74,8 @@ class TLSNSSLClientSession(object):
         #client hello, server hello, certificate, server hello done,
         #client key exchange, change cipher spec, finished
         self.handshakeMessages = [None] * 7
+        self.handshakeHashSHA = None
+        self.handshakeHashMD5 = None
         #client random can be created immediately on instantiation
         cr_time = bi2ba(int(time.time()))
         self.clientRandom = cr_time + os.urandom(28)
@@ -257,6 +259,12 @@ class TLSNSSLClientSession(object):
             if self.chosenCipherSuite != server_ciphersuite:
                 raise Exception ('Server did not return the ciphersuite we requested')
         self.setCipherSuite(server_ciphersuite)
+        #if encPMS is not yet set, this is a call from prepare_pms()
+        #otherwise this is a normal audit session
+        if self.encPMS:
+            self.setHandshakeHashes()
+            self.setAuditeeSecret()
+        
         print ("Set cipher suite to ", str(server_ciphersuite))
             
         return (self.handshakeMessages[1:4], self.serverRandom)
@@ -422,6 +430,7 @@ class TLSNSSLClientSession(object):
         return bytearray('').join(filter(None,keyAccumulator))
 
     def getVerifyHMAC(self,sha_verify=None,md5_verify=None,half=1,isForClient=True):
+        '''returns only 12 bytes of hmac'''
         label = 'client finished' if isForClient else 'server finished'
         seed = md5_verify + sha_verify
         if half==1:
@@ -429,7 +438,8 @@ class TLSNSSLClientSession(object):
         else:
             return TLS10PRF(label+seed,req_bytes=12,second_half = self.masterSecretHalfAuditee)[1]
 
-    def getHandshakeHashes(self, isForServer = False):
+    def setHandshakeHashes(self):
+        assert self.encPMS
         #TODO: This is a repetition of getCKECCSF. Obviously it should be got rid of.
         #I can't remember why it's necessary.
         #construct correct length bytes for CKE
@@ -446,14 +456,17 @@ class TLSNSSLClientSession(object):
         self.handshakeMessages[5] = chcis + tlsver + bi2ba(1,fixed=2)+'\x01'
         
         handshakeData = bytearray('').join([x[5:] for x in self.handshakeMessages[:5]])
-        if isForServer: handshakeData += self.unencryptedClientFinished
-        sha_verify = sha1(handshakeData).digest()
-        md5_verify = md5(handshakeData).digest()
-        return (sha_verify,md5_verify)
+        self.handshakeHashSHA = sha1(handshakeData).digest()
+        self.handshakeHashMD5 = md5(handshakeData).digest()
+    
+    def getServerHandshakeHashes(self):
+        handshakeData = bytearray('').join([x[5:] for x in self.handshakeMessages[:5]])
+        handshakeData += self.unencryptedClientFinished
+        return(sha1(handshakeData).digest(), md5(handshakeData).digest())
 
     def getVerifyDataForFinished(self,sha_verify=None,md5_verify=None,half=1,providedPValue=None):
         if not (sha_verify and md5_verify):
-            sha_verify, md5_verify = self.getHandshakeHashes()
+            sha_verify, md5_verify = self.handshakeHashSHA, self.handshakeHashMD5
 
         if not providedPValue:
             #we calculate the verify data from the raw handshake messages
@@ -528,19 +541,10 @@ class TLSNSSLClientSession(object):
         If providedPValue is non null, it means the caller does not have
         access to the full master secret, and is providing the pvalue to be
         passed into getVerifyDataForFinished.'''
-        #construct correct length bytes for CKE
-        epms_len = len(bi2ba(self.encPMS))
-        b_epms_len = bi2ba(epms_len,fixed=2)
-        hs_len = 2 + epms_len
-        b_hs_len = bi2ba(hs_len,fixed=3)
-        record_len = 6+epms_len
-        b_record_len = bi2ba(record_len,fixed=2)
-        #construct CKE
-        self.handshakeMessages[4] = hs + tlsver + b_record_len + h_cke + \
-            b_hs_len + b_epms_len + bi2ba(self.encPMS)
-        #Change cipher spec NB, not a handshake message
-        self.handshakeMessages[5] = chcis + tlsver + bi2ba(1,fixed=2)+'\x01'
-        
+        assert self.encPMS
+        assert self.handshakeMessages[4] #cke
+        assert self.handshakeMessages[5] #ccs
+        #CKE and CCS were already prepared earlier
         #start processing for Finished
         if providedPValue:
             verifyData = self.getVerifyDataForFinished(providedPValue=providedPValue,half=2)
@@ -608,7 +612,7 @@ class TLSNSSLClientSession(object):
         assert plaintext[:4] == h_fin+bi2ba(12,fixed=3), "The server Finished verify data is invalid"
         #Verify the verify data
         verifyData = plaintext[4:]
-        sha_verify,md5_verify = self.getHandshakeHashes(isForServer=True)
+        sha_verify,md5_verify = self.getServerHandshakeHashes()
         if len(plaintext[4:]) != 12:
             print ("Wrong length of plaintext")
         verifyDataCheck = xor(providedPValue,\
@@ -734,7 +738,7 @@ class TLSNSSLClientSession(object):
         return (plaintext, bad_record_mac)
 
     def completeHandshake(self, rsapms2):
-        '''wrapper function for auditee only,
+        '''Called from prepare_pms(). For auditee only,
         who passes the second half of the encrypted
         PMS product (see TLSNotary.pdf under documentation).'''
         self.extractCertificate()
@@ -745,6 +749,7 @@ class TLSNSSLClientSession(object):
         self.encSecondHalfPMS = ba2int(rsapms2)
         self.setEncFirstHalfPMS()
         self.setEncryptedPMS()
+        self.setHandshakeHashes()         
         return self.getCKECCSF()
         
 def getCBCPadding(data_length):

@@ -274,10 +274,9 @@ class HandlerClass(SimpleHTTPServer.SimpleHTTPRequestHandler):
             #compare this ongoing audit's cert to the one 
             #we used from the browser in prepare_encrypted_pms
             verifyServer(dercert, tlsnSession)
-            retval = negotiateCrippledSecrets(tlsnSession)
+            retval = negotiateCrippledSecrets(tlsnSession, tlssock)
             if not retval == 'success': 
                 raise Exception(retval)
-            retval = negotiateVerifyAndFinishHandshake(tlsnSession,tlssock)
             bCommChannelBusy = False                        
             if not retval == 'success': 
                 raise Exception(retval)
@@ -399,11 +398,11 @@ def prepare_pms():
         reply = send_and_recv('rcr_rsr:'+pmsSession.clientRandom+pmsSession.serverRandom)
         if reply[0] != 'success': 
             raise Exception ('Failed to receive a reply for rcr_rsr:')
-        if not reply[1].startswith('rrsapms_rhmac:'):
+        if not reply[1].startswith('rrsapms_rhmac'):
             raise Exception ('bad reply. Expected rrsapms_rhmac:')
-        rrsapms_rhmac = reply[1][len('rrsapms_rhmac:'):]
-        rsapms2 = rrsapms_rhmac[:256]
-        shahmac = rrsapms_rhmac[256:304]
+        reply_data = reply[1][len('rrsapms_rhmac:'):]
+        rsapms2 = reply_data[:256]
+        shahmac = reply_data[256:304]
         pmsSession.pAuditor = shahmac
         tlssock.send(pmsSession.completeHandshake(rsapms2))
         response = shared.recv_socket(tlssock,isHandshake=True)
@@ -510,43 +509,42 @@ def verifyServer(claimed_cert, tlsnSession):
     else:
         print ("Browser verifies that the server certificate is valid, continuing audit.")    
         
-def negotiateCrippledSecrets(tlsnSession):
+def negotiateCrippledSecrets(tlsnSession, tlssock):
     '''Negotiate with auditor in order to create valid session keys
     (except server mac is garbage as auditor withholds it)'''
+    assert tlsnSession.handshakeHashMD5
+    assert tlsnSession.handshakeHashSHA
     tlsnSession.setAuditeeSecret()
-    cr_sr_hmac= chr(tlsnSession.chosenCipherSuite)+tlsnSession.clientRandom+tlsnSession.serverRandom+ \
-                tlsnSession.pAuditee[:24]
-    reply = send_and_recv('cr_sr_hmac:'+cr_sr_hmac)
-    if reply[0] != 'success': return ('Failed to receive a reply for cr_sr_hmac:')
-    if not reply[1].startswith('hmacms_hmacek:'):
-        return 'bad reply. Expected hmacms_hmacek: but got reply[1]'
-    hmacms_hmacek = reply[1][len('hmacms_hmacek:'):]
-    tlsnSession.setMasterSecretHalf(half=2,providedPValue = hmacms_hmacek[:24])
-    tlsnSession.pMasterSecretAuditor = hmacms_hmacek[24:24+tlsnSession.cipherSuites[tlsnSession.chosenCipherSuite][-1]]
-    tlsnSession.doKeyExpansion()    
-    return 'success'
-
-def negotiateVerifyAndFinishHandshake(tlsnSession,tlssock):
-    '''Complete handshake (includes negotiation of verify data 
-    with auditor).'''
-    sha_digest,md5_digest = tlsnSession.getHandshakeHashes()
-    reply = send_and_recv('verify_md5sha:'+md5_digest+sha_digest)
-    if reply[0] != 'success': return ('Failed to receive a reply for verify_md5sha')
-    if not reply[1].startswith('verify_hmac:'): return ('bad reply. Expected verify_hmac:')
-    data =  tlsnSession.getCKECCSF(providedPValue=reply[1][len('verify_hmac:'):])
+    cs_cr_sr_hmacms_verifymd5sha = chr(tlsnSession.chosenCipherSuite) + tlsnSession.clientRandom + \
+        tlsnSession.serverRandom + tlsnSession.pAuditee[:24] +  tlsnSession.handshakeHashMD5 + \
+        tlsnSession.handshakeHashSHA
+    reply = send_and_recv('cs_cr_sr_hmacms_verifymd5sha:'+cs_cr_sr_hmacms_verifymd5sha)
+    if reply[0] != 'success': return ('Failed to receive a reply for cs_cr_sr_hmacms_verifymd5sha:')
+    if not reply[1].startswith('hmacms_hmacek_hmacverify:'):
+        return 'bad reply. Expected hmacms_hmacek_hmacverify: but got reply[1]'
+    reply_data = reply[1][len('hmacms_hmacek_hmacverify:'):]
+    expanded_key_len = tlsnSession.cipherSuites[tlsnSession.chosenCipherSuite][-1]
+    assert len(reply_data) == 24+140+12
+    hmacms = reply_data[:24]    
+    hmacek = reply_data[24:24 + 140][:expanded_key_len]
+    hmacverify = reply_data[24 + 140:24 + 140+12]   
+    tlsnSession.setMasterSecretHalf(half=2,providedPValue = hmacms)
+    tlsnSession.pMasterSecretAuditor = hmacek
+    tlsnSession.doKeyExpansion()
+    data =tlsnSession.getCKECCSF(providedPValue=hmacverify)
     tlssock.send(data)
     response = shared.recv_socket(tlssock,isHandshake=True)
     #in case the server sent only CCS; wait until we get Finished also
     while response.count(shared.hs+shared.tlsver) != 1:
         response += shared.recv_socket(tlssock,isHandshake=True)
-    sha_digest2,md5_digest2 = tlsnSession.getHandshakeHashes(isForServer = True)
+    sha_digest2,md5_digest2 = tlsnSession.getServerHandshakeHashes()
     reply = send_and_recv('verify_md5sha2:'+md5_digest2+sha_digest2)
     if reply[0] != 'success':return("Failed to receive a reply for verify_md5sha2")
     if not reply[1].startswith('verify_hmac2:'):return("bad reply. Expected verify_hmac2:")
     if not tlsnSession.processServerCCSFinished(response,providedPValue = reply[1][len('verify_hmac2:'):]):
         raise Exception ("Could not finish handshake with server successfully. Audit aborted")
-    return 'success'
-
+    return 'success'    
+    
 def makeTLSNRequest(headers,tlsnSession,tlssock):
     '''Send TLS request including http headers and receive server response.'''
     headers += '\r\n'
