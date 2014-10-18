@@ -37,6 +37,10 @@ elif m_platform == 'Darwin': OS = 'macos'
 #Globals
 recvQueue = Queue.Queue() #all messages from the auditor are placed here by receivingThread
 ackQueue = Queue.Queue() #ack numbers are placed here
+certQueue = Queue.Queue() #used to pass the cert from the browser
+certs_and_encpms = {} # contains 'certificate bytes' and corresponding encrypted PMS prepared in advance
+bPeerConnected = False #toggled to True when p2p connection is establishe
+bCommChannelBusy = False #used as a semaphore between threads to sends messages in an orderly way
 auditor_nick = '' #we learn auditor's nick as soon as we get a ao_hello signed by the auditor
 my_nick = '' #our nick is randomly generated on connection
 myPrvKey = myPubKey = auditorPubKey = None
@@ -206,6 +210,8 @@ class HandlerClass(SimpleHTTPServer.SimpleHTTPRequestHandler):
         if self.path.startswith('/start_peer_connection'):
             rv = start_peer_messaging()
             rv2 = peer_handshake()
+            global bPeerConnected
+            bPeerConnected = True            
             self.respond({'response':'start_peer_connection', 'status':rv,'pms_status':rv2})
             return       
         #----------------------------------------------------------------------#
@@ -215,36 +221,52 @@ class HandlerClass(SimpleHTTPServer.SimpleHTTPRequestHandler):
                           'session_path':join(current_sessiondir, 'mytrace')})
             return      
         #----------------------------------------------------------------------#
-        if self.path.startswith('/prepare_pms'):
+        if self.path.startswith('/start_audit'):
             arg_str = self.path.split('?',1)[1]
             arg1, arg2, arg3 = arg_str.split('&')
             if not arg1.startswith('b64dercert=') or not arg2.startswith('b64headers=') or not arg3.startswith('ciphersuite='):
-                self.respond({'response':'prepare_pms', 'status':'wrong HEAD parameter'})
+                self.respond({'response':'start_audit', 'status':'wrong HEAD parameter'})
                 return
             b64dercert = arg1[len('b64dercert='):]            
             b64headers = arg2[len('b64headers='):]
             cs = arg3[len('ciphersuite='):] #used for testing, empty otherwise        
             dercert = b64decode(b64dercert)
             headers = b64decode(b64headers)
-            print ('Preparing encPMS')
-            pms_secret, pms_padding_secret = prepare_pms()
-            server_name, modified_headers = parse_headers(headers)
-
-            #make a dummy request just to get the certificate
-            #you will have to comment out the dercert= above if u want to use this
-            #dummytlssock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            #dummytlssock.settimeout(int(shared.config.get("General","tcp_socket_timeout")))
-            #if testing: dummytlsnSession = shared.TLSNSSLClientSession(server_name, ccs=int(cs))
-            #else: dummytlsnSession = shared.TLSNSSLClientSession(server_name)
-            #startTLSSession(dummytlsnSession, dummytlssock)
-            #dummytlsnSession.extractCertificate()
-            #dercert = dummytlsnSession.serverCertificate
-
+            
+            server_name, modified_headers = parse_headers(headers)            
             if testing: 
                 tlsnSession = shared.TLSNSSLClientSession(server_name, ccs=int(cs))
             else: 
-                tlsnSession = shared.TLSNSSLClientSession(server_name)                        
-            prepare_encrypted_pms(tlsnSession, dercert, pms_secret, pms_padding_secret)
+                tlsnSession = shared.TLSNSSLClientSession(server_name)                     
+
+            global bCommChannelBusy
+            while bCommChannelBusy:
+                time.sleep(0.1)
+            bCommChannelBusy = True
+            #if the encPMS hasn't yet been prepared
+            if not dercert in certs_and_encpms:
+                print ('Preparing encPMS')
+                pms_secret, pms_padding_secret = prepare_pms()
+
+                #make a dummy request just to get the certificate
+                #you will have to comment out the dercert= above if u want to use this
+                #dummytlssock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                #dummytlssock.settimeout(int(shared.config.get("General","tcp_socket_timeout")))
+                #if testing: dummytlsnSession = shared.TLSNSSLClientSession(server_name, ccs=int(cs))
+                #else: dummytlsnSession = shared.TLSNSSLClientSession(server_name)
+                #startTLSSession(dummytlsnSession, dummytlssock)
+                #dummytlsnSession.extractCertificate()
+                #dercert = dummytlsnSession.serverCertificate                           
+                prepare_encrypted_pms(tlsnSession, dercert, pms_secret, pms_padding_secret)
+            else:
+                print ('Encrypted PMS was already prepared')
+                pms_secret, pms_padding_secret, encPMS = certs_and_encpms[dercert]
+                #remove dercert - we must not reuse it, because server mac will be revealed at the end of audit
+                certs_and_encpms.pop(dercert)
+                tlsnSession.auditeeSecret = pms_secret
+                tlsnSession.auditeePaddingSecret = pms_padding_secret
+                tlsnSession.encPMS = encPMS
+            
             print ('Peforming handshake with server')
             tlssock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             tlssock.settimeout(int(shared.config.get("General","tcp_socket_timeout")))
@@ -252,10 +274,10 @@ class HandlerClass(SimpleHTTPServer.SimpleHTTPRequestHandler):
             #compare this ongoing audit's cert to the one 
             #we used from the browser in prepare_encrypted_pms
             verifyServer(dercert, tlsnSession)
-            retval = negotiateCrippledSecrets(tlsnSession)
+            retval = negotiateCrippledSecrets(tlsnSession, tlssock)
             if not retval == 'success': 
                 raise Exception(retval)
-            retval = negotiateVerifyAndFinishHandshake(tlsnSession,tlssock)
+            bCommChannelBusy = False                        
             if not retval == 'success': 
                 raise Exception(retval)
             print ('Getting data from server')            
@@ -265,7 +287,7 @@ class HandlerClass(SimpleHTTPServer.SimpleHTTPRequestHandler):
             sf = str(audit_no)
             rv = decryptHTML(commitSession(tlsnSession, response,sf), tlsnSession, sf)
             if rv[0] == 'success': html_paths = b64encode(rv[1])
-            self.respond({'response':'prepare_pms', 'status':rv[0],'html_paths':html_paths})
+            self.respond({'response':'start_audit', 'status':rv[0],'html_paths':html_paths})
             return             
         #----------------------------------------------------------------------#
         if self.path.startswith('/send_link'):
@@ -309,6 +331,12 @@ class HandlerClass(SimpleHTTPServer.SimpleHTTPRequestHandler):
             with open(shared.config_location,'wb') as f: shared.config.write(f)
             return
         #----------------------------------------------------------------------#
+        if self.path.startswith('/send_certificate'):
+            b64cert = self.path.split('?')[1]
+            certQueue.put(b64cert)
+            #no need to respond, nobody cares
+            return
+        #----------------------------------------------------------------------#        
         else:
             self.respond({'response':'unknown command'})
             return
@@ -320,6 +348,37 @@ class HandlerClass(SimpleHTTPServer.SimpleHTTPRequestHandler):
                                    self.log_date_time_string(),
                                    (format%args)[:80]))
         
+
+#loops on the certQueue and prepares encPMS
+def process_certificate_queue():
+    #wait for peer to connect before sending
+    while not bPeerConnected:
+        time.sleep(0.1)
+    #when peer is connected we dont want to immediately send certs (if any)
+    #because auditor needs a couple of seconds to setup
+    time.sleep(2)
+    while True:
+        #dummy class only to get encPMS, use new one each iteration just in case
+        tlscrypto = shared.TLSNSSLClientSession()            
+        b64cert = certQueue.get()
+        #we don't want to pre-compute for more than 1 certificate as this will
+        #confuse the auditor. However, the auditor code can be changed to 
+        #accomodate >1 cert but I see no urgent need for that
+        if len(certs_and_encpms) > 0: continue
+        certDER = b64decode(b64cert)
+        #don't process duplicates
+        if certDER in certs_and_encpms: continue
+        certDER = b64decode(b64cert)
+        print ('Preparing encPMS in advance')
+        global bCommChannelBusy
+        while bCommChannelBusy:
+            time.sleep(0.1)
+        bCommChannelBusy = True
+        pms_secret, pms_padding_secret = prepare_pms()
+        prepare_encrypted_pms(tlscrypto, certDER, pms_secret, pms_padding_secret)
+        bCommChannelBusy = False
+        certs_and_encpms[certDER] = (pms_secret, pms_padding_secret, tlscrypto.encPMS)
+
 
 #Because there is a 1 in ? chance that the encrypted PMS will contain zero bytes in its
 #padding, we first try the encrypted PMS with a reliable site and see if it gets rejected.
@@ -339,11 +398,11 @@ def prepare_pms():
         reply = send_and_recv('rcr_rsr:'+pmsSession.clientRandom+pmsSession.serverRandom)
         if reply[0] != 'success': 
             raise Exception ('Failed to receive a reply for rcr_rsr:')
-        if not reply[1].startswith('rrsapms_rhmac:'):
+        if not reply[1].startswith('rrsapms_rhmac'):
             raise Exception ('bad reply. Expected rrsapms_rhmac:')
-        rrsapms_rhmac = reply[1][len('rrsapms_rhmac:'):]
-        rsapms2 = rrsapms_rhmac[:256]
-        shahmac = rrsapms_rhmac[256:304]
+        reply_data = reply[1][len('rrsapms_rhmac:'):]
+        rsapms2 = reply_data[:256]
+        shahmac = reply_data[256:304]
         pmsSession.pAuditor = shahmac
         tlssock.send(pmsSession.completeHandshake(rsapms2))
         response = shared.recv_socket(tlssock,isHandshake=True)
@@ -450,43 +509,42 @@ def verifyServer(claimed_cert, tlsnSession):
     else:
         print ("Browser verifies that the server certificate is valid, continuing audit.")    
         
-def negotiateCrippledSecrets(tlsnSession):
+def negotiateCrippledSecrets(tlsnSession, tlssock):
     '''Negotiate with auditor in order to create valid session keys
     (except server mac is garbage as auditor withholds it)'''
+    assert tlsnSession.handshakeHashMD5
+    assert tlsnSession.handshakeHashSHA
     tlsnSession.setAuditeeSecret()
-    cr_sr_hmac= chr(tlsnSession.chosenCipherSuite)+tlsnSession.clientRandom+tlsnSession.serverRandom+ \
-                tlsnSession.pAuditee[:24]
-    reply = send_and_recv('cr_sr_hmac:'+cr_sr_hmac)
-    if reply[0] != 'success': return ('Failed to receive a reply for cr_sr_hmac:')
-    if not reply[1].startswith('hmacms_hmacek:'):
-        return 'bad reply. Expected hmacms_hmacek: but got reply[1]'
-    hmacms_hmacek = reply[1][len('hmacms_hmacek:'):]
-    tlsnSession.setMasterSecretHalf(half=2,providedPValue = hmacms_hmacek[:24])
-    tlsnSession.pMasterSecretAuditor = hmacms_hmacek[24:24+tlsnSession.cipherSuites[tlsnSession.chosenCipherSuite][-1]]
-    tlsnSession.doKeyExpansion()    
-    return 'success'
-
-def negotiateVerifyAndFinishHandshake(tlsnSession,tlssock):
-    '''Complete handshake (includes negotiation of verify data 
-    with auditor).'''
-    sha_digest,md5_digest = tlsnSession.getHandshakeHashes()
-    reply = send_and_recv('verify_md5sha:'+md5_digest+sha_digest)
-    if reply[0] != 'success': return ('Failed to receive a reply for verify_md5sha')
-    if not reply[1].startswith('verify_hmac:'): return ('bad reply. Expected verify_hmac:')
-    data =  tlsnSession.getCKECCSF(providedPValue=reply[1][len('verify_hmac:'):])
+    cs_cr_sr_hmacms_verifymd5sha = chr(tlsnSession.chosenCipherSuite) + tlsnSession.clientRandom + \
+        tlsnSession.serverRandom + tlsnSession.pAuditee[:24] +  tlsnSession.handshakeHashMD5 + \
+        tlsnSession.handshakeHashSHA
+    reply = send_and_recv('cs_cr_sr_hmacms_verifymd5sha:'+cs_cr_sr_hmacms_verifymd5sha)
+    if reply[0] != 'success': return ('Failed to receive a reply for cs_cr_sr_hmacms_verifymd5sha:')
+    if not reply[1].startswith('hmacms_hmacek_hmacverify:'):
+        return 'bad reply. Expected hmacms_hmacek_hmacverify: but got reply[1]'
+    reply_data = reply[1][len('hmacms_hmacek_hmacverify:'):]
+    expanded_key_len = tlsnSession.cipherSuites[tlsnSession.chosenCipherSuite][-1]
+    assert len(reply_data) == 24+expanded_key_len+12
+    hmacms = reply_data[:24]    
+    hmacek = reply_data[24:24 + expanded_key_len]
+    hmacverify = reply_data[24 + expanded_key_len:24 + expanded_key_len+12]   
+    tlsnSession.setMasterSecretHalf(half=2,providedPValue = hmacms)
+    tlsnSession.pMasterSecretAuditor = hmacek
+    tlsnSession.doKeyExpansion()
+    data =tlsnSession.getCKECCSF(providedPValue=hmacverify)
     tlssock.send(data)
     response = shared.recv_socket(tlssock,isHandshake=True)
     #in case the server sent only CCS; wait until we get Finished also
     while response.count(shared.hs+shared.tlsver) != 1:
         response += shared.recv_socket(tlssock,isHandshake=True)
-    sha_digest2,md5_digest2 = tlsnSession.getHandshakeHashes(isForServer = True)
+    sha_digest2,md5_digest2 = tlsnSession.getServerHandshakeHashes()
     reply = send_and_recv('verify_md5sha2:'+md5_digest2+sha_digest2)
     if reply[0] != 'success':return("Failed to receive a reply for verify_md5sha2")
     if not reply[1].startswith('verify_hmac2:'):return("bad reply. Expected verify_hmac2:")
     if not tlsnSession.processServerCCSFinished(response,providedPValue = reply[1][len('verify_hmac2:'):]):
         raise Exception ("Could not finish handshake with server successfully. Audit aborted")
-    return 'success'
-
+    return 'success'    
+    
 def makeTLSNRequest(headers,tlsnSession,tlssock):
     '''Send TLS request including http headers and receive server response.'''
     headers += '\r\n'
@@ -528,10 +586,11 @@ def decryptHTML(sha1hmac, tlsnSession,sf):
     tlsnSession.setMasterSecretHalf() #without arguments sets the whole MS
     tlsnSession.doKeyExpansion()
     
-    if not testing or not tlsnSession.chosenCipherSuite in [47,53]:
+    if int(shared.config.get("General","decrypt_with_slowaes")) or not tlsnSession.chosenCipherSuite in [47,53]:
+        #either using slowAES or a RC4 ciphersuite
         plaintext,bad_mac = tlsnSession.processServerAppDataRecords(checkFinished=True)
         if bad_mac: print ("WARNING! Plaintext is not authenticated.")        
-    else: #we are both testing and our CS is AES
+    else: #AES ciphersuite and not using slowaes
         ciphertexts = tlsnSession.getCiphertexts()
         raw_plaintexts = []
         for one_ciphertext in ciphertexts:
@@ -626,7 +685,7 @@ def peer_handshake():
 
 #Make a local copy of firefox, find the binary, install the new profile
 #and start up firefox with that profile.
-def start_firefox(FF_to_backend_port, firefox_install_path):
+def start_firefox(FF_to_backend_port, firefox_install_path, AES_decryption_port):
     #find the binary *before* copying; acts as sanity check
     ffbinloc = {'linux':['firefox'],'mswin':['firefox.exe'],'macos':['Contents','MacOS','firefox']}
     assert os.path.isfile(join(*([firefox_install_path]+ffbinloc[OS]))),\
@@ -689,6 +748,9 @@ def start_firefox(FF_to_backend_port, firefox_install_path):
             shutil.copytree(join(datadir, 'FF-addon', ext_dir),join(bundles_dir, ext_dir))                  
     os.putenv('FF_to_backend_port', str(FF_to_backend_port))
     os.putenv('FF_first_window', 'true')   #prevents addon confusion when websites open multiple FF windows
+    if int(shared.config.get("General","decrypt_with_slowaes")) == 0:
+        os.putenv('TLSNOTARY_USING_BROWSER_AES_DECRYPTION', 'true')
+        os.putenv('TLSNOTARY_AES_DECRYPTION_PORT', str(AES_decryption_port))
 
     if testing:
         print ('****************************TESTING MODE********************************')
@@ -733,7 +795,7 @@ def aes_decryption_thread(parentthread):
     #allow three attempts to start mini httpd in case if the port is in use
     bWasStarted = False
     for i in range(3):
-        AES_decryption_port = 37777 #random.randint(1025,65535)
+        AES_decryption_port = random.randint(1025,65535)
         print ('Starting AES decryption server')
         try:
             aes_httpd = shared.StoppableHttpServer(('127.0.0.1', AES_decryption_port), HandlerClass_aes)
@@ -819,25 +881,6 @@ def start_testing():
     global test_driver_pid
     test_driver_pid = test_proc.pid
             
-    #We want AES decryption to be done fast in browser's JS instead of in python.
-    #We start a server which sends ciphertexts to browser                
-    thread_aes = shared.ThreadWithRetval(target=aes_decryption_thread)
-    thread_aes.daemon = True
-    thread_aes.start()            
-    #wait for minihttpd thread to indicate its status  
-    bWasStarted = False
-    for i in range(10):
-        time.sleep(1)        
-        if thread_aes.retval == '': continue
-        #else
-        if thread_aes.retval[0] != 'success': 
-            raise Exception (
-            'Failed to start minihttpd server. Please investigate')
-        #else
-        bWasStarted = True
-        break
-    if bWasStarted == False:
-        raise Exception ('minihttpd failed to start in 10 secs. Please investigate')    
 
  
 if __name__ == "__main__":
@@ -916,14 +959,44 @@ if __name__ == "__main__":
     if bWasStarted == False:
         raise Exception ('minihttpd failed to start in 10 secs. Please investigate')
     FF_to_backend_port = thread.retval[1]
-        
-    ff_retval = start_firefox(FF_to_backend_port, firefox_install_path)
+    
+    thread = threading.Thread(target=process_certificate_queue)
+    thread.daemon = True
+    thread.start()
+    
+    AES_decryption_port = None
+    if int(shared.config.get("General","decrypt_with_slowaes")) == 0:
+        #We want AES decryption to be done fast in browser's JS instead of in python.
+        #We start a server which sends ciphertexts to browser                
+        thread_aes = shared.ThreadWithRetval(target=aes_decryption_thread)
+        thread_aes.daemon = True
+        thread_aes.start()            
+        #wait for minihttpd thread to indicate its status  
+        bWasStarted = False
+        for i in range(10):
+            time.sleep(1)        
+            if thread_aes.retval == '': continue
+            #else
+            if thread_aes.retval[0] != 'success': 
+                raise Exception (
+                'Failed to start minihttpd server. Please investigate')
+            #else
+            bWasStarted = True
+            AES_decryption_port = thread_aes.retval[1]
+            break
+        if bWasStarted == False:
+            raise Exception ('minihttpd failed to start in 10 secs. Please investigate')        
+          
+    ff_retval = start_firefox(FF_to_backend_port, firefox_install_path, AES_decryption_port)
     if ff_retval[0] != 'success': 
         raise Exception (
         'Error while starting Firefox: '+ ff_retval[0])
     ff_proc = ff_retval[1]
     firefox_pid = ff_proc.pid    
     
+   
+        
+        
     signal.signal(signal.SIGTERM, quit)
 
     if testing: start_testing()

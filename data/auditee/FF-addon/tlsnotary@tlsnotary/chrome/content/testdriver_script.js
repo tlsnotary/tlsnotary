@@ -28,9 +28,10 @@ var tlsnLoadListener = {
         // check if the state is secure or not
         if(aState & Ci.nsIWebProgressListener.STATE_IS_SECURE)
         {
-			//begin recording as soon as the page turns into https
 			gBrowser.removeProgressListener(this);
-			tlsnRecord();
+			//begin recording as soon as the page turns into https, but not immediately, because
+			//send_certificate request must go out first
+			setTimeout(tlsnRecord, 1000);
         }    
     }
 }
@@ -118,9 +119,8 @@ function waitForP2PConnection(){
 		setTimeout(waitForP2PConnection, 1000);
 		return;      
 	}
-	//else connected to peer
-	startDecryptionProcess();
-	openNextLink();
+	//give auditor time to run checks and start the receiving thread
+	setTimeout(openNextLink, 2000);
 }
 
 
@@ -215,54 +215,3 @@ function waitForSessionEnd(iteration){
 }
 
 
-var reqReadyToDecrypt;
-var bStopReadyToDecrypt;
-function startDecryptionProcess(){
-	reqReadyToDecrypt = new XMLHttpRequest();
-	reqReadyToDecrypt.onload = responseReadyToDecrypt;
-	reqReadyToDecrypt.open("HEAD", "http://127.0.0.1:37777/ready_to_decrypt", true);
-	reqReadyToDecrypt.send();
-	responseReadyToDecrypt(0);
-}
-
-function responseReadyToDecrypt(iteration){
-    if (typeof iteration == "number"){
-        //if (iteration > 3000){
-			//help.value = "ERROR responseReadyToDecrypt timed out";
-			//we dont want to time out because this is an endless loop
-            //return;
-        
-        if (!bStopReadyToDecrypt) setTimeout(responseReadyToDecrypt, 1000, ++iteration)
-        return;
-    }
-    //else: not a timeout but a response from the server
-	bStopReadyToDecrypt = true;
-    var query = reqReadyToDecrypt.getResponseHeader("response");
-    var b64ciphertext = reqReadyToDecrypt.getResponseHeader("ciphertext");
-    var b64key = reqReadyToDecrypt.getResponseHeader("key");
-    var b64iv = reqReadyToDecrypt.getResponseHeader("iv");
-   	if (query != "ready_to_decrypt"){
-		help.value = "ERROR Internal error. Wrong response header: " +query;
-        return;
-    }
-    var b64cleartext = aes_decrypt(b64ciphertext, b64key, b64iv);
-    bStopReadyToDecrypt = false;
-    var req = new XMLHttpRequest();
-    req.open("HEAD", "http://127.0.0.1:37777/cleartext="+b64cleartext, true);
-	req.send();
-	reqReadyToDecrypt.open("HEAD", "http://127.0.0.1:37777/ready_to_decrypt", true);
-	reqReadyToDecrypt.timeout = 0; //no timeout
-	reqReadyToDecrypt.send();
-	responseReadyToDecrypt(0);
-}
-
-function aes_decrypt(b64ciphertext, b64key, b64IV){
-	var cipherParams = CryptoJS.lib.CipherParams.create({
-	ciphertext: CryptoJS.enc.Base64.parse(b64ciphertext)
-	});
-	var key = CryptoJS.enc.Base64.parse(b64key)
-	var IV = CryptoJS.enc.Base64.parse(b64IV)
-	var decrypted = CryptoJS.AES.decrypt(cipherParams, key, { iv: IV })
-	var b64decrypted = decrypted.toString(CryptoJS.enc.Base64)
-	return b64decrypted;
-}
