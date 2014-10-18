@@ -57,18 +57,18 @@ def process_messages():
         #premaster secret, and returns the hashed version, along with
         #the half-pms encrypted to the server's pubkey
         if msg.startswith('rcr_rsr:'):
-            rcr_rsr = msg[len('rcr_rsr:'):]
+            msg_data = msg[len('rcr_rsr:'):]
             tlsnSession = shared.TLSNSSLClientSession()
             rspSession = shared.TLSNSSLClientSession()
-            rspSession.clientRandom = rcr_rsr[:32]
-            rspSession.serverRandom = rcr_rsr[32:64]
+            rspSession.clientRandom = msg_data[:32]
+            rspSession.serverRandom = msg_data[32:64]
             #pubkey required to set encrypted pms
             rspSession.serverModulus = int(shared.reliable_sites[rsChoice][1],16)
             rspSession.serverExponent = 65537
             #TODO currently can only handle 2048 bit keys for 'reliable site'
             rspSession.serverModLength = shared.bi2ba(256)
             rspSession.setAuditorSecret()
-            rspSession.setEncSecondHalfPMS()
+            rspSession.setEncSecondHalfPMS()           
             rrsapms = shared.bi2ba(rspSession.encSecondHalfPMS)
             send_message('rrsapms_rhmac:'+ rrsapms+rspSession.pAuditor)
             #we keep resetting so that the final, successful choice of secrets are stored
@@ -76,29 +76,36 @@ def process_messages():
             tlsnSession.auditorPaddingSecret = rspSession.auditorPaddingSecret
             continue
         #---------------------------------------------------------------------#
-        #cr_sr_hmac : sent by auditee at the start of the real audit.
-        #client random, server random, md5 hmac of auditee's PMS half.
-        #Then construct master secret half and hmac for expanded keys; note that the 
+        #cs_cr_sr_hmacms_verifymd5sha : sent by auditee at the start of the real audit.
+        #client random, server random, md5 hmac of auditee's PMS half, client handshake hashes (md5 and sha)
+        #Then construct master secret half, hmac for expanded keys. Note that the 
         #HMAC is 'garbageized', meaning some bytes are set as random garbage, so that 
         #the auditee's expanded keys will be invalid for that section (specifically -
         #the server mac key). Finally send back to auditee the hmac half for the
-        #master secret half and the hmac for the expanded keys (message
-        #rhmacms_hmacek).
-        elif msg.startswith('cr_sr_hmac:'): 
+        #master secret half and the hmac for the expanded keys and auditor's half
+        #of the HMAC needed to construct the PRF output for the verify data
+        #which is needed to construct the Client Finished handshake final message.        
+        #message (hmacms_hmacek_hmacverify).
+        elif msg.startswith('cs_cr_sr_hmacms_verifymd5sha:'): 
             progressQueue.put(time.strftime('%H:%M:%S', time.localtime()) + ': Processing data from the auditee.')
-            cr_sr_hmac = msg[len('cr_sr_hmac:'):]
-            tlsnSession.clientRandom = cr_sr_hmac[1:33]
-            tlsnSession.serverRandom = cr_sr_hmac[33:65]
-            tlsnSession.chosenCipherSuite = int(cr_sr_hmac[:1].encode('hex'),16)
-            md5hmac1_for_MS=cr_sr_hmac[65:89] #half of MS's 48 bytes
-            if not tlsnSession.auditorSecret: 
-                raise Exception("Auditor PMS secret data should have already been set.")
+            request = msg[len('cs_cr_sr_hmacms_verifymd5sha:'):]
+            assert len(request) == 125
+            tlsnSession.chosenCipherSuite = int(request[:1].encode('hex'),16)
+            tlsnSession.clientRandom = request[1:33]
+            tlsnSession.serverRandom = request[33:65]
+            md5hmac1_for_MS=request[65:89] #half of MS's 48 bytes
+            verify_md5 = request[89:105]
+            verify_sha = request[105:125]
             tlsnSession.setAuditorSecret()
             tlsnSession.setMasterSecretHalf(half=1,providedPValue=md5hmac1_for_MS)         
             garbageizedHMAC = tlsnSession.getPValueMS('auditor',[2]) #withhold the server mac
-            #rsapms_hmacms_hmacek = shared.bi2ba(tlsnSession.encSecondHalfPMS)+tlsnSession.pAuditor[24:]+garbageizedHMAC
-            hmacms_hmacek = tlsnSession.pAuditor[24:]+garbageizedHMAC
-            send_message('hmacms_hmacek:'+ hmacms_hmacek)
+            #TODO: I thought the convention was that the auditor always does the SHA part of PRF
+            #however, here he does MD5.
+            hmacverifymd5 = tlsnSession.getVerifyHMAC(verify_sha, verify_md5, half=1) 
+            if not tlsnSession.auditorSecret: 
+                raise Exception("Auditor PMS secret data should have already been set.")            
+            hmacms_hmacek_hmacverify = tlsnSession.pAuditor[24:]+garbageizedHMAC+hmacverifymd5
+            send_message('hmacms_hmacek_hmacverify:'+ hmacms_hmacek_hmacverify)
             continue
         #---------------------------------------------------------------------#
         #n_e: Server pubkey's modulus and exponent used to construct the
@@ -119,16 +126,10 @@ def process_messages():
             send_message('rsapms:'+ rsapms)
             continue
 
+        #---------------------------------------------------------------------#
         #Receive from the auditee the client handshake hashes (md5 and sha) and return
         #auditor's half of the HMAC needed to construct the PRF output for the verify data
-        #which is needed to construct the Client Finished handshake final message.
-        elif msg.startswith('verify_md5sha:'):
-            md5sha = msg[len('verify_md5sha:'):]
-            md5hmac = tlsnSession.getVerifyHMAC(md5sha[16:],md5sha[:16],half=1)
-            send_message('verify_hmac:'+md5hmac)
-            continue
-        #---------------------------------------------------------------------#
-        #Exactly as above, but for the Server 'Finished' message (which must be verified)
+        #which is needed to verify the Server Finished handshake final message.
         elif msg.startswith('verify_md5sha2:'):
             md5sha2 = msg[len('verify_md5sha2:'):]
             md5hmac2 = tlsnSession.getVerifyHMAC(md5sha2[16:],md5sha2[:16],half=1,isForClient=False)
