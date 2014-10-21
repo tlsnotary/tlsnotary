@@ -50,6 +50,9 @@ rsChoice = None
 firefox_pid = selftest_pid = 0
 audit_no = 0 #we may be auditing multiple URLs. This var keeps track of how many
 #successful audits there were so far and is used to index html files audited.
+paillier_private_key = None #Auditee's private key. Used for paillier_scheme.
+#Generated only once and is reused until the end of the auditing session
+bPaillierPrivkeyBeingGenerated = True #toggled to False when finished generating the Paillier privkey
 
 #TESTING only vars
 testing = False #toggled when we are running a test suite (developer only)
@@ -174,6 +177,8 @@ class HandleBrowserRequestsClass(SimpleHTTPServer.SimpleHTTPRequestHandler):
         return
     
     def start_peer_connection(self):
+        if int(shared.config.get("General","use_paillier_scheme")):
+            paillier_gen_privkey()
         rv = start_peer_messaging()
         rv2 = peer_handshake()
         global bPeerConnected
@@ -222,21 +227,9 @@ class HandleBrowserRequestsClass(SimpleHTTPServer.SimpleHTTPRequestHandler):
             print ('Preparing encPMS')
             if not use_paillier_scheme:
                 pms_secret, pms_padding_secret = prepare_pms()
-
-                #if for some reason you can't get the cert from the browser
-                #then make a dummy request just to get the certificate
-                #you will have to comment out the dercert= above if u want to use this
-                #dummytlssock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                #dummytlssock.settimeout(int(shared.config.get("General","tcp_socket_timeout")))
-                #if testing: dummytlsnSession = shared.TLSNSSLClientSession(server_name, ccs=int(cs))
-                #else: dummytlsnSession = shared.TLSNSSLClientSession(server_name)
-                #startTLSSession(dummytlsnSession, dummytlssock)
-                #dummytlsnSession.extractCertificate()
-                #dercert = dummytlsnSession.serverCertificate
-                
                 prepare_encrypted_pms(tlsnSession, dercert, pms_secret, pms_padding_secret)
             else: #use_paillier_scheme:
-                prepare_encrypted_pms_paillier(tlsnSession, dercert)
+                paillier_prepare_encrypted_pms(tlsnSession, dercert)
         else:
             print ('Encrypted PMS was already prepared')
             pms_secret, pms_padding_secret, encPMS = certs_and_encpms[dercert]
@@ -308,6 +301,9 @@ class HandleBrowserRequestsClass(SimpleHTTPServer.SimpleHTTPRequestHandler):
         return        
     
     def send_certificate(self, b64cert):
+        #we don't want to cache encPMSs as it would take too long in paillier scheme
+        if int(shared.config.get("General","use_paillier_scheme")):
+            return
         certQueue.put(b64cert)
         #no need to respond, nobody cares
         return        
@@ -378,6 +374,18 @@ class HandleBrowserRequestsClass(SimpleHTTPServer.SimpleHTTPRequestHandler):
                                    (format%args)[:80]))
         
 
+def paillier_gen_privkey_thread():
+    global paillier_private_key
+    paillier_private_key = shared.Paillier(privkey_bits=4096+8)
+    global bPaillierPrivkeyBeingGenerated
+    bPaillierPrivkeyBeingGenerated = False
+
+def paillier_gen_privkey():
+    thread = threading.Thread(target=paillier_gen_privkey_thread)
+    thread.daemon = True
+    thread.start()    
+
+
 #loops on the certQueue and prepares encPMS
 def process_certificate_queue():
     #wait for peer to connect before sending
@@ -386,9 +394,11 @@ def process_certificate_queue():
     #when peer is connected we dont want to immediately send certs (if any)
     #because auditor needs a couple of seconds to setup
     time.sleep(2)
+    use_paillier_scheme = False
+    if int(shared.config.get("General","use_paillier_scheme")):
+        use_paillier_scheme = True                    
     while True:
-        #dummy class only to get encPMS, use new one each iteration just in case
-        tlscrypto = shared.TLSNSSLClientSession()            
+        #dummy class only to get encPMS, use new one each iteration just in case     
         b64cert = certQueue.get()
         #we don't want to pre-compute for more than 1 certificate as this will
         #confuse the auditor. However, the auditor code can be changed to 
@@ -398,15 +408,26 @@ def process_certificate_queue():
         #don't process duplicates
         if certDER in certs_and_encpms: continue
         certDER = b64decode(b64cert)
-        print ('Preparing encPMS in advance')
         global bCommChannelBusy
         while bCommChannelBusy:
             time.sleep(0.1)
         bCommChannelBusy = True
-        pms_secret, pms_padding_secret = prepare_pms()
-        prepare_encrypted_pms(tlscrypto, certDER, pms_secret, pms_padding_secret)
-        bCommChannelBusy = False
+        #make sure the cert wasnt cached while we were waiting
+        if len(certs_and_encpms) > 0:
+            bCommChannelBusy = False            
+            continue
+        print ('Preparing encPMS in advance')        
+        if not use_paillier_scheme:
+            tlscrypto = shared.TLSNSSLClientSession()
+            pms_secret, pms_padding_secret = prepare_pms()
+            prepare_encrypted_pms(tlscrypto, certDER, pms_secret, pms_padding_secret)
+        else:
+            tlscrypto = shared.TLSNSSLClientSession_Paillier()   
+            pms_secret = tlscrypto.auditeeSecret
+            pms_padding_secret = tlscrypto.auditeePaddingSecret
+            paillier_prepare_encrypted_pms(tlscrypto, certDER)
         certs_and_encpms[certDER] = (pms_secret, pms_padding_secret, tlscrypto.encPMS)
+        bCommChannelBusy = False        
 
 
 #Because there is a 1 in ? chance that the encrypted PMS will contain zero bytes in its
@@ -461,12 +482,52 @@ def prepare_encrypted_pms(tlsnSession, certDER, pms_secret, pms_padding_secret):
     if not reply[1].startswith('rsapms:'):
         return 'bad reply. Expected rsapms:'
     rsapms = reply[1][len('rsapms:'):]
-    assert len(rsapms) == len(n) #TODO i once saw rsapms of size 255
     tlsnSession.serverModulus = shared.ba2int(n)
     tlsnSession.serverModLength = len_n
     tlsnSession.encSecondHalfPMS = shared.ba2int(rsapms)
     tlsnSession.setEncFirstHalfPMS()
     tlsnSession.setEncryptedPMS()    
+
+
+def paillier_prepare_encrypted_pms(tlsnSession, certDER):
+    N_int, e_int = tlsnSession.extractModAndExp(certDER)
+    N_ba = shared.bi2ba(N_int)
+    if len(N_ba) > 256:
+        raise Exception ('''Can not audit the website with a pubkey length more than 256 bytes.
+        Please set use_paillier_scheme = 0 in tlsnotary.ini and rerun tlsnotary''')
+    if bPaillierPrivkeyBeingGenerated:
+        print ('Waiting for Paillier key to finish generating before continuing')
+        while bPaillierPrivkeyBeingGenerated:
+            time.sleep(0.1)
+        print ('Paillier private key generated! Continuing.')  
+    print ('Preparing encPMS using Paillier. This usually takes 2 minutes')
+    assert paillier_private_key
+    scheme = shared.Paillier_scheme_auditee(paillier_private_key)
+    data_for_auditor = scheme.get_data_for_auditor(tlsnSession.auditeePaddedRSAHalf, N_ba)
+    datafile = join(current_sessiondir, 'paillier_data')
+    with open(datafile, 'wb') as f: f.write(data_for_auditor)
+    try: 
+        link = shared.sendspace_getlink(datafile, requests.get, requests.post)
+    except:
+        raise Exception('Could not use sendspace')  
+    reply = send_and_recv('p_link:'+link, timeout=200)
+    if reply[0] != 'success':
+        raise Exception ('Failed to receive a reply for p_link:')
+    
+    for i in range(8):
+        if not reply[1].startswith('p_round_or'+str(i)+':'):
+            return 'bad reply. Expected p_round_or'+str(i)+':'
+        E_ba = reply[1][len('p_round_or'+str(i)+':'):]
+        F_ba = shared.bi2ba( scheme.do_round(i, shared.ba2int(E_ba)), fixed=513)
+        reply = send_and_recv('p_round_ee'+str(i)+':'+F_ba)
+        if reply[0] != 'success': 
+            raise Exception ('Failed to receive a reply for p_round_ee'+str(i)+':')
+   
+    if not reply[1].startswith('p_round_or8:'):
+        raise Exception ('bad reply. Expected p_round_or8:')
+    PSum_ba = reply[1][len('p_round_or8:'):]
+    encPMS = scheme.do_ninth_round(shared.ba2int(PSum_ba))    
+    tlsnSession.encPMS = encPMS
 
     
 #peer messaging protocol
