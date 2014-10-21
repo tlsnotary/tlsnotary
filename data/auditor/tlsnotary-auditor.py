@@ -47,7 +47,6 @@ def send_message(data):
 #Main thread which receives messages from auditee over peer messaging,
 #and performs crypto auditing functions.
 def process_messages():
-
     while True:
         try: msg = recvQueue.get(block=True, timeout=1)
         except: continue
@@ -157,7 +156,7 @@ def process_messages():
             last_seqno = max([0] + seqnos) #avoid throwing by feeding at least one value 0
             my_seqno = last_seqno+1
             response_hash_path = os.path.join(commit_dir, 'responsehash'+str(my_seqno))
-            n_hexlified = binascii.hexlify(n)
+            n_hexlified = binascii.hexlify(shared.bi2ba(tlsnSession.serverModulus))
             #pubkey in the format 09 56 23 ....
             n_write = " ".join(n_hexlified[i:i+2] for i in range(0, len(n_hexlified), 2)) 
             pubkey_path = os.path.join(commit_dir, 'pubkey'+str(my_seqno))
@@ -289,6 +288,34 @@ In Firefox, click the padlock to the left of the URL bar -> More Information -> 
             progressQueue.put(time.strftime('%H:%M:%S', time.localtime()) + ': All decrypted HTML can be found in ' + decr_dir)
             progressQueue.put(time.strftime('%H:%M:%S', time.localtime()) + ': You may now close the browser.')
             continue
+    #---------------------------------------------------------------------#
+    #Paillier scheme
+        elif msg.startswith('p_link:'):
+            p_link = msg[len('p_link:'):]
+            tlsnSession = shared.TLSNSSLClientSession_Paillier()            
+            time.sleep(1) #just in case the upload server needs some time to prepare the file
+            req = urllib2.Request(p_link)
+            resp = urllib2.urlopen(req)
+            linkdata = resp.read()
+            
+            assert len(linkdata) == (256+513+1026*(3*8+2))
+            tlsnSession.serverModulus = shared.ba2int(linkdata[:256])
+            scheme = shared.Paillier_scheme_auditor(tlsnSession.auditorPaddedRSAHalf, linkdata)
+            E1 = scheme.do_round(0, None)
+            send_message('p_round_or0:'+shared.bi2ba(E1, fixed=1026))
+            continue
+        
+        elif msg.startswith('p_round_ee'):
+            round_no  = int( msg[len('p_round_ee'):len('p_round_ee')+1] )
+            assert round_no < 8
+            F_ba = msg[len('p_round_ee'+str(round_no)+':'):]
+            if round_no == 7:
+                E = scheme.do_ninth_round(shared.ba2int(F_ba))
+            else:
+                E = scheme.do_round(round_no+1, shared.ba2int(F_ba))
+            send_message('p_round_or'+str(round_no+1)+':'+shared.bi2ba(E, fixed=1026))
+            continue      
+    
       
 #Receive HTTP HEAD requests from FF extension. This is how the extension communicates with python backend.
 class Handler(SimpleHTTPServer.SimpleHTTPRequestHandler):
