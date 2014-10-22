@@ -735,7 +735,7 @@ def peer_handshake():
     rs_e = shared.bi2ba(65537,fixed=4)
 
     bIsAuditorRegistered = False
-    for attempt in range(6): #try for 6*10 secs to find the auditor
+    for attempt in range(6): #try for 6*5 secs to find the auditor
         if bIsAuditorRegistered == True: break #previous iteration successfully regd the auditor
         time_attempt_began = int(time.time())
         shared.tlsn_send_single_msg(' :ae_hello:',modulus+signed_hello,auditorPubKey)
@@ -743,7 +743,7 @@ def peer_handshake():
         signed_hello_message_dict = {}
         full_signed_hello = ''
         while not bIsAuditorRegistered:
-            if int(time.time()) - time_attempt_began > 20: break
+            if int(time.time()) - time_attempt_began > 5: break
             #ignore decryption errors here, as above, the message may be
             #from someone else's handshake
             x = shared.tlsn_receive_single_msg('ao_hello:',myPrvKey,my_nick,iDE=True)
