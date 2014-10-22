@@ -783,6 +783,33 @@ def start_firefox(FF_to_backend_port, firefox_install_path, AES_decryption_port)
            "Firefox executable not found - invalid Firefox application directory."
         
     local_ff_copy = join(datadir,'Firefox.app') if OS=='macos' else join(datadir,'firefoxcopy')  
+    
+    #check if FF-addon/tlsnotary@tlsnotary files were modified. If so, get a fresh 
+    #firefoxcopy and FF-profile. This is useful for developers, otherwise
+    #we forget to do it manually and end up chasing wild geese
+    filehashes = []
+    for root, dirs, files in os.walk(join(datadir, 'FF-addon', 'tlsnotary@tlsnotary')):
+        for onefile in files:
+            with open(join(root, onefile), 'rb') as f: filehashes.append(md5(f.read()).hexdigest())
+    #sort hashes and get the final hash
+    filehashes.sort()
+    final_hash = md5(''.join(filehashes)).hexdigest()
+    hash_path = join(datadir, 'ffaddon.md5')
+    if not os.path.exists(hash_path):
+        with open(hash_path, 'wb') as f: f.write(final_hash)
+    else:
+        with open(hash_path, 'rb') as f: saved_hash = f.read()
+        if saved_hash != final_hash:
+            print('''FF-addon directory changed since last invocation. 
+            Replacing some of your Firefox\'s copy folders''')
+            try:
+                shutil.rmtree(local_ff_copy)
+                shutil.rmtree(join(datadir, 'FF-profile'))
+            except:
+                pass
+            with open(hash_path, 'wb') as f: f.write(final_hash)            
+            
+             
     if not os.path.exists(local_ff_copy):
         try:
             shutil.copytree(firefox_install_path, local_ff_copy, symlinks=True)        
