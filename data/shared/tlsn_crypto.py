@@ -905,7 +905,6 @@ class Paillier(object):
     '''instantiate with (privkey_bits=...) to generate a new Paillier priv/pubkey pair or
     with (pubkey=...) to import a Paillier pubkey'''
     #making the list of smallprimes larger can even DEcrease performance. Benchmarking required
-    smallprimes = (2,3,5,7,11,13,17,19,23,29,31,37,41,43,47,53,59,61,67,71,73,79,83,89,97,101)            
     def __init__(self, privkey_bits=None, pubkey=None):
         if (privkey_bits and pubkey) or (not privkey_bits and not pubkey):
             raise Exception('Provide either privkey_bits=<bits> or pubkey=<modulus>')
@@ -921,14 +920,14 @@ class Paillier(object):
             raise Exception ('Please don\'t be ridiculous. The private key must have be at least 1024 bits these days')          
         if (privkey_bits % 2 != 0): #p and q must be of the same size, need even bitlength
             raise Exception('Can only work with even bitlength keys')
-        p = self.generate_prime(privkey_bits / 2)
-        q = self.generate_prime(privkey_bits / 2)
+        p = generate_prime(privkey_bits / 2)
+        q = generate_prime(privkey_bits / 2)
         print ('Finished with primes')
         self.n = p * q
         self.n_sq = self.n * self.n
         self.g = self.n + 1
         self.l = (p-1) * (q-1)
-        self.m = Paillier.inverse(self.l, self.n)
+        self.m = inverse(self.l, self.n)
         r = random_int(int(self.n).bit_length())
         #we pre-compute r^n mod n^2 and use it for every encryption
         self.r_pow_n_mod_n_sq = pow(r, self.n, self.n_sq)
@@ -954,90 +953,7 @@ class Paillier(object):
         x = pow(cipher, self.l, self.n_sq) - 1
         return ((x // self.n) * self.m) % self.n
 
-    @staticmethod
-    def generate_prime(bits):
-        s = 0
-        hundreds = 0
-        while True:
-            #time.sleep(0.1) #go easy on the CPU if speed is not critical
-            s += 1
-            if s == 100:
-                hundreds += 1
-                s = 0
-                print('Finding prime. Try no ' + str(hundreds*100))
-            #get and odd int
-            candidate = random_int(bits) | 1
-            if Paillier.is_probably_prime(candidate, 40):
-                return candidate
-
-    @staticmethod    
-    def is_probably_prime(candidate, k):
-        for prime in Paillier.smallprimes:
-            if candidate % prime == 0:     
-                return False
-        for i in xrange(k):
-            test = random.randrange(2, candidate - 1) | 1
-            if Paillier.rabin_miller_witness(test, candidate):
-                return False
-        return True
-
-    #copied from https://github.com/mikeivanov/paillier/blob/master/primes.py
-    @staticmethod    
-    def rabin_miller_witness(test, candidate):
-        """Using Rabin-Miller witness test, will return True if candidate is
-           definitely not prime (composite), False if it may be prime."""    
-        return 1 not in Paillier.ipow(test, candidate-1, candidate)    
-
-    @staticmethod    
-    def ipow(a, b, n):
-        """calculates (a**b) % n via binary exponentiation, yielding itermediate
-           results as Rabin-Miller requires"""
-        A = a = long(a % n)
-        yield A
-        t = 1L
-        while t <= b:
-            t <<= 1   
-        # t = 2**k, and t > b
-        t >>= 2
-        while t:
-            A = (A * A) % n
-            if t & b:
-                A = (A * a) % n
-            yield A
-            t >>= 1
-            
-    
-    #copied from pyrsa
-    @staticmethod        
-    def extended_gcd(a, b):
-        '''Returns a tuple (r, i, j) such that r = gcd(a, b) = ia + jb
-        '''
-        # r = gcd(a,b) i = multiplicitive inverse of a mod b
-        #      or      j = multiplicitive inverse of b mod a
-        # Neg return values for i or j are made positive mod b or a respectively
-        # Iterateive Version is faster and uses much less stack space
-        x = 0
-        y = 1
-        lx = 1
-        ly = 0
-        oa = a                             #Remember original a/b to remove 
-        ob = b                             #negative values from return results
-        while b != 0:
-            q = a // b
-            (a, b)  = (b, a % b)
-            (x, lx) = ((lx - (q * x)),x)
-            (y, ly) = ((ly - (q * y)),y)
-        if (lx < 0): lx += ob              #If neg wrap modulo orignal b
-        if (ly < 0): ly += oa              #If neg wrap modulo orignal a
-        return (a, lx, ly)                 #Return only positive values
-    
-    @staticmethod        
-    def inverse(x, n):
-        '''Returns x^-1 (mod n)'''
-        (divider, inv, _) = Paillier.extended_gcd(x, n)
-        if divider != 1:
-            raise ValueError("x (%d) and n (%d) are not relatively prime" % (x, n))
-        return inv
+ 
 
 
 
@@ -1047,21 +963,12 @@ class TLSNSSLClientSession_Paillier(TLSNSSLClientSession):
         #prepare the secrets right away. Depending on who will be using this class - 
         #auditee or auditor, accordingly secrets will be used
         self.auditeeSecret = os.urandom(22)
-        self.auditeePaddingSecret = self.random_non_zero(103)
+        self.auditeePaddingSecret = random_non_zero(103)
         self.auditeePaddedRSAHalf = '\x02' + self.auditeePaddingSecret + '\x00'*102 + '\x00\x03\x01' + self.auditeeSecret + '\x00'*24        
         
         self.auditorSecret = os.urandom(24)
-        self.auditorPaddingSecret = self.random_non_zero(102)
+        self.auditorPaddingSecret = random_non_zero(102)
         self.auditorPaddedRSAHalf = self.auditorPaddingSecret + '\x00'*25 + self.auditorSecret
-  
-    def random_non_zero(self, byte_len):
-        ba = os.urandom(byte_len)
-        while True:
-            pos = ba.find('\x00')
-            if pos == -1:
-                break
-            ba = ba[:pos]+os.urandom(1)+ba[pos+1:]
-        return ba
     
     #overriden
     def setAuditeeSecret(self):
@@ -1147,9 +1054,7 @@ class Paillier_scheme_auditor():
         PSum = P.e_add(P.e_add(BY, BX), AY)
         return PSum
             
-            
-                           
-    
+                
 class Paillier_scheme_auditee():
     def __init__(self, Paillier_obj):
         self.N = None

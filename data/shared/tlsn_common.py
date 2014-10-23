@@ -13,6 +13,8 @@ config_location = os.path.join(os.path.dirname(os.path.realpath(__file__)),'tlsn
 required_options = {'IRC':['irc_server','irc_port','channel_name']}
 
 reliable_sites = {}
+smallprimes = (2,3,5,7,11,13,17,19,23,29,31,37,41,43,47,53,59,61,67,71,73,79,83,89,97,101)            
+
 
 #file transfer functions - currently only used for sending
 #ciphertext to auditor
@@ -260,3 +262,92 @@ def random_int(bits):
     if extra_bits:
         rand_int >>= (8-extra_bits)
     return rand_int
+
+def generate_prime(bits):
+    s = 0
+    hundreds = 0
+    while True:
+        #time.sleep(0.1) #go easy on the CPU if speed is not critical
+        s += 1
+        if s == 100:
+            hundreds += 1
+            s = 0
+            print('Finding prime. Try no ' + str(hundreds*100))
+        #get and odd int
+        candidate = random_int(bits) | 1
+        if is_probably_prime(candidate, 40):
+            return candidate
+
+def is_probably_prime(candidate, k):
+    for prime in smallprimes:
+        if candidate % prime == 0:     
+            return False
+    for i in xrange(k):
+        test = random.randrange(2, candidate - 1) | 1
+        if rabin_miller_witness(test, candidate):
+            return False
+    return True
+
+#copied from https://github.com/mikeivanov/paillier/blob/master/primes.py
+def rabin_miller_witness(test, candidate):
+    """Using Rabin-Miller witness test, will return True if candidate is
+       definitely not prime (composite), False if it may be prime."""    
+    return 1 not in ipow(test, candidate-1, candidate)    
+
+#copied from https://github.com/mikeivanov/paillier/blob/master/primes.py
+def ipow(a, b, n):
+    """calculates (a**b) % n via binary exponentiation, yielding itermediate
+       results as Rabin-Miller requires"""
+    A = a = long(a % n)
+    yield A
+    t = 1L
+    while t <= b:
+        t <<= 1   
+    # t = 2**k, and t > b
+    t >>= 2
+    while t:
+        A = (A * A) % n
+        if t & b:
+            A = (A * a) % n
+        yield A
+        t >>= 1
+        
+#copied from pyrsa
+def extended_gcd(a, b):
+    '''Returns a tuple (r, i, j) such that r = gcd(a, b) = ia + jb
+    '''
+    # r = gcd(a,b) i = multiplicitive inverse of a mod b
+    #      or      j = multiplicitive inverse of b mod a
+    # Neg return values for i or j are made positive mod b or a respectively
+    # Iterateive Version is faster and uses much less stack space
+    x = 0
+    y = 1
+    lx = 1
+    ly = 0
+    oa = a                             #Remember original a/b to remove 
+    ob = b                             #negative values from return results
+    while b != 0:
+        q = a // b
+        (a, b)  = (b, a % b)
+        (x, lx) = ((lx - (q * x)),x)
+        (y, ly) = ((ly - (q * y)),y)
+    if (lx < 0): lx += ob              #If neg wrap modulo orignal b
+    if (ly < 0): ly += oa              #If neg wrap modulo orignal a
+    return (a, lx, ly)                 #Return only positive values
+
+#copied from pyrsa
+def inverse(x, n):
+    '''Returns x^-1 (mod n)'''
+    (divider, inv, _) = extended_gcd(x, n)
+    if divider != 1:
+        raise ValueError("x (%d) and n (%d) are not relatively prime" % (x, n))
+    return inv
+
+def random_non_zero(self, byte_len):
+     ba = os.urandom(byte_len)
+     while True:
+         pos = ba.find('\x00')
+         if pos == -1:
+             break
+         ba = ba[:pos]+os.urandom(1)+ba[pos+1:]
+     return ba
