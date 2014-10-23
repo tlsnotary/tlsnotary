@@ -1,7 +1,8 @@
 from __future__ import print_function
 from ConfigParser import SafeConfigParser
 from SocketServer import ThreadingMixIn
-import os, binascii, itertools, re
+from struct import pack
+import os, binascii, itertools, re, random
 import threading, BaseHTTPServer
 import select, socket, time
 #General utility objects used by both auditor and auditee.
@@ -253,15 +254,14 @@ def dechunkHTTP(http_data):
         cur_offset += chunk_len+len('\r\n')    
     return dechunked
 
-
-def random_int(bits):
-    '''Returns a random cryptographically secure int of specified bitlength'''
-    bytes_no, extra_bits = divmod(bits, 8)
-    if extra_bits: bytes_no += 1
-    rand_int = ba2int(os.urandom(bytes_no))
-    if extra_bits:
-        rand_int >>= (8-extra_bits)
-    return rand_int
+def random_non_zero(byte_len):
+    ba = os.urandom(byte_len)
+    while True:
+        pos = ba.find('\x00')
+        if pos == -1:
+            break
+        ba = ba[:pos]+os.urandom(1)+ba[pos+1:]
+    return ba
 
 def generate_prime(bits):
     s = 0
@@ -274,7 +274,7 @@ def generate_prime(bits):
             s = 0
             print('Finding prime. Try no ' + str(hundreds*100))
         #get and odd int
-        candidate = random_int(bits) | 1
+        candidate = randint(2**bits) | 1
         if is_probably_prime(candidate, 40):
             return candidate
 
@@ -342,12 +342,69 @@ def inverse(x, n):
     if divider != 1:
         raise ValueError("x (%d) and n (%d) are not relatively prime" % (x, n))
     return inv
+ 
+#copied from pyrsa
+def read_random_bits(nbits):
+    '''Reads 'nbits' random bits.
 
-def random_non_zero(self, byte_len):
-     ba = os.urandom(byte_len)
-     while True:
-         pos = ba.find('\x00')
-         if pos == -1:
-             break
-         ba = ba[:pos]+os.urandom(1)+ba[pos+1:]
-     return ba
+    If nbits isn't a whole number of bytes, an extra byte will be appended with
+    only the lower bits set.
+    '''
+
+    nbytes, rbits = divmod(nbits, 8)
+
+    # Get the random bytes
+    randomdata = os.urandom(nbytes)
+
+    # Add the remaining random bits
+    if rbits > 0:
+        randomvalue = ord(os.urandom(1))
+        randomvalue >>= (8 - rbits)
+        #randomdata = byte(randomvalue) + randomdata
+        randomdata = pack("B", randomvalue) + randomdata
+
+    return randomdata
+
+#copied from pyrsa
+def read_random_int(nbits):
+    '''Reads a random integer of approximately nbits bits.
+    '''
+
+    randomdata = read_random_bits(nbits)
+    #value = transform.bytes2int(randomdata)
+    value = int(binascii.hexlify(randomdata), 16)
+    
+
+    # Ensure that the number is large enough to just fill out the required
+    # number of bits.
+    value |= 1 << (nbits - 1)
+
+    return value
+
+#copied from pyrsa
+def randint(maxvalue):
+    '''Returns a random integer x with 1 <= x <= maxvalue
+    
+    May take a very long time in specific situations. If maxvalue needs N bits
+    to store, the closer maxvalue is to (2 ** N) - 1, the faster this function
+    is.
+    '''
+
+    #bit_size = common.bit_size(maxvalue)
+    bit_size = int(maxvalue).bit_length()
+
+    tries = 0
+    while True:
+        value = read_random_int(bit_size)
+        if value <= maxvalue:
+            break
+
+        if tries and tries % 10 == 0:
+            # After a lot of tries to get the right number of bits but still
+            # smaller than maxvalue, decrease the number of bits by 1. That'll
+            # dramatically increase the chances to get a large enough number.
+            bit_size -= 1
+        tries += 1
+
+    return value
+ 

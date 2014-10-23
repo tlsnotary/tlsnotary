@@ -913,7 +913,7 @@ class Paillier(object):
             self.n_sq = self.n * self.n            
             self.g = self.n+1
             #we pre-compute r^n mod n^2 and use it for every encryption            
-            r = random_int(int(self.n).bit_length())
+            r = randint(self.n-1)
             self.r_pow_n_mod_n_sq = pow(r, self.n, self.n_sq)
             return
         elif (privkey_bits < 1024):
@@ -928,7 +928,7 @@ class Paillier(object):
         self.g = self.n + 1
         self.l = (p-1) * (q-1)
         self.m = inverse(self.l, self.n)
-        r = random_int(int(self.n).bit_length())
+        r = randint(self.n-1)
         #we pre-compute r^n mod n^2 and use it for every encryption
         self.r_pow_n_mod_n_sq = pow(r, self.n, self.n_sq)
 
@@ -1038,7 +1038,7 @@ class Paillier_scheme_auditor():
         T5 = P.encrypt( pow(iv, 4, N) )        
         TSum = P.e_add(P.e_add(P.e_add(T2, T3), T4), T5)       
         #apply mask D
-        self.D = random_int(n_len-2)
+        self.D = randint(2**(n_len-2))
         E = P.e_add(TSum, P.encrypt(self.D))
         return E
         
@@ -1080,7 +1080,7 @@ class Paillier_scheme_auditee():
             P3 = P.encrypt(6*pow(iv, 2, N) % N)
             P4 = P.encrypt(4*iv % N)
             #len(K) < len(n_len) because we add K to another n_len-2 value. The sum must not overflow n
-            K = random_int(n_len-2)
+            K = randint(2**(n_len-2))
             #prepare iv for next round (L in the paper)
             iv = (T1 - K) % N
             self.data_for_auditor += bi2ba(P2, fixed=1026) + bi2ba(P3, fixed=1026) + bi2ba(P4, fixed=1026)
