@@ -250,3 +250,13 @@ def dechunkHTTP(http_data):
         dechunked += http_body[cur_offset:cur_offset+chunk_len]
         cur_offset += chunk_len+len('\r\n')    
     return dechunked
+
+
+def random_int(bits):
+    '''Returns a random cryptographically secure int of specified bitlength'''
+    bytes_no, extra_bits = divmod(bits, 8)
+    if extra_bits: bytes_no += 1
+    rand_int = ba2int(os.urandom(bytes_no))
+    if extra_bits:
+        rand_int >>= (8-extra_bits)
+    return rand_int
