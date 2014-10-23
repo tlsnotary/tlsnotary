@@ -287,6 +287,7 @@ class HandleBrowserRequestsClass(SimpleHTTPServer.SimpleHTTPRequestHandler):
         return        
     
     def set_advanced(self, args):
+        args = args.split(',')
         #TODO can make this more generic when there are lots of arguments;
         if not (args[0].split('=')[0] == 'server_val' and args[1].split('=')[0] == 'channel_val' \
             and args[2].split('=')[0] == 'port_val' and args[0].split('=')[1] and \
