@@ -93,28 +93,30 @@ function startListening(){
 function startRecording(){
     audited_browser = gBrowser.selectedBrowser;
     tab_url_full = audited_browser.contentWindow.location.href;
-    if (!tab_url_full.startsWith("https://")){
+    //remove hashes - they are not URLs but are used for internal page mark-up
+	sanitized_url = tab_url_full.split("#")[0];
+    if (!sanitized_url.startsWith("https://")){
 		help.value = "ERROR You can only audit pages which start with https://";
 		return;
     }
-    if (dict_of_status[tab_url_full] != "secure"){
+    if (dict_of_status[sanitized_url] != "secure"){
 	alert("Do not attempt to audit this page! It does not have a valid SSL certificate.");
 	return;
     }
     
-    var x = tab_url_full.split('/');
+    var x = sanitized_url.split('/');
     x.splice(0,3);
     tab_url = x.join('/');
 	button_record_enabled.hidden = true;
 	button_spinner.hidden = false;
 	button_stop_disabled.hidden = false;
 	button_stop_enabled.hidden = true;
-    var httpChannel = dict_of_httpchannels[tab_url_full]
+    var httpChannel = dict_of_httpchannels[sanitized_url]
 	headers = "";
 	headers += httpChannel.requestMethod + " /" + tab_url + " HTTP/1.1" + "\r\n";
 	httpChannel.visitRequestHeaders(function(header,value){
                                   headers += header +": " + value + "\r\n";});
-    startAudit(tab_url_full);
+    startAudit(sanitized_url);
 }
 
 
@@ -273,9 +275,11 @@ function dumpSecurityInfo(channel,urldata) {
             latest_tab_sec_state = "insecure";
         else if ((secInfo.securityState & Ci.nsIWebProgressListener.STATE_IS_BROKEN) == Ci.nsIWebProgressListener.STATE_IS_BROKEN)
             latest_tab_sec_state = "unknown";
-	    
-	dict_of_status[urldata] = latest_tab_sec_state;
-	dict_of_httpchannels[urldata]  = channel.QueryInterface(Ci.nsIHttpChannel);
+	
+	//remove hashes - they are not URLs but are used for internal page mark-up
+	sanitized_url = urldata.split("#")[0];
+	dict_of_status[sanitized_url] = latest_tab_sec_state;
+	dict_of_httpchannels[sanitized_url]  = channel.QueryInterface(Ci.nsIHttpChannel);
 	
     }
     else {
@@ -284,7 +288,7 @@ function dumpSecurityInfo(channel,urldata) {
     // Print SSL certificate details
     if (secInfo instanceof Ci.nsISSLStatusProvider) {
       var cert = secInfo.QueryInterface(Ci.nsISSLStatusProvider).SSLStatus.QueryInterface(Ci.nsISSLStatus).serverCert;
-      dict_of_certs[urldata] = cert;
+      dict_of_certs[sanitized_url] = cert;
       //send the cert immediately to backend to prepare encrypted PMS
 	  send_cert_to_backend(cert);
     }
