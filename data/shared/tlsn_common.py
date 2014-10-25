@@ -4,7 +4,7 @@ from SocketServer import ThreadingMixIn
 from struct import pack
 import os, binascii, itertools, re, random
 import threading, BaseHTTPServer
-import select, socket, time
+import select, time
 #General utility objects used by both auditor and auditee.
 
 config = SafeConfigParser()
@@ -59,13 +59,13 @@ def pipebytes_getlink(mfile,rg,rp):
     reply1 = rg('http://host03.pipebytes.com/getkey.php?r='+
                           ('%.16f' % random.uniform(0,1)), timeout=5)
     key = reply1.text
-    reply2 = rp('http://host03.pipebytes.com/setmessage.php?r='+
+    rp('http://host03.pipebytes.com/setmessage.php?r='+
                            ('%.16f' % random.uniform(0,1))+'&key='+key, {'message':''}, timeout=5)
     thread = threading.Thread(target= pipebytes_post, args=(key, mfile))
     thread.daemon = True
     thread.start()
     time.sleep(1)               
-    reply4 = rg('http://host03.pipebytes.com/status.py?key='+key+
+    rg('http://host03.pipebytes.com/status.py?key='+key+
                           '&touch=yes&r='+('%.16f' % random.uniform(0,1)), timeout=5)
     return ('http://host03.pipebytes.com/get.py?key='+key)
 
@@ -168,8 +168,8 @@ class StoppableHttpServer (BaseHTTPServer.HTTPServer):
         """Handle one request at a time until stopped. Optionally return a value"""
         self.stop = False
         while not self.stop:
-                self.handle_request()
-        return self.retval;
+            self.handle_request()
+        return self.retval
  
 
 #processes each http request in a separate thread
@@ -182,8 +182,8 @@ class StoppableThreadedHttpServer (ThreadingMixIn, BaseHTTPServer.HTTPServer):
         self.stop = False
         self.socket.setblocking(1)
         while not self.stop:
-                self.handle_request()
-        return self.retval;
+            self.handle_request()
+        return self.retval
     
 def bi2ba(bigint,fixed=None):
     m_bytes = []

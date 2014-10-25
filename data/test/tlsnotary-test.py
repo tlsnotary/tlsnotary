@@ -1,24 +1,9 @@
 #!/usr/bin/env python
 from __future__ import print_function
 
-import BaseHTTPServer
-import hashlib
-import os
-import platform
-import Queue
-import random
-import select
-import shutil
-import signal
-import SimpleHTTPServer
-import socket
-import subprocess
-import sys
-import threading
-import time
-import urllib2
-import urllib
-import zipfile
+import BaseHTTPServer, hashlib, os, platform
+import random, signal, SimpleHTTPServer, sys
+import threading, time, urllib
  
 auditor_pid = auditee_pid = 0
 test_finished = False
@@ -100,8 +85,8 @@ class StoppableHttpServer (BaseHTTPServer.HTTPServer):
         """Handle one request at a time until stopped. Optionally return a value"""
         self.stop = False
         while not self.stop:
-                self.handle_request()
-        return self.retval;
+            self.handle_request()
+        return self.retval
 
 
 #Receive HTTP HEAD requests from FF addon. This is how the addon communicates with python backend.
@@ -111,8 +96,6 @@ class HandlerClass(SimpleHTTPServer.SimpleHTTPRequestHandler):
     protocol_version = "HTTP/1.0"      
 
     def do_HEAD(self):
-        global website_list
-        global cs_list
         print ('minihttp received ' + self.path + ' request',end='\r\n')
         # example HEAD string "/command?parameter=124value1&para2=123value2"
         # we need to adhere to CORS and add extra Access-Control-* headers in server replies
@@ -238,7 +221,6 @@ def minihttp_thread(parentthread):
     return
     
 def start_run():
-    global website_list_file
     global website_list
     global cs_list
     global website_num

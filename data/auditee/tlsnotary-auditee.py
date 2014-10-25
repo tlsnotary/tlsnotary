@@ -59,8 +59,8 @@ testing = False #toggled when we are running a test suite (developer only)
 aes_ciphertext_queue = Queue.Queue() #testing only: receive one ciphertext 
 aes_cleartext_queue = Queue.Queue() #testing only: and put one cleartext
 b_awaiting_cleartext = False #testing only: used for sanity check on HandlerClass_aes
-test_driver_pid = 0 #testing only: testdriver's PID used to kill it at quit()
-test_auditor_pid = 0 #testing only: auditor's PID used to kill it at quit()
+test_driver_pid = 0 #testing only: testdriver's PID used to kill it at quit_clean()
+test_auditor_pid = 0 #testing only: auditor's PID used to kill it at quit_clean()
 
 #RSA key management for peer messaging
 def import_auditor_pubkey(auditor_pubkey_b64modulus):
@@ -138,11 +138,11 @@ class HandlerClass_aes(SimpleHTTPServer.SimpleHTTPRequestHandler):
             return
         
     #overriding BaseHTTPServer.py's method to cap the output
-    def log_message(self, format, *args):
+    def log_message(self, fmt, *args):
         sys.stderr.write("%s - - [%s] %s\n" %
                                   (self.client_address[0],
                                    self.log_date_time_string(),
-                                   (format%args)[:80]))        
+                                   (fmt%args)[:80]))        
 
 
 #Receive HTTP HEAD requests from FF addon
@@ -368,11 +368,11 @@ class HandleBrowserRequestsClass(SimpleHTTPServer.SimpleHTTPRequestHandler):
             self.respond({'response':'unknown command'})
 
     #overriding BaseHTTPRequestHandler's method to cap the output
-    def log_message(self, format, *args):
+    def log_message(self, fmt, *args):
         sys.stderr.write("%s - - [%s] %s\n" %
                                   (self.client_address[0],
                                    self.log_date_time_string(),
-                                   (format%args)[:80]))
+                                   (fmt%args)[:80]))
         
 
 def paillier_gen_privkey_thread():
@@ -722,7 +722,6 @@ def start_peer_messaging():
 def peer_handshake():
     global my_nick
     global auditor_nick
-    global auditor_pub_key
     global rs_choice
     shared.import_reliable_sites(join(install_dir,'data','shared'))
     #hello contains the first 10 bytes of modulus of the auditor's pubkey
@@ -923,7 +922,7 @@ def send_link(filelink):
     return response
 
 #cleanup
-def quit(sig=0, frame=0):
+def quit_clean(sig=0, frame=0):
     if testing:
         try: os.kill(test_auditor_pid, signal.SIGTERM)
         except: pass #happens when test terminated itself
@@ -1088,12 +1087,12 @@ if __name__ == "__main__":
    
         
         
-    signal.signal(signal.SIGTERM, quit)
+    signal.signal(signal.SIGTERM, quit_clean)
 
     if testing: start_testing()
 
     try:
         while True:
             time.sleep(1)
-            if ff_proc.poll() != None: quit() #FF was closed
-    except KeyboardInterrupt: quit()            
+            if ff_proc.poll() != None: quit_clean() #FF was closed
+    except KeyboardInterrupt: quit_clean()            

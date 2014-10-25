@@ -1,11 +1,10 @@
 import socket
 irc_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-import socket
-from tlsn_common import *
+from shared.tlsn_common import config as config
 verbose = False
 
-'''log to console'''
 def ltc(msg):
+    """Log to console"""
     if verbose:
         print (msg)
 
@@ -36,15 +35,15 @@ def receive_single_msg(my_nick=None):
     returns False.
     If a matching message is found, returns (<msg>,<nick of sending counterparty>)
     '''
-    buffer = ''
-    try: buffer = irc_socket.recv(1024)
+    msg_buffer = ''
+    try: msg_buffer = irc_socket.recv(1024)
     except: return False
-    if not buffer: return False
+    if not msg_buffer: return False
 
-    ltc(buffer)
+    ltc(msg_buffer)
 
     #sometimes the IRC server may pack multiple PRIVMSGs into one message separated with /r/n/
-    messages = buffer.split('\r\n')
+    messages = msg_buffer.split('\r\n')
     for onemsg in messages:
         msg = onemsg.split()
         if len(msg)==0 : continue  #stray newline
@@ -78,29 +77,28 @@ def find_nick(msg):
     return msg[0][1:exclamation_mark_position]
 
 def msg_receiver(my_nick,counterparty_nick):
+    msg_buffer = ''
+    try: msg_buffer = irc_socket.recv(1024)
+    except: return None #1 sec timeout
+    if not msg_buffer: return None
 
-        buffer = ''
-        try: buffer = irc_socket.recv(1024)
-        except: return None #1 sec timeout
-        if not buffer: return None
+    #sometimes the IRC server may pack multiple PRIVMSGs into one message separated with /r/n/
+    messages = msg_buffer.split('\r\n')
 
-        #sometimes the IRC server may pack multiple PRIVMSGs into one message separated with /r/n/
-        messages = buffer.split('\r\n')
+    for onemsg in messages:
+        msg = onemsg.split()
+        if len(msg) == 0: continue  #stray newline
 
-        for onemsg in messages:
-            msg = onemsg.split()
-            if len(msg) == 0: continue  #stray newline
+        if ping_pong(msg): continue
 
-            if ping_pong(msg): continue
+        #filter irrelevant chan messages
+        if not len(msg) >= 5: continue
+        if not (msg[1] == 'PRIVMSG' and msg[2] == '#' + config.get('IRC','channel_name') and msg[3] == ':'+my_nick ): continue
+        if not counterparty_nick == find_nick(msg): continue
 
-            #filter irrelevant chan messages
-            if not len(msg) >= 5: continue
-            if not (msg[1] == 'PRIVMSG' and msg[2] == '#' + config.get('IRC','channel_name') and msg[3] == ':'+my_nick ): continue
-            if not counterparty_nick == find_nick(msg): continue
+        #this is one of our messages; output to console
+        ltc('RECEIVED:' + msg_buffer)
 
-            #this is one of our messages; output to console
-            ltc('RECEIVED:' + buffer)
+        return msg[4:]
 
-            return msg[4:]
-
-        return None
+    return None

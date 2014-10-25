@@ -1,10 +1,14 @@
 from __future__ import print_function
-import math, os, binascii, hmac, time, rsa, re, random
+import math, os, binascii, hmac, time, rsa, re
 from hashlib import md5, sha1
-from tlsn_common import *
+from shared.tlsn_common import bigint_to_list as bigint_to_list
+from shared.tlsn_common import ba2int as ba2int, bi2ba as bi2ba
+from shared.tlsn_common import xor as xor, randint as randint, inverse as inverse
+from shared.tlsn_common import random_non_zero as random_non_zero
+from shared.tlsn_common import generate_prime as generate_prime
 from base64 import b64encode,b64decode
 from pyasn1.type import univ
-from pyasn1.codec.der import encoder, decoder
+from pyasn1.codec.der import decoder
 from slowaes import AESModeOfOperation
 from slowaes import AES
 
@@ -81,18 +85,18 @@ class TLSNSSLClientSession(object):
         self.client_random = cr_time + os.urandom(28)
         self.server_random = None
 
-        '''The amount of key material for each ciphersuite:
+        """The amount of key material for each ciphersuite:
         AES256-CBC-SHA: mac key 20*2, encryption key 32*2, IV 16*2 == 136bytes
         AES128-CBC-SHA: mac key 20*2, encryption key 16*2, IV 16*2 == 104bytes
         RC4128_SHA: mac key 20*2, encryption key 16*2 == 72bytes
-        RC4128_MD5: mac key 16*2, encryption key 16*2 == 64 bytes'''
+        RC4128_MD5: mac key 16*2, encryption key 16*2 == 64 bytes"""
         self.cipher_suites = {47:['AES128',20,20,16,16,16,16],\
                              53:['AES256',20,20,32,32,16,16],\
                              5:['RC4SHA',20,20,16,16,0,0],\
                              4:['RC4MD5',16,16,16,16,0,0]}
         #preprocessing: add the total number of bytes in the expanded keys format
         #for each cipher suite, for ease of reference
-        for k,v in self.cipher_suites.iteritems():
+        for v in self.cipher_suites.values():
             v.append(sum(v[1:]))
 
         self.chosen_cipher_suite = ccs
@@ -354,7 +358,6 @@ class TLSNSSLClientSession(object):
         self.server_modulus = int(modulus)
         self.server_exponent = int(exponent)
         n = bi2ba(self.server_modulus)
-        e = bi2ba(self.server_exponent)
         modulus_len_int = len(n)
         self.server_mod_length = bi2ba(modulus_len_int)
         if len(self.server_mod_length) == 1: self.server_mod_length.insert(0,0)  #zero-pad to 2 bytes
@@ -629,7 +632,6 @@ class TLSNSSLClientSession(object):
         return True
 
     def store_server_app_data_records(self, response):
-        self.serverAppDataRecords = response
         #extract the ciphertext from the raw records as a list
         #for maximum flexibility in decryption
         while True:

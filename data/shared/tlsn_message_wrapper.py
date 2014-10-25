@@ -2,12 +2,10 @@
 #TLSNotary's own messaging protocol abstraction layer
 #Protocol is documented in the documentation folder.
 
-#Import the implementation module; a more advanced version
-#can read a choice of implementation from config and switch based on that
-from irc_messaging import *
-
-from tlsn_crypto import *
-from tlsn_common import *
+#Import the implementation module here and name it 'mi' = messaging implementation
+import shared.irc_messaging as mi
+from shared.tlsn_crypto import ee, dd
+from shared.tlsn_common import config as config
 import time
 
 msg_chunk_size = None
@@ -26,14 +24,14 @@ def tlsn_initialise_messaging(my_nick):
     msg_chunk_size = int(config.get('General','msg_chunk_size'))
     global initialized
     initialized = True
-    start_connection(my_nick)
+    mi.start_connection(my_nick)
 
 
 #does not implement any of: seqnos, acks, recv/ack queues, chunking, encryption, encoding
 def tlsn_send_raw(data):
     if not initialized:
         raise Exception("TLSN Messaging not yet instantiated")
-    return send_raw(data)
+    return mi.send_raw(data)
 
 
 def tlsn_send_single_msg(header,data,pk,ctrprty_nick=None):
@@ -92,7 +90,7 @@ def tlsn_send_msg(data,pk,ack_q,recipient,seq_init=100000,raw=False):
                 for j in range(5):
                     try: ack_q.get_nowait()
                     except: pass
-                bytes_sent = tlsn_send_raw(msg_to_send)
+                tlsn_send_raw(msg_to_send)
                 try:
                     ack_check = ack_q.get(block=True, timeout=3)
                 except: continue #send again because ack was not received
@@ -130,7 +128,7 @@ def tlsn_receive_single_msg(header, pk, my_nick=None,ide=False):
     if not initialized:
         raise Exception("TLSN Messaging not yet instantiated")
 
-    retval = receive_single_msg(my_nick)
+    retval = mi.receive_single_msg(my_nick)
     if not retval:
         return False
     if len(retval) != 2:
@@ -170,7 +168,7 @@ def tlsn_msg_receiver(my_nick,counterparty_nick,ack_queue,recv_queue,message_hea
 
     chunks = []
     while True:
-        eemsg = msg_receiver(my_nick,counterparty_nick)
+        eemsg = mi.msg_receiver(my_nick,counterparty_nick)
         if not eemsg: continue #note that the timeout is in the implementation layer
 
         #acknowledgements are not our business here; put them on the queue
@@ -192,7 +190,7 @@ def tlsn_msg_receiver(my_nick,counterparty_nick,ack_queue,recv_queue,message_hea
         his_seq = int(eemsg[0][len('seq:'):])
         if his_seq <=  tlsn_msg_receiver.last_seq_which_i_acked:
             #the other side is out of sync, send an ack again
-            send_raw(' :' + counterparty_nick + ' ack:' + str(his_seq))
+            mi.send_raw(' :' + counterparty_nick + ' ack:' + str(his_seq))
             continue
 
         #we did not receive the next seq in order
@@ -205,7 +203,7 @@ def tlsn_msg_receiver(my_nick,counterparty_nick,ack_queue,recv_queue,message_hea
 
         #'CRLF' is used at the end of the first chunk, 'EOL' is used to show that there are no more chunks
         chunks.append(msg[1])
-        send_raw(' :' + counterparty_nick + ' ack:' + str(his_seq))
+        mi.send_raw(' :' + counterparty_nick + ' ack:' + str(his_seq))
         tlsn_msg_receiver.last_seq_which_i_acked = his_seq
         if msg[-1]=='EOL':
             assembled_message = ''.join(chunks)
