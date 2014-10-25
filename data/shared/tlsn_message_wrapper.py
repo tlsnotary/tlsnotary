@@ -54,9 +54,9 @@ def tlsn_send_single_msg(header,data,pk,ctrprty_nick=None):
         tlsn_send_raw(header+' '+encrypted_encoded_chunk+' '+ending)
         time.sleep(0.5)
 
-def tlsn_send_msg(data,pk,ackQ,recipient,seq_init=100000,raw=False):
+def tlsn_send_msg(data,pk,ack_q,recipient,seq_init=100000,raw=False):
     '''Send a message <data> on an already negotiated connection ;
-    wait for an acknowledgement by polling for it on Queue ackQ
+    wait for an acknowledgement by polling for it on Queue ack_q
     Messages are sent with sequence numbers initialised at seq_init,
     or 0 if seq_init is undef.
     Messages larger than chunk_size are split into chunks with line endings.
@@ -87,23 +87,23 @@ def tlsn_send_msg(data,pk,ackQ,recipient,seq_init=100000,raw=False):
 
         if not raw:
             for i in range (3):
-                bWasMessageAcked = False
+                b_was_message_acked = False
                 #empty the ack queue. Not using while True: because sometimes an endless loop would happen TODO: find out why
                 for j in range(5):
-                    try: ackQ.get_nowait()
+                    try: ack_q.get_nowait()
                     except: pass
                 bytes_sent = tlsn_send_raw(msg_to_send)
                 try:
-                    ack_check = ackQ.get(block=True, timeout=3)
+                    ack_check = ack_q.get(block=True, timeout=3)
                 except: continue #send again because ack was not received
                 #print ('ack check is: ',ack_check)
                 if not str(tlsn_send_msg.my_seq) == ack_check: continue
                 #else: correct ack received
                 #print ('message was acked')
-                bWasMessageAcked = True
+                b_was_message_acked = True
                 break
 
-            if not bWasMessageAcked:
+            if not b_was_message_acked:
                 return 'failure'
         else:
             tlsn_send_raw(msg_to_send)
@@ -112,7 +112,7 @@ def tlsn_send_msg(data,pk,ackQ,recipient,seq_init=100000,raw=False):
 
 
 
-def tlsn_receive_single_msg(header, pk, my_nick=None,iDE=False):
+def tlsn_receive_single_msg(header, pk, my_nick=None,ide=False):
     '''Non blocking receipt of a single message statelessly
     filtered on a message header, optionally prefixed by a username
     NB This is for handshake messages. All other messaging is handled
@@ -123,7 +123,7 @@ def tlsn_receive_single_msg(header, pk, my_nick=None,iDE=False):
     Messages are decrypted using private key pk and base64 decoded
     Sequence number, plaintext message, ending and (if relevant) nick of sending party
     are returned.
-    If iDE (ignore decryption errors) is true, we return False on a decryption 
+    If ide (ignore decryption errors) is true, we return False on a decryption 
     error, treating the failure as receiving a handshake message from the wrong
     counterparty.
     '''
@@ -145,16 +145,16 @@ def tlsn_receive_single_msg(header, pk, my_nick=None,iDE=False):
         seq = msg[0]
         msg = ''.join(msg[1:])
     except:
-        if iDE:
+        if ide:
             return False #means we got a message from the wrong counterparty
         raise Exception ("Failure in decryption or decoding of message: ", encrypted_encoded_msg)
 
     return ((header,int(seq),msg,ending),ctrprty_nick)
 
 
-def tlsn_msg_receiver(my_nick,counterparty_nick,ackQueue,recvQueue,message_headers,pk,seq_init=100000):
+def tlsn_msg_receiver(my_nick,counterparty_nick,ack_queue,recv_queue,message_headers,pk,seq_init=100000):
     '''Intended to be run as a thread; puts msgs sent to my_nick from counterparty_nick
-    onto the Queue recvQueue, and sends acknowledgements onto ackQueue, filtering out
+    onto the Queue recv_queue, and sends acknowledgements onto ack_queue, filtering out
     messages whose headers/topics are not in message_headers, and using sequence numbering
     starting from seq_init (or 0 if seq_init is undef).
     Messages are received in chunks and decrypted using private key pk and base64 decoded, then
@@ -176,7 +176,7 @@ def tlsn_msg_receiver(my_nick,counterparty_nick,ackQueue,recvQueue,message_heade
         #acknowledgements are not our business here; put them on the queue
         if eemsg[0].startswith('ack'):
             #acks are not encrypted
-            ackQueue.put(eemsg[0][len('ack:'):])
+            ack_queue.put(eemsg[0][len('ack:'):])
             continue
 
         if len(eemsg) !=3: continue
@@ -209,5 +209,5 @@ def tlsn_msg_receiver(my_nick,counterparty_nick,ackQueue,recvQueue,message_heade
         tlsn_msg_receiver.last_seq_which_i_acked = his_seq
         if msg[-1]=='EOL':
             assembled_message = ''.join(chunks)
-            recvQueue.put(hdr+':'+assembled_message)
+            recv_queue.put(hdr+':'+assembled_message)
             chunks = []

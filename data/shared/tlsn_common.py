@@ -110,7 +110,7 @@ def import_reliable_sites(d):
         reliable_sites[site] = [ports[i]]
         reliable_sites[site].append(pubkeys[i])
 
-def checkCompleteRecords(d):
+def check_complete_records(d):
     '''Given a response d from a server,
     we want to know if its contents represents
     a complete set of records, however many.'''
@@ -118,9 +118,9 @@ def checkCompleteRecords(d):
     l = ba2int(d[3:5])
     if len(d)< l+5: return False
     elif len(d)==l+5: return True
-    else: return checkCompleteRecords(d[l+5:])
+    else: return check_complete_records(d[l+5:])
     
-def recv_socket(sckt,isHandshake=False):
+def recv_socket(sckt,is_handshake=False):
     last_time_data_was_seen_from_server = 0
     data_from_server_seen = False
     databuffer=''
@@ -148,8 +148,8 @@ def recv_socket(sckt,isHandshake=False):
                     return databuffer
             data_from_server_seen = True  
             databuffer += data
-            if isHandshake: 
-                if checkCompleteRecords(databuffer): return databuffer #else, just continue loop
+            if is_handshake: 
+                if check_complete_records(databuffer): return databuffer #else, just continue loop
             last_time_data_was_seen_from_server = int(time.time())
         
             
@@ -213,7 +213,7 @@ def ba2int(byte_array):
     return int(str(byte_array).encode('hex'), 16)
     
     
-def gunzipHTTP(http_data):
+def gunzip_http(http_data):
     import gzip
     import StringIO
     http_header = http_data[:http_data.find('\r\n\r\n')+len('\r\n\r\n')]
@@ -231,7 +231,7 @@ def gunzipHTTP(http_data):
     return ungzipped
     
        
-def dechunkHTTP(http_data):
+def dechunk_http(http_data):
     '''Dechunk only if http_data is chunked otherwise return http_data unmodified'''
     http_header = http_data[:http_data.find('\r\n\r\n')+len('\r\n\r\n')]
     #\s* below means any amount of whitespaces
@@ -354,25 +354,25 @@ def read_random_bits(nbits):
     nbytes, rbits = divmod(nbits, 8)
 
     # Get the random bytes
-    randomdata = os.urandom(nbytes)
+    random_data = os.urandom(nbytes)
 
     # Add the remaining random bits
     if rbits > 0:
-        randomvalue = ord(os.urandom(1))
-        randomvalue >>= (8 - rbits)
-        #randomdata = byte(randomvalue) + randomdata
-        randomdata = pack("B", randomvalue) + randomdata
+        random_value = ord(os.urandom(1))
+        random_value >>= (8 - rbits)
+        #random_data = byte(random_value) + random_data
+        random_data = pack("B", random_value) + random_data
 
-    return randomdata
+    return random_data
 
 #copied from pyrsa
 def read_random_int(nbits):
     '''Reads a random integer of approximately nbits bits.
     '''
 
-    randomdata = read_random_bits(nbits)
-    #value = transform.bytes2int(randomdata)
-    value = int(binascii.hexlify(randomdata), 16)
+    random_data = read_random_bits(nbits)
+    #value = transform.bytes2int(random_data)
+    value = int(binascii.hexlify(random_data), 16)
     
 
     # Ensure that the number is large enough to just fill out the required
@@ -382,26 +382,26 @@ def read_random_int(nbits):
     return value
 
 #copied from pyrsa
-def randint(maxvalue):
-    '''Returns a random integer x with 1 <= x <= maxvalue
+def randint(max_value):
+    '''Returns a random integer x with 1 <= x <= max_value
     
-    May take a very long time in specific situations. If maxvalue needs N bits
-    to store, the closer maxvalue is to (2 ** N) - 1, the faster this function
+    May take a very long time in specific situations. If max_value needs N bits
+    to store, the closer max_value is to (2 ** N) - 1, the faster this function
     is.
     '''
 
-    #bit_size = common.bit_size(maxvalue)
-    bit_size = int(maxvalue).bit_length()
+    #bit_size = common.bit_size(max_value)
+    bit_size = int(max_value).bit_length()
 
     tries = 0
     while True:
         value = read_random_int(bit_size)
-        if value <= maxvalue:
+        if value <= max_value:
             break
 
         if tries and tries % 10 == 0:
             # After a lot of tries to get the right number of bits but still
-            # smaller than maxvalue, decrease the number of bits by 1. That'll
+            # smaller than max_value, decrease the number of bits by 1. That'll
             # dramatically increase the chances to get a large enough number.
             bit_size -= 1
         tries += 1

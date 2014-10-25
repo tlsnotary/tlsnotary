@@ -1,5 +1,5 @@
 import socket
-IRCsocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+irc_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 import socket
 from tlsn_common import *
 verbose = False
@@ -14,17 +14,17 @@ def start_connection(my_nick):
     in the config file in shared.config_location.
     No return - failure will be indicated by Exceptions.
     '''
-    IRCsocket.connect((config.get('IRC','irc_server'), int(config.get('IRC','irc_port'))))
-    IRCsocket.send('USER %s %s %s %s' % ('these', 'arguments', 'are', 'optional') + '\r\n')
-    IRCsocket.send('NICK ' + my_nick + '\r\n')
-    IRCsocket.send('JOIN %s' % ('#'+config.get('IRC','channel_name')) + '\r\n')
-    IRCsocket.settimeout(1)
+    irc_socket.connect((config.get('IRC','irc_server'), int(config.get('IRC','irc_port'))))
+    irc_socket.send('USER %s %s %s %s' % ('these', 'arguments', 'are', 'optional') + '\r\n')
+    irc_socket.send('NICK ' + my_nick + '\r\n')
+    irc_socket.send('JOIN %s' % ('#'+config.get('IRC','channel_name')) + '\r\n')
+    irc_socket.settimeout(1)
 
 
 def send_raw(data):
     '''Sending a single message without authentication or acks
     '''
-    bytes_sent = IRCsocket.send('PRIVMSG ' + '#' + config.get('IRC','channel_name') +' ' + data +' \r\n')
+    bytes_sent = irc_socket.send('PRIVMSG ' + '#' + config.get('IRC','channel_name') +' ' + data +' \r\n')
     ltc('SENT: ' + str(bytes_sent) + ' ' + data)
     return bytes_sent
 
@@ -37,7 +37,7 @@ def receive_single_msg(my_nick=None):
     If a matching message is found, returns (<msg>,<nick of sending counterparty>)
     '''
     buffer = ''
-    try: buffer = IRCsocket.recv(1024)
+    try: buffer = irc_socket.recv(1024)
     except: return False
     if not buffer: return False
 
@@ -68,19 +68,19 @@ def receive_single_msg(my_nick=None):
 def ping_pong(msg):
     '''Answer with PONG as per RFC 1459'''
     if msg[0] == "PING":
-        IRCsocket.send("PONG %s" % msg[1])
+        irc_socket.send("PONG %s" % msg[1])
         return True
     return False
 
 def find_nick(msg):
     '''Returns message sender's nick from the IRC message format'''
-    exclamationMarkPosition = msg[0].find('!')
-    return msg[0][1:exclamationMarkPosition]
+    exclamation_mark_position = msg[0].find('!')
+    return msg[0][1:exclamation_mark_position]
 
 def msg_receiver(my_nick,counterparty_nick):
 
         buffer = ''
-        try: buffer = IRCsocket.recv(1024)
+        try: buffer = irc_socket.recv(1024)
         except: return None #1 sec timeout
         if not buffer: return None
 
