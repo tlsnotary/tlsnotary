@@ -26,20 +26,20 @@ elif platform == 'Darwin': OS = 'macos'
 #Globals
 my_nick = ''
 auditee_nick = ''
-myPrivateKey = myPubKey = auditeePublicKey = None
-recvQueue = Queue.Queue() #all messages destined for me
-ackQueue = Queue.Queue() #auditee ACKs
-progressQueue = Queue.Queue() #messages intended to be displayed by the frontend
-rsChoice = 0
-bTerminateAllThreads = False
+my_private_key = my_pub_key = auditee_public_key = None
+recv_queue = Queue.Queue() #all messages destined for me
+ack_queue = Queue.Queue() #auditee ACKs
+progress_queue = Queue.Queue() #messages intended to be displayed by the frontend
+rs_choice = 0
+b_terminate_all_threads = False
 
 #peer messaging receive thread
-def receivingThread():
-    shared.tlsn_msg_receiver(my_nick,auditee_nick,ackQueue,recvQueue,shared.message_types_from_auditee,myPrivateKey,seq_init=None)
+def receiving_thread():
+    shared.tlsn_msg_receiver(my_nick,auditee_nick,ack_queue,recv_queue,shared.message_types_from_auditee,my_private_key,seq_init=None)
 
 #send a single message over peer messaging
 def send_message(data):
-    if ('success' == shared.tlsn_send_msg(data,auditeePublicKey,ackQueue,auditee_nick)):
+    if ('success' == shared.tlsn_send_msg(data,auditee_public_key,ack_queue,auditee_nick)):
         return ('success',)
     else:
         return ('failure',)
@@ -48,7 +48,7 @@ def send_message(data):
 #and performs crypto auditing functions.
 def process_messages():
     while True:
-        try: msg = recvQueue.get(block=True, timeout=1)
+        try: msg = recv_queue.get(block=True, timeout=1)
         except: continue
         
         #rcr_rsr - reliable site client random, server random.
@@ -57,22 +57,22 @@ def process_messages():
         #the half-pms encrypted to the server's pubkey
         if msg.startswith('rcr_rsr:'):
             msg_data = msg[len('rcr_rsr:'):]
-            tlsnSession = shared.TLSNSSLClientSession()
-            rspSession = shared.TLSNSSLClientSession()
-            rspSession.clientRandom = msg_data[:32]
-            rspSession.serverRandom = msg_data[32:64]
+            tlsn_session = shared.TLSNSSLClientSession()
+            rsp_session = shared.TLSNSSLClientSession()
+            rsp_session.client_random = msg_data[:32]
+            rsp_session.server_random = msg_data[32:64]
             #pubkey required to set encrypted pms
-            rspSession.serverModulus = int(shared.reliable_sites[rsChoice][1],16)
-            rspSession.serverExponent = 65537
+            rsp_session.server_modulus = int(shared.reliable_sites[rs_choice][1],16)
+            rsp_session.server_exponent = 65537
             #TODO currently can only handle 2048 bit keys for 'reliable site'
-            rspSession.serverModLength = shared.bi2ba(256)
-            rspSession.setAuditorSecret()
-            rspSession.setEncSecondHalfPMS()           
-            rrsapms = shared.bi2ba(rspSession.encSecondHalfPMS)
-            send_message('rrsapms_rhmac:'+ rrsapms+rspSession.pAuditor)
+            rsp_session.server_mod_length = shared.bi2ba(256)
+            rsp_session.set_auditor_secret()
+            rsp_session.set_enc_second_half_pms()           
+            rrsapms = shared.bi2ba(rsp_session.enc_second_half_pms)
+            send_message('rrsapms_rhmac:'+ rrsapms+rsp_session.p_auditor)
             #we keep resetting so that the final, successful choice of secrets are stored
-            tlsnSession.auditorSecret = rspSession.auditorSecret
-            tlsnSession.auditorPaddingSecret = rspSession.auditorPaddingSecret
+            tlsn_session.auditor_secret = rsp_session.auditor_secret
+            tlsn_session.auditor_padding_secret = rsp_session.auditor_padding_secret
             continue
         #---------------------------------------------------------------------#
         #cs_cr_sr_hmacms_verifymd5sha : sent by auditee at the start of the real audit.
@@ -86,24 +86,24 @@ def process_messages():
         #which is needed to construct the Client Finished handshake final message.        
         #message (hmacms_hmacek_hmacverify).
         elif msg.startswith('cs_cr_sr_hmacms_verifymd5sha:'): 
-            progressQueue.put(time.strftime('%H:%M:%S', time.localtime()) + ': Processing data from the auditee.')
+            progress_queue.put(time.strftime('%H:%M:%S', time.localtime()) + ': Processing data from the auditee.')
             request = msg[len('cs_cr_sr_hmacms_verifymd5sha:'):]
             assert len(request) == 125
-            tlsnSession.chosenCipherSuite = int(request[:1].encode('hex'),16)
-            tlsnSession.clientRandom = request[1:33]
-            tlsnSession.serverRandom = request[33:65]
-            md5hmac1_for_MS=request[65:89] #half of MS's 48 bytes
+            tlsn_session.chosen_cipher_suite = int(request[:1].encode('hex'),16)
+            tlsn_session.client_random = request[1:33]
+            tlsn_session.server_random = request[33:65]
+            md5_hmac1_for_ms=request[65:89] #half of MS's 48 bytes
             verify_md5 = request[89:105]
             verify_sha = request[105:125]
-            tlsnSession.setAuditorSecret()
-            tlsnSession.setMasterSecretHalf(half=1,providedPValue=md5hmac1_for_MS)         
-            garbageizedHMAC = tlsnSession.getPValueMS('auditor',[2]) #withhold the server mac
+            tlsn_session.set_auditor_secret()
+            tlsn_session.set_master_secret_half(half=1,provided_p_value=md5_hmac1_for_ms)         
+            garbageized_hmac = tlsn_session.get_p_value_ms('auditor',[2]) #withhold the server mac
             #TODO: I thought the convention was that the auditor always does the SHA part of PRF
             #however, here he does MD5.
-            hmacverifymd5 = tlsnSession.getVerifyHMAC(verify_sha, verify_md5, half=1) 
-            if not tlsnSession.auditorSecret: 
+            hmac_verify_md5 = tlsn_session.get_verify_hmac(verify_sha, verify_md5, half=1) 
+            if not tlsn_session.auditor_secret: 
                 raise Exception("Auditor PMS secret data should have already been set.")            
-            hmacms_hmacek_hmacverify = tlsnSession.pAuditor[24:]+garbageizedHMAC+hmacverifymd5
+            hmacms_hmacek_hmacverify = tlsn_session.p_auditor[24:]+garbageized_hmac+hmac_verify_md5
             send_message('hmacms_hmacek_hmacverify:'+ hmacms_hmacek_hmacverify)
             continue
         #---------------------------------------------------------------------#
@@ -115,13 +115,13 @@ def process_messages():
             n_len_int = int(n_e[:2].encode('hex'),16)
             n = n_e[2:2+n_len_int]
             e = n_e[2+n_len_int:2+n_len_int+3]
-            tlsnSession.serverModulus = int(n.encode('hex'),16)
-            tlsnSession.serverExponent = int(e.encode('hex'),16)
-            tlsnSession.serverModLength = shared.bi2ba(n_len_int)
-            if not tlsnSession.auditorSecret: 
+            tlsn_session.server_modulus = int(n.encode('hex'),16)
+            tlsn_session.server_exponent = int(e.encode('hex'),16)
+            tlsn_session.server_mod_length = shared.bi2ba(n_len_int)
+            if not tlsn_session.auditor_secret: 
                 raise Exception("Auditor PMS secret data should have already been set.")
-            tlsnSession.setEncSecondHalfPMS() #will set the enc PMS second half
-            rsapms =  shared.bi2ba(tlsnSession.encSecondHalfPMS)
+            tlsn_session.set_enc_second_half_pms() #will set the enc PMS second half
+            rsapms =  shared.bi2ba(tlsn_session.enc_second_half_pms)
             send_message('rsapms:'+ rsapms)
             continue
 
@@ -131,7 +131,7 @@ def process_messages():
         #which is needed to verify the Server Finished handshake final message.
         elif msg.startswith('verify_md5sha2:'):
             md5sha2 = msg[len('verify_md5sha2:'):]
-            md5hmac2 = tlsnSession.getVerifyHMAC(md5sha2[16:],md5sha2[:16],half=1,isForClient=False)
+            md5hmac2 = tlsn_session.get_verify_hmac(md5sha2[16:],md5sha2[:16],half=1,is_for_client=False)
             send_message('verify_hmac2:'+md5hmac2)
             continue
         #------------------------------------------------------------------------------------------------------#    
@@ -156,7 +156,7 @@ def process_messages():
             last_seqno = max([0] + seqnos) #avoid throwing by feeding at least one value 0
             my_seqno = last_seqno+1
             response_hash_path = os.path.join(commit_dir, 'responsehash'+str(my_seqno))
-            n_hexlified = binascii.hexlify(shared.bi2ba(tlsnSession.serverModulus))
+            n_hexlified = binascii.hexlify(shared.bi2ba(tlsn_session.server_modulus))
             #pubkey in the format 09 56 23 ....
             n_write = " ".join(n_hexlified[i:i+2] for i in range(0, len(n_hexlified), 2)) 
             pubkey_path = os.path.join(commit_dir, 'pubkey'+str(my_seqno))
@@ -166,12 +166,12 @@ def process_messages():
             with open(response_hash_path, 'wb') as f: f.write(response_hash)
             with open(md5hmac_hash_path, 'wb') as f: f.write(md5hmac_hash)
             sha1hmac_path = os.path.join(commit_dir, 'sha1hmac'+str(my_seqno))
-            with open(sha1hmac_path, 'wb') as f: f.write(tlsnSession.pAuditor)
+            with open(sha1hmac_path, 'wb') as f: f.write(tlsn_session.p_auditor)
             cr_path = os.path.join(commit_dir, 'cr'+str(my_seqno))
-            with open(cr_path, 'wb') as f: f.write(tlsnSession.clientRandom)
+            with open(cr_path, 'wb') as f: f.write(tlsn_session.client_random)
             sr_path = os.path.join(commit_dir,'sr'+str(my_seqno))
-            with open(sr_path,'wb') as f: f.write(tlsnSession.serverRandom)
-            send_message('sha1hmac_for_MS:'+tlsnSession.pAuditor)
+            with open(sr_path,'wb') as f: f.write(tlsn_session.server_random)
+            send_message('sha1hmac_for_MS:'+tlsn_session.p_auditor)
             continue  
         #---------------------------------------------------------------------#
         #Phase 1: Receive a url from the auditee from which can be downloaded a zip file containing
@@ -212,8 +212,8 @@ def process_messages():
                 response_hash = hashlib.sha256(responsedata).digest()
                 if not saved_hash == response_hash:
                     raise Exception ('WARNING: response\'s hash doesn\'t match the hash committed to')
-                IV_path = os.path.join(auditeetrace_dir,'IV'+str(this_seqno))
-                if not os.path.exists(IV_path):
+                iv_path = os.path.join(auditeetrace_dir,'IV'+str(this_seqno))
+                if not os.path.exists(iv_path):
                     raise Exception("WARNING: Could not find IV block in auditeetrace")
                 md5hmac_path = os.path.join(auditeetrace_dir, 'md5hmac'+str(this_seqno))
                 if not os.path.exists(md5hmac_path):
@@ -242,25 +242,25 @@ def process_messages():
                 for fname in ['sha1hmac','cr','sr']:
                     with open(os.path.join(commit_dir, fname+seqno), 'rb') as f: 
                         decr_data[fname] = f.read()                    
-                decrSession = shared.TLSNSSLClientSession(ccs = int(decr_data['cs']))
-                decrSession.clientRandom = decr_data['cr']
-                decrSession.serverRandom = decr_data['sr']
-                decrSession.pAuditee = decr_data['md5hmac']
-                decrSession.pAuditor = decr_data['sha1hmac']
-                decrSession.setMasterSecretHalf()
-                decrSession.doKeyExpansion()
-                decrSession.storeServerAppDataRecords(decr_data['response'])
-                IVd = decr_data['IV']
-                if decrSession.chosenCipherSuite in [47,53]:
-                    decrSession.lastServerCiphertextBlock = IVd
+                decr_session = shared.TLSNSSLClientSession(ccs = int(decr_data['cs']))
+                decr_session.client_random = decr_data['cr']
+                decr_session.server_random = decr_data['sr']
+                decr_session.p_auditee = decr_data['md5hmac']
+                decr_session.p_auditor = decr_data['sha1hmac']
+                decr_session.set_master_secret_half()
+                decr_session.do_key_expansion()
+                decr_session.store_server_app_data_records(decr_data['response'])
+                iv_d = decr_data['IV']
+                if decr_session.chosen_cipher_suite in [47,53]:
+                    decr_session.last_server_ciphertext_block = iv_d
                 else:
-                    decrSession.serverRC4State=(map(ord,IVd[:256]),ord(IVd[256]),ord(IVd[257]))
-                plaintext, bad_mac = decrSession.processServerAppDataRecords()
+                    decr_session.server_rc4_state=(map(ord,iv_d[:256]),ord(iv_d[256]),ord(iv_d[257]))
+                plaintext, bad_mac = decr_session.process_server_app_data_records()
                 if bad_mac:
                     print ("AUDIT FAILURE - invalid mac")
                     link_response = 'false'
-                plaintext = shared.dechunkHTTP(plaintext)
-                plaintext = shared.gunzipHTTP(plaintext)
+                plaintext = shared.dechunk_http(plaintext)
+                plaintext = shared.gunzip_http(plaintext)
                 path = os.path.join(decr_dir, 'html-'+seqno)
                 with open(path, 'wb') as f: f.write(plaintext) #TODO maybe strip headers?
                 #also create a file where the auditor can see the domain and pubkey
@@ -281,26 +281,26 @@ In Firefox, click the padlock to the left of the URL bar -> More Information -> 
                
             send_message('response:'+link_response)            
             if link_response == 'success':
-                progressQueue.put(time.strftime('%H:%M:%S', time.localtime()) + ': The auditee has successfully finished the audit session')
+                progress_queue.put(time.strftime('%H:%M:%S', time.localtime()) + ': The auditee has successfully finished the audit session')
             else:
-                progressQueue.put(time.strftime('%H:%M:%S', time.localtime()) + ': WARNING!!! The auditee FAILED the audit session')
-            progressQueue.put(time.strftime('%H:%M:%S', time.localtime()) + ': Decrypting  auditee\'s data')
-            progressQueue.put(time.strftime('%H:%M:%S', time.localtime()) + ': All decrypted HTML can be found in ' + decr_dir)
-            progressQueue.put(time.strftime('%H:%M:%S', time.localtime()) + ': You may now close the browser.')
+                progress_queue.put(time.strftime('%H:%M:%S', time.localtime()) + ': WARNING!!! The auditee FAILED the audit session')
+            progress_queue.put(time.strftime('%H:%M:%S', time.localtime()) + ': Decrypting  auditee\'s data')
+            progress_queue.put(time.strftime('%H:%M:%S', time.localtime()) + ': All decrypted HTML can be found in ' + decr_dir)
+            progress_queue.put(time.strftime('%H:%M:%S', time.localtime()) + ': You may now close the browser.')
             continue
     #---------------------------------------------------------------------#
     #Paillier scheme
         elif msg.startswith('p_link:'):
             p_link = msg[len('p_link:'):]
-            tlsnSession = shared.TLSNSSLClientSession_Paillier()            
+            tlsn_session = shared.TLSNSSLClientSession_Paillier()            
             time.sleep(1) #just in case the upload server needs some time to prepare the file
             req = urllib2.Request(p_link)
             resp = urllib2.urlopen(req)
             linkdata = resp.read()
             
             assert len(linkdata) == (256+513+1026*(3*8+2))
-            tlsnSession.serverModulus = shared.ba2int(linkdata[:256])
-            scheme = shared.Paillier_scheme_auditor(tlsnSession.auditorPaddedRSAHalf, linkdata)
+            tlsn_session.server_modulus = shared.ba2int(linkdata[:256])
+            scheme = shared.Paillier_scheme_auditor(tlsn_session.auditor_padded_rsa_half, linkdata)
             E1 = scheme.do_round(0, None)
             send_message('p_round_or0:'+shared.bi2ba(E1, fixed=1026))
             continue
@@ -369,10 +369,10 @@ class Handler(SimpleHTTPServer.SimpleHTTPRequestHandler):
             time_started = int(time.time())
             while int(time.time()) - time_started < 30:
                 try: 
-                    update = progressQueue.get(block=False)
+                    update = progress_queue.get(block=False)
                     break #something in the queue
                 except:
-                    if bTerminateAllThreads: break
+                    if b_terminate_all_threads: break
                     time.sleep(1) #nothing in the queue
             self.respond({'response':'progress_update', 'update':update})
             return
@@ -385,18 +385,18 @@ class Handler(SimpleHTTPServer.SimpleHTTPRequestHandler):
 def import_auditee_pubkey(auditee_pubkey_b64modulus): 
     auditee_pubkey_modulus = base64.b64decode(auditee_pubkey_b64modulus)
     auditee_pubkey_modulus_int = int(auditee_pubkey_modulus.encode('hex'),16)
-    global auditeePublicKey    
-    auditeePublicKey = rsa.PublicKey(auditee_pubkey_modulus_int, 65537)         
-    auditee_pubkey_pem = auditeePublicKey.save_pkcs1()                
+    global auditee_public_key    
+    auditee_public_key = rsa.PublicKey(auditee_pubkey_modulus_int, 65537)         
+    auditee_pubkey_pem = auditee_public_key.save_pkcs1()                
     with open(os.path.join(current_sessiondir, 'auditeepubkey'), 'w') as f: f.write(auditee_pubkey_pem)
     #also save the key as recent, so that they could be reused in the next session
     if not os.path.exists(os.path.join(datadir, 'recentkeys')): os.makedirs(os.path.join(datadir, 'recentkeys'))
     with open(os.path.join(datadir, 'recentkeys' , 'auditeepubkey'), 'w') as f: f.write(auditee_pubkey_pem)
         
 def get_recent_keys():
-    global myPrivateKey
-    global auditeePublicKey
-    global myPubKey
+    global my_private_key
+    global auditee_public_key
+    global my_pub_key
     #this is the very first command that we expect in a new session.
     #If this is the very first time tlsnotary is run, there will be no saved keys
     #otherwise we load up the saved keys which the user can override with new keys if need be
@@ -407,23 +407,23 @@ def get_recent_keys():
             with open(os.path.join(datadir, 'recentkeys', 'mypubkey'), 'r') as f: my_pubkey_pem = f.read()
             with open(os.path.join(current_sessiondir, 'myprivkey'), 'w') as f: f.write(my_privkey_pem)
             with open(os.path.join(current_sessiondir, 'mypubkey'), 'w') as f: f.write(my_pubkey_pem)
-            myPrivateKey = rsa.PrivateKey.load_pkcs1(my_privkey_pem)
-            myPubKey = rsa.PublicKey.load_pkcs1(my_pubkey_pem)
-            my_pubkey_export = base64.b64encode(shared.bi2ba(myPubKey.n))
+            my_private_key = rsa.PrivateKey.load_pkcs1(my_privkey_pem)
+            my_pub_key = rsa.PublicKey.load_pkcs1(my_pubkey_pem)
+            my_pubkey_export = base64.b64encode(shared.bi2ba(my_pub_key.n))
         if os.path.exists(os.path.join(datadir, 'recentkeys', 'auditeepubkey')):
             with open(os.path.join(datadir, 'recentkeys', 'auditeepubkey'), 'r') as f: auditee_pubkey_pem = f.read()
             with open(os.path.join(current_sessiondir, 'auditorpubkey'), 'w') as f: f.write(auditee_pubkey_pem)
-            auditeePublicKey = rsa.PublicKey.load_pkcs1(auditee_pubkey_pem)
+            auditee_public_key = rsa.PublicKey.load_pkcs1(auditee_pubkey_pem)
             auditee_pubkey = rsa.PublicKey.load_pkcs1(auditee_pubkey_pem)
             auditee_pubkey_export = base64.b64encode(shared.bi2ba(auditee_pubkey.n))
     return my_pubkey_export, auditee_pubkey_export
       
 def new_keypair():
-    global myPrivateKey
-    global myPubKey
-    myPubKey, myPrivateKey = rsa.newkeys(1024)
-    my_pubkey_pem = myPubKey.save_pkcs1()
-    my_privkey_pem = myPrivateKey.save_pkcs1()
+    global my_private_key
+    global my_pub_key
+    my_pub_key, my_private_key = rsa.newkeys(1024)
+    my_pubkey_pem = my_pub_key.save_pkcs1()
+    my_privkey_pem = my_private_key.save_pkcs1()
     #------------------------------------------
     with open(os.path.join(current_sessiondir, 'myprivkey'), 'w') as f: f.write(my_privkey_pem)
     with open(os.path.join(current_sessiondir, 'mypubkey'), 'w') as f: f.write(my_pubkey_pem)
@@ -432,28 +432,28 @@ def new_keypair():
     with open(os.path.join(datadir, 'recentkeys' , 'myprivkey'), 'w') as f: f.write(my_privkey_pem)
     with open(os.path.join(datadir, 'recentkeys', 'mypubkey'), 'w') as f: f.write(my_pubkey_pem)
     my_pubkey = rsa.PublicKey.load_pkcs1(my_pubkey_pem)
-    my_pubkey_export = base64.b64encode(shared.bi2ba(myPubKey.n))
+    my_pubkey_export = base64.b64encode(shared.bi2ba(my_pub_key.n))
     return my_pubkey_export
 
 #Thread to wait for arrival of auditee in peer messaging channel
 #and perform peer handshake according to tlsnotary messaging protocol
-def registerAuditeeThread():
+def register_auditee_thread():
     global auditee_nick
-    global rsChoice
-    global myPubKey
+    global rs_choice
+    global my_pub_key
     shared.import_reliable_sites(os.path.join(installdir,'data','shared'))
     with open(os.path.join(current_sessiondir, 'mypubkey'), 'r') as f: my_pubkey_pem =f.read()
-    myPubKey = rsa.PublicKey.load_pkcs1(my_pubkey_pem)
-    myModulus = shared.bi2ba(myPubKey.n)[:10]
-    bIsAuditeeRegistered = False
+    my_pub_key = rsa.PublicKey.load_pkcs1(my_pubkey_pem)
+    my_modulus = shared.bi2ba(my_pub_key.n)[:10]
+    b_is_auditee_registered = False
     hello_message_dict = {}
     rs_pubkey_message_dict = {}
     full_hello = ''
     full_rs_pubkey   = ''
-    while not (bIsAuditeeRegistered or bTerminateAllThreads):
+    while not (b_is_auditee_registered or b_terminate_all_threads):
         #NB we must allow decryption errors for this message, since another
         #handshake might be going on at the same time.
-        x = shared.tlsn_receive_single_msg((':rs_pubkey:',':ae_hello:'),myPrivateKey,iDE=True)
+        x = shared.tlsn_receive_single_msg((':rs_pubkey:',':ae_hello:'),my_private_key,ide=True)
         if not x: continue
         msg_array,nick = x
         header, seq, msg, ending = msg_array
@@ -472,9 +472,9 @@ def registerAuditeeThread():
                         #and as a sanity check compare his pubkey with ours
                         assert rs_modulus_byte == shared.reliable_sites[domain_bytes][1].decode('hex'),\
                         "Auditee provided pubkey for : "+domain_bytes+ " did not match ours; investigate."
-                        rsChoice = domain_bytes
+                        rs_choice = domain_bytes
                         print ('Auditee successfully verified')
-                        bIsAuditeeRegistered = True
+                        b_is_auditee_registered = True
                         break
                     except:
                         print ('Error while processing rs pubkey')
@@ -493,25 +493,25 @@ def registerAuditeeThread():
 
                     modulus = full_hello[:10] #this is the first 10 bytes of modulus of auditor's pubkey
                     sig = str(full_hello[10:]) #this is a sig for 'ae_hello||auditee nick'. The auditor is expected to have received auditee's pubkey via other channels
-                    if modulus != myModulus : continue
-                    rsa.verify('ae_hello'+nick, sig, auditeePublicKey)
+                    if modulus != my_modulus : continue
+                    rsa.verify('ae_hello'+nick, sig, auditee_public_key)
                     #we get here if there was no exception
                     auditee_nick = nick
                 except:
                     print ('Verification of a hello message failed')
                     continue
 
-    if not bIsAuditeeRegistered:
+    if not b_is_auditee_registered:
         return ('failure',)
-    signed_hello = rsa.sign('ao_hello'+my_nick, myPrivateKey, 'SHA-1')
+    signed_hello = rsa.sign('ao_hello'+my_nick, my_private_key, 'SHA-1')
     #send twice because it was observed that the msg would not appear on the chan
     for x in range(2):
-        shared.tlsn_send_single_msg('ao_hello',signed_hello,auditeePublicKey,ctrprty_nick = auditee_nick)
+        shared.tlsn_send_single_msg('ao_hello',signed_hello,auditee_public_key,ctrprty_nick = auditee_nick)
         time.sleep(2)
 
-    progressQueue.put(time.strftime('%H:%M:%S', time.localtime()) + \
+    progress_queue.put(time.strftime('%H:%M:%S', time.localtime()) + \
                       ': Auditee has been authorized. Awaiting data...')
-    thread = threading.Thread(target= receivingThread)
+    thread = threading.Thread(target= receiving_thread)
     thread.daemon = True
     thread.start()
     thread = threading.Thread(target= process_messages)
@@ -525,13 +525,13 @@ def start_peer_messaging():
     #*immediately* before connecting, because in self-test mod
     #it can be reset by the auditee
     shared.config.read(shared.config_location)
-    progressQueue.put(time.strftime('%H:%M:%S', time.localtime()) +\
+    progress_queue.put(time.strftime('%H:%M:%S', time.localtime()) +\
     ': Connecting to '+shared.config.get('IRC','irc_server')+' and joining #'\
     +shared.config.get('IRC','channel_name'))
     my_nick= 'user' + ''.join(random.choice('0123456789') for x in range(10))
     shared.tlsn_initialise_messaging(my_nick)
     #if we got here, no exceptions were thrown, which counts as success.
-    thread = threading.Thread(target= registerAuditeeThread)
+    thread = threading.Thread(target= register_auditee_thread)
     thread.daemon = True
     thread.start()
     return 'success'
@@ -539,7 +539,7 @@ def start_peer_messaging():
 #use http server to talk to auditor.html
 def http_server(parentthread):    
     #allow three attempts to start mini httpd in case if the port is in use
-    bWasStarted = False
+    b_was_started = False
     print ('Starting http server to communicate with auditor panel')    
     for i in range(3):
         FF_to_backend_port = random.randint(1025,65535)
@@ -549,9 +549,9 @@ def http_server(parentthread):
         except Exception, e:
             print ('Error starting mini http server. Maybe the port is in use?', e,end='\r\n')
             continue
-        bWasStarted = True
+        b_was_started = True
         break        
-    if bWasStarted == False:
+    if b_was_started == False:
         #retval is a var that belongs to our parent class which is ThreadWithRetval
         parentthread.retval = ('failure',)
         return
@@ -596,18 +596,18 @@ if __name__ == "__main__":
     thread.daemon = True
     thread.start()
     #wait for minihttpd thread to indicate its status   
-    bWasStarted = False
+    b_was_started = False
     for i in range(10):
         time.sleep(1)        
         if thread.retval == '': continue
         elif thread.retval[0] == 'failure': 
             raise Exception('MINIHTTPD_FAILURE')
         elif thread.retval[0] == 'success':
-            bWasStarted = True
+            b_was_started = True
             break
         else: 
             raise Exception('MINIHTTPD_WRONG_RESPONSE')
-    if bWasStarted == False: 
+    if b_was_started == False: 
         raise Exception('MINIHTTPD_START_TIMEOUT')
     FF_to_backend_port = thread.retval[1]
     
@@ -674,7 +674,7 @@ if __name__ == "__main__":
         while True:
             time.sleep(1)
             if daemon_mode:
-                try: print (progressQueue.get_nowait())
+                try: print (progress_queue.get_nowait())
                 except: pass      
     except KeyboardInterrupt:
-        bTerminateAllThreads = True
+        b_terminate_all_threads = True

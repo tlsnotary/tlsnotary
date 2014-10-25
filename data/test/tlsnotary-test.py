@@ -21,8 +21,8 @@ import urllib
 import zipfile
  
 auditor_pid = auditee_pid = 0
-testFinished = False
-testRetval = -1
+test_finished = False
+test_retval = -1
  
 testdir = os.path.dirname(os.path.realpath(__file__))
 installdir = os.path.dirname(os.path.dirname(testdir))
@@ -30,7 +30,7 @@ datadir = os.path.join(installdir, 'data')
 sessionsdir = os.path.join(datadir, 'auditee', 'sessions')
 auditor_sessionsdir = os.path.join(datadir, 'auditor','sessions')
 #for reference (this is what is in the testing add-on)
-tlsnCipherSuiteNames=["security.ssl3.rsa_aes_128_sha","security.ssl3.rsa_aes_256_sha",\
+tlsn_cipher_suite_names=["security.ssl3.rsa_aes_128_sha","security.ssl3.rsa_aes_256_sha",\
 "security.ssl3.rsa_rc4_128_md5","security.ssl3.rsa_rc4_128_sha"]
 website_list_file=""
 website_list=[]
@@ -46,7 +46,7 @@ elif m_platform == 'Linux':
 elif m_platform == 'Darwin':
     OS = 'macos'
 
-PINL = '\r\n' if OS == 'mswin' else '\n'
+pinl = '\r\n' if OS == 'mswin' else '\n'
 
 #exit codes
 MINIHTTPD_FAILURE = 2
@@ -62,7 +62,7 @@ TSHARK_NOT_FOUND = 10
 
 
 def cleanup_and_exit():
-    if testRetval != 0: #there was an error, leave the auditee's browser running for some post-mortem analysis
+    if test_retval != 0: #there was an error, leave the auditee's browser running for some post-mortem analysis
         os.kill(auditor_pid, signal.SIGTERM)
         os._exit(1)
     else:
@@ -73,7 +73,7 @@ def cleanup_and_exit():
 
 #logging, primitively
 def log_to_file(message,bdir='.',p=False):
-    msg = time.strftime("%a, %d %b %Y %H:%M:%S +0000", time.gmtime())+': '+message+PINL
+    msg = time.strftime("%a, %d %b %Y %H:%M:%S +0000", time.gmtime())+': '+message+pinl
     with open(os.path.join(bdir,'tlsnotarytestlog'),'a') as f:
         f.write(msg)
     if p:
@@ -119,7 +119,7 @@ class HandlerClass(SimpleHTTPServer.SimpleHTTPRequestHandler):
 
         if self.path.startswith('/get_websites'):
             #'get websites' doubles as a request to start (note for now
-            # multiple runs will only randomise ciphersuites, *not* change the list of websites to be
+            # multiple runs will only randomise cipher_suites, *not* change the list of websites to be
             # tested; to do that you have to restart this backend script.
             start_run()
             self.send_response(200)
@@ -142,10 +142,10 @@ class HandlerClass(SimpleHTTPServer.SimpleHTTPRequestHandler):
                 print("Received erroneous request from testing frontend")
             err_msg = arg_str[len('errmsg='):]
             log_to_file("Front end sent error condition: "+urllib.unquote(err_msg),p=True)
-            global testFinished
-            global testRetval
-            testFinished = True
-            testRetval = 1            
+            global test_finished
+            global test_retval
+            test_finished = True
+            test_retval = 1            
             cleanup_and_exit()
 
         if self.path.startswith('/end_test'):
@@ -187,45 +187,45 @@ def perform_final_check():
             with open(os.path.join(auditee_decrypted_dir,i),'rb') as f: dh = f.read()
             auditee_md5s[i] = hashlib.md5(dh[3:]).hexdigest() #hack to remove byte order mark
 
-    bCheckFailed = False
+    b_check_failed = False
     if not auditee_md5s: 
         log_to_file("No html found in auditee session directory: "+auditee_decrypted_dir)
-        bCheckFailed = True
+        b_check_failed = True
     if not auditor_md5s: 
         log_to_file("No html found in auditor session directory: "+auditor_decrypted_dir)
-        bCheckFailed = True
+        b_check_failed = True
 
     if (auditee_md5s != auditor_md5s):
         log_to_file('Hash mismatch: Auditor: '+str(auditor_md5s)+', Auditee: '+str(auditee_md5s))
         log_to_file("hash mismatch, test run failed.",p=True)
-        bCheckFailed = True
+        b_check_failed = True
     else:
         log_to_file('Hashes matched: Auditor: '+str(auditor_md5s)+', Auditee: '+str(auditee_md5s))
         log_to_file('TlsNotary test run successful! See log for details.',p=True)
     log_to_file("**************END TEST RUN*************************")
-    global testFinished
-    global testRetval  
-    testFinished = True
-    if bCheckFailed: testRetval = 1
-    else: testRetval = 0
+    global test_finished
+    global test_retval  
+    test_finished = True
+    if b_check_failed: test_retval = 1
+    else: test_retval = 0
     cleanup_and_exit()
     
 
 #use miniHTTP server to receive commands from Firefox addon and respond to them
 def minihttp_thread(parentthread):    
     #allow three attempts to start mini httpd in case if the port is in use
-    bWasStarted = False
+    b_was_started = False
     for i in range(3):
         FF_to_backend_port = 27777 #random.randint(1025,65535)
         print ('Testdriver: starting mini http server to communicate with browser')
         try:
             httpd = StoppableHttpServer(('127.0.0.1', FF_to_backend_port), HandlerClass)
-            bWasStarted = True
+            b_was_started = True
             break
         except Exception, e:
             print ('Error starting mini http server. Maybe the port is in use?', e,end='\r\n')
             continue
-    if bWasStarted == False:
+    if b_was_started == False:
         #retval is a var that belongs to our parent class which is ThreadWithRetval
         parentthread.retval = ('failure',)
         return
@@ -251,11 +251,11 @@ def start_run():
             url,code = a.split()
             if not url.startswith('#'):
                 website_list.append(url)
-            #accepted ciphersuites (indexed by tlsnCipherSuiteList above)
+            #accepted cipher_suites (indexed by tlsnCipherSuiteList above)
             #are separated by commas:
-            acceptable_ciphersuites = code.split(',')
+            acceptable_cipher_suites = code.split(',')
             #choose one of the given numbers at random
-            cs_list.append(random.choice(acceptable_ciphersuites))
+            cs_list.append(random.choice(acceptable_cipher_suites))
     log_to_file("*********START TEST*****************")
     log_to_file("Starting new run for these websites:")
     log_to_file(','.join(website_list))
@@ -278,7 +278,7 @@ if __name__ == "__main__":
     thread.start()
 
     #wait for minihttpd thread to indicate its status and FF_to_backend_port  
-    bWasStarted = False
+    b_was_started = False
     for i in range(10):
         if thread.retval == '':
             time.sleep(1)
@@ -287,17 +287,17 @@ if __name__ == "__main__":
             print ('Failed to start minihttpd server. Please investigate')
             sys.exit(MINIHTTPD_FAILURE)
         elif thread.retval[0] == 'success':
-            bWasStarted = True
+            b_was_started = True
             break
         else:
             print ('Unexpected minihttpd server response. Please investigate')
             sys.exit(MINIHTTPD_WRONG_RESPONSE)
 
-    if bWasStarted == False:
+    if b_was_started == False:
         print ('minihttpd failed to start in 10 secs. Please investigate')
         sys.exit(MINIHTTPD_START_TIMEOUT)
 
     while True:
-        if testFinished == True:
+        if test_finished == True:
             cleanup_and_exit()
         time.sleep(1)        

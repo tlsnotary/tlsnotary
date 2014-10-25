@@ -60,150 +60,150 @@ h_fin = '\x14' #Finished
 
 class TLSNSSLClientSession(object):
     def __init__(self,server=None,port=443,ccs=None):
-        self.serverName = server
-        self.sslPort = port
-        self.nAuditeeEntropy = 12
-        self.nAuditorEntropy = 9
-        self.auditorSecret = None
-        self.auditeeSecret = None
-        self.auditorPaddingSecret = None
-        self.auditeePaddingSecret = None
-        self.encFirstHalfPMS = None
-        self.encSecondHalfPMS = None
-        self.encPMS = None
+        self.server_name = server
+        self.ssl_port = port
+        self.n_auditee_entropy = 12
+        self.n_auditor_entropy = 9
+        self.auditor_secret = None
+        self.auditee_secret = None
+        self.auditor_padding_secret = None
+        self.auditee_padding_secret = None
+        self.enc_first_half_pms = None
+        self.enc_second_half_pms = None
+        self.enc_pms = None
         #client hello, server hello, certificate, server hello done,
         #client key exchange, change cipher spec, finished
-        self.handshakeMessages = [None] * 7
-        self.handshakeHashSHA = None
-        self.handshakeHashMD5 = None
+        self.handshake_messages = [None] * 7
+        self.handshake_hash_sha = None
+        self.handshake_hash_md5 = None
         #client random can be created immediately on instantiation
         cr_time = bi2ba(int(time.time()))
-        self.clientRandom = cr_time + os.urandom(28)
-        self.serverRandom = None
+        self.client_random = cr_time + os.urandom(28)
+        self.server_random = None
 
         '''The amount of key material for each ciphersuite:
         AES256-CBC-SHA: mac key 20*2, encryption key 32*2, IV 16*2 == 136bytes
         AES128-CBC-SHA: mac key 20*2, encryption key 16*2, IV 16*2 == 104bytes
         RC4128_SHA: mac key 20*2, encryption key 16*2 == 72bytes
         RC4128_MD5: mac key 16*2, encryption key 16*2 == 64 bytes'''
-        self.cipherSuites = {47:['AES128',20,20,16,16,16,16],\
+        self.cipher_suites = {47:['AES128',20,20,16,16,16,16],\
                              53:['AES256',20,20,32,32,16,16],\
                              5:['RC4SHA',20,20,16,16,0,0],\
                              4:['RC4MD5',16,16,16,16,0,0]}
         #preprocessing: add the total number of bytes in the expanded keys format
         #for each cipher suite, for ease of reference
-        for k,v in self.cipherSuites.iteritems():
+        for k,v in self.cipher_suites.iteritems():
             v.append(sum(v[1:]))
 
-        self.chosenCipherSuite = ccs
+        self.chosen_cipher_suite = ccs
 
-        self.pAuditor = None
-        self.pAuditee = None
+        self.p_auditor = None
+        self.p_auditee = None
 
-        self.masterSecretHalfAuditor = None
-        self.masterSecretHalfAuditee = None
+        self.master_secret_half_auditor = None
+        self.master_secret_half_auditee = None
 
-        self.pMasterSecretAuditor = None
-        self.pMasterSecretAuditee = None
+        self.p_master_secret_auditor = None
+        self.p_master_secret_auditee = None
 
-        self.serverMacKey = None
-        self.clientMacKey = None
-        self.serverEncKey = None
-        self.clientEncKey = None
+        self.server_mac_key = None
+        self.client_mac_key = None
+        self.server_enc_key = None
+        self.client_enc_key = None
         self.serverIV = None
         self.clientIV = None
 
-        self.serverCertificate = None
-        self.serverModulus = None
-        self.serverExponent = 65537
-        self.serverModLength = None
+        self.server_certificate = None
+        self.server_modulus = None
+        self.server_exponent = 65537
+        self.server_mod_length = None
 
         #these are stored to be used as IV
         #for encryption/decryption of the next SSL record
-        self.lastClientCiphertextBlock = None
-        self.lastServerCiphertextBlock = None
+        self.last_client_ciphertext_block = None
+        self.last_server_ciphertext_block = None
 
         #needed for maintaining RC4 cipher state
-        self.clientRC4State = None
-        self.serverRC4State = None
+        self.client_rc4_state = None
+        self.server_rc4_state = None
 
         #needed for record HMAC construction
-        self.clientSeqNo = 0
-        self.serverSeqNo = 0
+        self.client_seq_no = 0
+        self.server_seq_no = 0
 
         #array of ciphertexts from each SSL record
-        self.serverResponseCiphertexts=[]
+        self.server_response_ciphertexts=[]
 
         #the HMAC required to construct the verify data
         #for the server Finished record
-        self.verifyHMACForServerFinished = None
+        self.verify_hmac_for_server_finished = None
         
         #store the decrypted server finished message
         #for later mac check in form (plaintext,mac)
-        self.decryptedServerFinished = (None,None)
+        self.decrypted_server_finished = (None,None)
         
         #all handshake messages are stored as transferred
         #over the wire, but the Finished message, which
         #is encrypted over the wire, is also needed for
         #hashing in unencrypted form.
-        self.unencryptedClientFinished = None
+        self.unencrypted_client_finished = None
         
         #create clientHello on instantiation
-        self.setClientHello()
+        self.set_client_hello()
 
     def dump(self):
-        returnStr='Session state dump: \n'
+        return_str='Session state dump: \n'
         for k,v in self.__dict__.iteritems():
-            returnStr += k + '\n'
+            return_str += k + '\n'
             if type(v) == type(str()):
-                returnStr += 'string: len:'+str(len(v)) + '\n'
-                returnStr += v + '\n'
+                return_str += 'string: len:'+str(len(v)) + '\n'
+                return_str += v + '\n'
             elif type(v) == type(bytearray()):
-                returnStr += 'bytearray: len:'+str(len(v)) + '\n'
-                returnStr += binascii.hexlify(v) + '\n'
+                return_str += 'bytearray: len:'+str(len(v)) + '\n'
+                return_str += binascii.hexlify(v) + '\n'
             else:
-                returnStr += str(v) + '\n'
-        return returnStr
+                return_str += str(v) + '\n'
+        return return_str
 
-    def setClientHello(self):
-        assert self.clientRandom, "Client random should have been set in constructor."
-        remaining = tlsver + self.clientRandom + '\x00' #last byte is session id length
-        if self.chosenCipherSuite:
+    def set_client_hello(self):
+        assert self.client_random, "Client random should have been set in constructor."
+        remaining = tlsver + self.client_random + '\x00' #last byte is session id length
+        if self.chosen_cipher_suite:
             #prepare_pms and testing only: use specific cs
-            remaining  += '\x00\x02\x00'+chr(self.chosenCipherSuite) 
+            remaining  += '\x00\x02\x00'+chr(self.chosen_cipher_suite) 
         else:
-            #use all 4 ciphersuites
-            remaining += '\x00'+chr(2*len(self.cipherSuites))
-            for a in self.cipherSuites:
+            #use all 4 cipher_suites
+            remaining += '\x00'+chr(2*len(self.cipher_suites))
+            for a in self.cipher_suites:
                 remaining += '\x00'+chr(a)                        
         remaining += '\x01\x00' #compression methods
-        self.handshakeMessages[0] = hs + tlsver + bi2ba(len(remaining)+4,fixed=2) + \
+        self.handshake_messages[0] = hs + tlsver + bi2ba(len(remaining)+4,fixed=2) + \
         h_ch + bi2ba(len(remaining),fixed=3) + remaining
-        return self.handshakeMessages[0]
+        return self.handshake_messages[0]
 
-    def setMasterSecretHalf(self,half=1,providedPValue=None):
+    def set_master_secret_half(self,half=1,provided_p_value=None):
         #non provision of p value means we use the existing p
         #values to calculate the whole MS
-        if not providedPValue:
-            self.masterSecretHalfAuditor = xor(self.pAuditee[:24],self.pAuditor[:24])
-            self.masterSecretHalfAuditee = xor(self.pAuditee[24:],self.pAuditor[24:])
-            return self.masterSecretHalfAuditor+self.masterSecretHalfAuditee
+        if not provided_p_value:
+            self.master_secret_half_auditor = xor(self.p_auditee[:24],self.p_auditor[:24])
+            self.master_secret_half_auditee = xor(self.p_auditee[24:],self.p_auditor[24:])
+            return self.master_secret_half_auditor+self.master_secret_half_auditee
         assert half in [1,2], "Must provide half argument as 1 or 2"
         #otherwise the p value must be enough to provide one half of MS
-        assert len(providedPValue)==24, "Wrong length of P-hash value for half MS setting."
+        assert len(provided_p_value)==24, "Wrong length of P-hash value for half MS setting."
         if half == 1:
-            self.masterSecretHalfAuditor = xor(self.pAuditor[:24],providedPValue)
-            return self.masterSecretHalfAuditor
+            self.master_secret_half_auditor = xor(self.p_auditor[:24],provided_p_value)
+            return self.master_secret_half_auditor
         else:
-            self.masterSecretHalfAuditee = xor(self.pAuditee[24:],providedPValue)
-            return self.masterSecretHalfAuditee
+            self.master_secret_half_auditee = xor(self.p_auditee[24:],provided_p_value)
+            return self.master_secret_half_auditee
 
-    def setCipherSuite(self, cs):
-        assert cs in self.cipherSuites.keys(), "Invalid cipher suite chosen" 
-        self.chosenCipherSuite = cs
+    def set_cipher_suite(self, cs):
+        assert cs in self.cipher_suites.keys(), "Invalid cipher suite chosen" 
+        self.chosen_cipher_suite = cs
         return cs
 
-    def processServerHello(self,sh_cert_shd):
+    def process_server_hello(self,sh_cert_shd):
         shd = hs + tlsver + bi2ba(4,fixed=2) + h_shd + bi2ba(0,fixed=3)
         sh_magic = re.compile(hs + tlsver + '..' + h_sh,re.DOTALL)
         if not re.match(sh_magic, sh_cert_shd): 
@@ -227,167 +227,167 @@ class TLSNSSLClientSession(object):
             #we know not to expect record headers for Cert and SHD
             sh_length = ba2int(sh_cert_shd[6:9])
             #build server hello
-            self.handshakeMessages[1]=tls_header+str(bi2ba(4+sh_length,fixed=2))+ \
+            self.handshake_messages[1]=tls_header+str(bi2ba(4+sh_length,fixed=2))+ \
             sh_cert_shd[5:9]+sh_cert_shd[9:9+sh_length]
             
             assert sh_cert_shd[9+sh_length] == h_cert, "Failed to find certificate, server hello length was: "+str(sh_length)
             cert_len = ba2int(sh_cert_shd[9+sh_length+1:9+sh_length+4])
             #certificate
-            self.handshakeMessages[2] = tls_header+str(bi2ba(4+cert_len,fixed=2))+\
+            self.handshake_messages[2] = tls_header+str(bi2ba(4+cert_len,fixed=2))+\
                 sh_cert_shd[9+sh_length:9+sh_length+4+cert_len]
             #server hello done
-            self.handshakeMessages[3] = shd
+            self.handshake_messages[3] = shd
 
         else:
             cert_start_position = cert_match.start()
             sh = sh_cert_shd[:cert_start_position]
-            self.handshakeMessages[2] = sh_cert_shd[cert_start_position : -len(shd)]
-            self.handshakeMessages[1] = sh
-            self.handshakeMessages[3] = shd
+            self.handshake_messages[2] = sh_cert_shd[cert_start_position : -len(shd)]
+            self.handshake_messages[1] = sh
+            self.handshake_messages[3] = shd
             
-        self.serverRandom = self.handshakeMessages[1][11:43]
+        self.server_random = self.handshake_messages[1][11:43]
         #extract the cipher suite
         #if a session id was provided, it will be preceded by its length 32:
         #note: 44 = 1 tls record type + 2 tls ver + 2 record length + 1 handshake type
         # + 3 handshake length + 2 tls ver + 32 server random + 1 session id lenth (zero)
-        cs_start_byte = 44 if self.handshakeMessages[1][43] != '\x20' else 43+1+32
-        if self.handshakeMessages[1][cs_start_byte] != '\x00' or \
-           ord(self.handshakeMessages[1][cs_start_byte+1]) not in self.cipherSuites.keys():
+        cs_start_byte = 44 if self.handshake_messages[1][43] != '\x20' else 43+1+32
+        if self.handshake_messages[1][cs_start_byte] != '\x00' or \
+           ord(self.handshake_messages[1][cs_start_byte+1]) not in self.cipher_suites.keys():
             raise Exception("Could not locate cipher suite choice in server hello.")
-        server_ciphersuite = ba2int(self.handshakeMessages[1][cs_start_byte+1])
-        if self.chosenCipherSuite: #testing only,  we prefered a specific cs
-            if self.chosenCipherSuite != server_ciphersuite:
+        server_cipher_suite = ba2int(self.handshake_messages[1][cs_start_byte+1])
+        if self.chosen_cipher_suite: #testing only,  we prefered a specific cs
+            if self.chosen_cipher_suite != server_cipher_suite:
                 raise Exception ('Server did not return the ciphersuite we requested')
-        self.setCipherSuite(server_ciphersuite)
-        #if encPMS is not yet set, this is a call from prepare_pms()
+        self.set_cipher_suite(server_cipher_suite)
+        #if enc_pms is not yet set, this is a call from prepare_pms()
         #otherwise this is a normal audit session
-        if self.encPMS:
-            self.setHandshakeHashes()
-            self.setAuditeeSecret()
+        if self.enc_pms:
+            self.set_handshake_hashes()
+            self.set_auditee_secret()
         
-        print ("Set cipher suite to ", str(server_ciphersuite))
+        print ("Set cipher suite to ", str(server_cipher_suite))
             
-        return (self.handshakeMessages[1:4], self.serverRandom)
+        return (self.handshake_messages[1:4], self.server_random)
 
-    def setEncryptedPMS(self):
-        assert (self.encFirstHalfPMS and self.encSecondHalfPMS and self.serverModulus), \
-            'failed to set encpms, first half was: ' + str(self.encFirstHalfPMS) +\
-            ' second half was: ' + str(self.encSecondHalfPMS) + ' modulus was: ' + str(self.serverModulus)
-        self.encPMS =  self.encFirstHalfPMS * self.encSecondHalfPMS % self.serverModulus
-        return self.encPMS
+    def set_encrypted_pms(self):
+        assert (self.enc_first_half_pms and self.enc_second_half_pms and self.server_modulus), \
+            'failed to set enc_pms, first half was: ' + str(self.enc_first_half_pms) +\
+            ' second half was: ' + str(self.enc_second_half_pms) + ' modulus was: ' + str(self.server_modulus)
+        self.enc_pms =  self.enc_first_half_pms * self.enc_second_half_pms % self.server_modulus
+        return self.enc_pms
 
-    def setEncFirstHalfPMS(self):
-        assert (self.serverModulus and not self.encFirstHalfPMS)
-        oneslength = 23            
-        pms1 = tlsver+self.auditeeSecret + ('\x00' * (24-2-self.nAuditeeEntropy))
-        self.encFirstHalfPMS = pow(ba2int('\x02'+('\x01'*(oneslength))+\
-        self.auditeePaddingSecret+'\x00'+pms1 +'\x00'*23 + '\x01'), self.serverExponent, self.serverModulus)
+    def set_enc_first_half_pms(self):
+        assert (self.server_modulus and not self.enc_first_half_pms)
+        ones_length = 23            
+        pms1 = tlsver+self.auditee_secret + ('\x00' * (24-2-self.n_auditee_entropy))
+        self.enc_first_half_pms = pow(ba2int('\x02'+('\x01'*(ones_length))+\
+        self.auditee_padding_secret+'\x00'+pms1 +'\x00'*23 + '\x01'), self.server_exponent, self.server_modulus)
      
-    def setAuditeeSecret(self):
+    def set_auditee_secret(self):
         '''Sets up the auditee's half of the preparatory
         secret material to create the master secret.'''
-        assert self.clientRandom and self.serverRandom,"one of client or server random not set"
-        if not self.auditeeSecret:
-            self.auditeeSecret = os.urandom(self.nAuditeeEntropy)             
-        if not self.auditeePaddingSecret:
-            self.auditeePaddingSecret = os.urandom(15)
+        assert self.client_random and self.server_random,"one of client or server random not set"
+        if not self.auditee_secret:
+            self.auditee_secret = os.urandom(self.n_auditee_entropy)             
+        if not self.auditee_padding_secret:
+            self.auditee_padding_secret = os.urandom(15)
         label = 'master secret'
-        seed = self.clientRandom + self.serverRandom
-        pms1 = tlsver+self.auditeeSecret + ('\x00' * (24-2-self.nAuditeeEntropy))
-        self.pAuditee = TLS10PRF(label+seed,first_half = pms1)[0]
+        seed = self.client_random + self.server_random
+        pms1 = tlsver+self.auditee_secret + ('\x00' * (24-2-self.n_auditee_entropy))
+        self.p_auditee = tls_10_prf(label+seed,first_half = pms1)[0]
         #encrypted PMS has already been calculated before the audit began
-        return (self.pAuditee)
+        return (self.p_auditee)
 
-    def setEncSecondHalfPMS(self):
-        assert (self.serverModulus and not self.encFirstHalfPMS)
-        oneslength = 103+ba2int(self.serverModLength)-256
-        pms2 =  self.auditorSecret + ('\x00' * (24-self.nAuditorEntropy-1)) + '\x01'
-        self.encSecondHalfPMS = pow( ba2int('\x01'+('\x01'*(oneslength))+\
-        self.auditorPaddingSecret+ ('\x00'*25)+pms2), self.serverExponent, self.serverModulus )
+    def set_enc_second_half_pms(self):
+        assert (self.server_modulus and not self.enc_first_half_pms)
+        ones_length = 103+ba2int(self.server_mod_length)-256
+        pms2 =  self.auditor_secret + ('\x00' * (24-self.n_auditor_entropy-1)) + '\x01'
+        self.enc_second_half_pms = pow( ba2int('\x01'+('\x01'*(ones_length))+\
+        self.auditor_padding_secret+ ('\x00'*25)+pms2), self.server_exponent, self.server_modulus )
 
-    def setAuditorSecret(self):
+    def set_auditor_secret(self):
         '''Sets up the auditor's half of the preparatory
         secret material to create the master secret, and
         the encrypted premaster secret.
-        'secret' should be a bytearray of length nAuditorEntropy'''
-        assert (self.clientRandom and self.serverRandom), "one of client or server random not set"
-        if not self.auditorSecret:
-            self.auditorSecret = os.urandom(self.nAuditorEntropy)
-        if not self.auditorPaddingSecret:
-            self.auditorPaddingSecret =  os.urandom(15)
+        'secret' should be a bytearray of length n_auditor_entropy'''
+        assert (self.client_random and self.server_random), "one of client or server random not set"
+        if not self.auditor_secret:
+            self.auditor_secret = os.urandom(self.n_auditor_entropy)
+        if not self.auditor_padding_secret:
+            self.auditor_padding_secret =  os.urandom(15)
         label = 'master secret'
-        seed = self.clientRandom + self.serverRandom
-        pms2 =  self.auditorSecret + ('\x00' * (24-self.nAuditorEntropy-1)) + '\x01'
-        self.pAuditor = TLS10PRF(label+seed,second_half = pms2)[1]
-        return (self.pAuditor)
+        seed = self.client_random + self.server_random
+        pms2 =  self.auditor_secret + ('\x00' * (24-self.n_auditor_entropy-1)) + '\x01'
+        self.p_auditor = tls_10_prf(label+seed,second_half = pms2)[1]
+        return (self.p_auditor)
 
-    def extractCertificate(self):
-        assert self.handshakeMessages[2], "Cannot extract certificate, no handshake message present."
-        cert_len = ba2int(self.handshakeMessages[2][12:15])
-        self.serverCertificate = self.handshakeMessages[2][15:15+cert_len]
-        return self.serverCertificate
+    def extract_certificate(self):
+        assert self.handshake_messages[2], "Cannot extract certificate, no handshake message present."
+        cert_len = ba2int(self.handshake_messages[2][12:15])
+        self.server_certificate = self.handshake_messages[2][15:15+cert_len]
+        return self.server_certificate
 
-    def extractModAndExp(self,certDER=None):
+    def extract_mod_and_exp(self,certDER=None):
         if not certDER: 
-            self.extractCertificate()
-            DERdata = self.serverCertificate
+            self.extract_certificate()
+            DERdata = self.server_certificate
         else: DERdata = certDER
-        assert (self.serverCertificate or certDER), "No server certificate, cannot extract pubkey"
+        assert (self.server_certificate or certDER), "No server certificate, cannot extract pubkey"
         rv  = decoder.decode(DERdata, asn1Spec=univ.Sequence())
-        bitstring = rv[0].getComponentByPosition(0).getComponentByPosition(6).getComponentByPosition(1)
-        #bitstring is a list of ints, like [01110001010101000...]
+        bit_string = rv[0].getComponentByPosition(0).getComponentByPosition(6).getComponentByPosition(1)
+        #bit_string is a list of ints, like [01110001010101000...]
         #convert it into into a string   '01110001010101000...'
-        stringOfBits = ''
-        for bit in bitstring:
+        string_of_bits = ''
+        for bit in bit_string:
             bit_as_str = str(bit)
-            stringOfBits += bit_as_str
+            string_of_bits += bit_as_str
         #treat every 8 chars as an int and pack the ints into a bytearray
         ba = bytearray()
-        for i in range(0, len(stringOfBits)/8):
-            onebyte = stringOfBits[i*8 : (i+1)*8]
+        for i in range(0, len(string_of_bits)/8):
+            onebyte = string_of_bits[i*8 : (i+1)*8]
             oneint = int(onebyte, base=2)
             ba.append(oneint)
         #decoding the nested sequence
         rv  = decoder.decode(str(ba), asn1Spec=univ.Sequence())
         exponent = rv[0].getComponentByPosition(1)
         modulus = rv[0].getComponentByPosition(0)
-        self.serverModulus = int(modulus)
-        self.serverExponent = int(exponent)
-        n = bi2ba(self.serverModulus)
-        e = bi2ba(self.serverExponent)
+        self.server_modulus = int(modulus)
+        self.server_exponent = int(exponent)
+        n = bi2ba(self.server_modulus)
+        e = bi2ba(self.server_exponent)
         modulus_len_int = len(n)
-        self.serverModLength = bi2ba(modulus_len_int)
-        if len(self.serverModLength) == 1: self.serverModLength.insert(0,0)  #zero-pad to 2 bytes
+        self.server_mod_length = bi2ba(modulus_len_int)
+        if len(self.server_mod_length) == 1: self.server_mod_length.insert(0,0)  #zero-pad to 2 bytes
 
-        return (self.serverModulus,self.serverExponent)
+        return (self.server_modulus,self.server_exponent)
 
     #provide a list of keys that you want to 'garbageize' so as to hide
     #that key from the counterparty, in the array 'garbage', each number is
-    #an index to that key in the cipherSuites dict
-    def getPValueMS(self,ctrprty,garbage=[]):
-        assert (self.serverRandom and self.clientRandom and self.chosenCipherSuite), \
+    #an index to that key in the cipher_suites dict
+    def get_p_value_ms(self,ctrprty,garbage=[]):
+        assert (self.server_random and self.client_random and self.chosen_cipher_suite), \
                "server random, client random or cipher suite not set."
         label = 'key expansion'
-        seed = self.serverRandom + self.clientRandom
-        expkeys_len = self.cipherSuites[self.chosenCipherSuite][-1]        
+        seed = self.server_random + self.client_random
+        expkeys_len = self.cipher_suites[self.chosen_cipher_suite][-1]        
         if ctrprty == 'auditor':
-            self.pMasterSecretAuditor = TLS10PRF(label+seed,req_bytes=expkeys_len,first_half=self.masterSecretHalfAuditor)[0]
+            self.p_master_secret_auditor = tls_10_prf(label+seed,req_bytes=expkeys_len,first_half=self.master_secret_half_auditor)[0]
         else:
-            self.pMasterSecretAuditee = TLS10PRF(label+seed,req_bytes=expkeys_len,second_half=self.masterSecretHalfAuditee)[1]
+            self.p_master_secret_auditee = tls_10_prf(label+seed,req_bytes=expkeys_len,second_half=self.master_secret_half_auditee)[1]
 
-        tmp = self.pMasterSecretAuditor if ctrprty=='auditor' else self.pMasterSecretAuditee
+        tmp = self.p_master_secret_auditor if ctrprty=='auditor' else self.p_master_secret_auditee
         for k in garbage:
             if k==1:
                 start = 0
             else:
-                start = sum(self.cipherSuites[self.chosenCipherSuite][1:k])
-            end = sum(self.cipherSuites[self.chosenCipherSuite][1:k+1])
+                start = sum(self.cipher_suites[self.chosen_cipher_suite][1:k])
+            end = sum(self.cipher_suites[self.chosen_cipher_suite][1:k+1])
             #ugh, python strings are immutable, what's the elegant way to do this?
             tmp2 = tmp[:start]+os.urandom(end-start)+tmp[end:]
             tmp = tmp2
         return tmp
 
-    def doKeyExpansion(self):
+    def do_key_expansion(self):
         '''A note about partial expansions:
         Often we will have sufficient information to extract particular
         keys, e.g. the client keys, but not others, e.g. the server keys.
@@ -395,240 +395,240 @@ class TLSNSSLClientSession(object):
         portions of the two master secret halves. TODO find a way to make this
         explicit so that querying the object will only give real keys.
         '''
-        assert (self.serverRandom and self.clientRandom)," need client and server random"
+        assert (self.server_random and self.client_random)," need client and server random"
         label = 'key expansion'
-        seed = self.serverRandom + self.clientRandom
+        seed = self.server_random + self.client_random
         #for maximum flexibility, we will compute the sha1 or md5 hmac
         #or the full keys, based on what secrets currently exist in this object
-        expkeys_len = self.cipherSuites[self.chosenCipherSuite][-1]                
-        if self.masterSecretHalfAuditee:
-            self.pMasterSecretAuditee = TLS10PRF(label+seed,req_bytes=expkeys_len,second_half=self.masterSecretHalfAuditee)[1]
-        if self.masterSecretHalfAuditor:
-            self.pMasterSecretAuditor = TLS10PRF(label+seed,req_bytes=expkeys_len,first_half=self.masterSecretHalfAuditor)[0]
+        expkeys_len = self.cipher_suites[self.chosen_cipher_suite][-1]                
+        if self.master_secret_half_auditee:
+            self.p_master_secret_auditee = tls_10_prf(label+seed,req_bytes=expkeys_len,second_half=self.master_secret_half_auditee)[1]
+        if self.master_secret_half_auditor:
+            self.p_master_secret_auditor = tls_10_prf(label+seed,req_bytes=expkeys_len,first_half=self.master_secret_half_auditor)[0]
 
-        if self.masterSecretHalfAuditee and self.masterSecretHalfAuditor:
-            keyExpansion = TLS10PRF(label+seed,req_bytes=expkeys_len,full_secret=self.masterSecretHalfAuditor+\
-                                                                                self.masterSecretHalfAuditee)[2]
-        elif self.pMasterSecretAuditee and self.pMasterSecretAuditor:
-            keyExpansion = xor(self.pMasterSecretAuditee,self.pMasterSecretAuditor)
+        if self.master_secret_half_auditee and self.master_secret_half_auditor:
+            key_expansion = tls_10_prf(label+seed,req_bytes=expkeys_len,full_secret=self.master_secret_half_auditor+\
+                                                                                self.master_secret_half_auditee)[2]
+        elif self.p_master_secret_auditee and self.p_master_secret_auditor:
+            key_expansion = xor(self.p_master_secret_auditee,self.p_master_secret_auditor)
         else:
             raise Exception ('Cannot expand keys, insufficient data')
 
         #we have the raw key expansion, but want the keys. Use the data
         #embedded in the cipherSuite dict to identify the boundaries.
-        assert self.chosenCipherSuite,"Cannot expand ssl keys without a chosen cipher suite."
+        assert self.chosen_cipher_suite,"Cannot expand ssl keys without a chosen cipher suite."
 
-        keyAccumulator = []
+        key_accumulator = []
         ctr=0
         for i in range(6):
-            keySize = self.cipherSuites[self.chosenCipherSuite][i+1]
+            keySize = self.cipher_suites[self.chosen_cipher_suite][i+1]
             if keySize == 0:
-                keyAccumulator.append(None)
+                key_accumulator.append(None)
             else:
-                keyAccumulator.append(keyExpansion[ctr:ctr+keySize])
+                key_accumulator.append(key_expansion[ctr:ctr+keySize])
             ctr += keySize
 
-        self.clientMacKey,self.serverMacKey,self.clientEncKey,self.serverEncKey,self.clientIV,self.serverIV = keyAccumulator
-        return bytearray('').join(filter(None,keyAccumulator))
+        self.client_mac_key,self.server_mac_key,self.client_enc_key,self.server_enc_key,self.clientIV,self.serverIV = key_accumulator
+        return bytearray('').join(filter(None,key_accumulator))
 
-    def getVerifyHMAC(self,sha_verify=None,md5_verify=None,half=1,isForClient=True):
+    def get_verify_hmac(self,sha_verify=None,md5_verify=None,half=1,is_for_client=True):
         '''returns only 12 bytes of hmac'''
-        label = 'client finished' if isForClient else 'server finished'
+        label = 'client finished' if is_for_client else 'server finished'
         seed = md5_verify + sha_verify
         if half==1:
-            return TLS10PRF(label+seed,req_bytes=12,first_half = self.masterSecretHalfAuditor)[0]
+            return tls_10_prf(label+seed,req_bytes=12,first_half = self.master_secret_half_auditor)[0]
         else:
-            return TLS10PRF(label+seed,req_bytes=12,second_half = self.masterSecretHalfAuditee)[1]
+            return tls_10_prf(label+seed,req_bytes=12,second_half = self.master_secret_half_auditee)[1]
 
-    def setHandshakeHashes(self):
-        assert self.encPMS
-        #TODO: This is a repetition of getCKECCSF. Obviously it should be got rid of.
+    def set_handshake_hashes(self):
+        assert self.enc_pms
+        #TODO: This is a repetition of get_cke_ccs_f. Obviously it should be got rid of.
         #I can't remember why it's necessary.
         #construct correct length bytes for CKE
-        epms_len = len(bi2ba(self.encPMS))
+        epms_len = len(bi2ba(self.enc_pms))
         b_epms_len = bi2ba(epms_len,fixed=2)
         hs_len = 2 + epms_len
         b_hs_len = bi2ba(hs_len,fixed=3)
         record_len = 6+epms_len
         b_record_len = bi2ba(record_len,fixed=2)
         #construct CKE
-        self.handshakeMessages[4] = hs + tlsver + b_record_len + h_cke + \
-            b_hs_len + b_epms_len + bi2ba(self.encPMS)
+        self.handshake_messages[4] = hs + tlsver + b_record_len + h_cke + \
+            b_hs_len + b_epms_len + bi2ba(self.enc_pms)
         #Change cipher spec NB, not a handshake message
-        self.handshakeMessages[5] = chcis + tlsver + bi2ba(1,fixed=2)+'\x01'
+        self.handshake_messages[5] = chcis + tlsver + bi2ba(1,fixed=2)+'\x01'
         
-        handshakeData = bytearray('').join([x[5:] for x in self.handshakeMessages[:5]])
-        self.handshakeHashSHA = sha1(handshakeData).digest()
-        self.handshakeHashMD5 = md5(handshakeData).digest()
+        handshake_data = bytearray('').join([x[5:] for x in self.handshake_messages[:5]])
+        self.handshake_hash_sha = sha1(handshake_data).digest()
+        self.handshake_hash_md5 = md5(handshake_data).digest()
     
-    def getServerHandshakeHashes(self):
-        handshakeData = bytearray('').join([x[5:] for x in self.handshakeMessages[:5]])
-        handshakeData += self.unencryptedClientFinished
-        return(sha1(handshakeData).digest(), md5(handshakeData).digest())
+    def get_server_handshake_hashes(self):
+        handshake_data = bytearray('').join([x[5:] for x in self.handshake_messages[:5]])
+        handshake_data += self.unencrypted_client_finished
+        return(sha1(handshake_data).digest(), md5(handshake_data).digest())
 
-    def getVerifyDataForFinished(self,sha_verify=None,md5_verify=None,half=1,providedPValue=None):
+    def get_verify_data_for_finished(self,sha_verify=None,md5_verify=None,half=1,provided_p_value=None):
         if not (sha_verify and md5_verify):
-            sha_verify, md5_verify = self.handshakeHashSHA, self.handshakeHashMD5
+            sha_verify, md5_verify = self.handshake_hash_sha, self.handshake_hash_md5
 
-        if not providedPValue:
+        if not provided_p_value:
             #we calculate the verify data from the raw handshake messages
-            if self.handshakeMessages[:6] != filter(None,self.handshakeMessages[:6]):
-                print ('Here are the handshake messages: ',[str(x) for x in self.handshakeMessages[:6]])
+            if self.handshake_messages[:6] != filter(None,self.handshake_messages[:6]):
+                print ('Here are the handshake messages: ',[str(x) for x in self.handshake_messages[:6]])
                 raise Exception('Handshake data was not complete, could not calculate verify data')
             label = 'client finished'
             seed = md5_verify + sha_verify
-            ms = self.masterSecretHalfAuditor+self.masterSecretHalfAuditee
+            ms = self.master_secret_half_auditor+self.master_secret_half_auditee
             #we don't store the verify data locally, just return it
-            return TLS10PRF(label+seed,req_bytes=12,full_secret=ms)[2]
+            return tls_10_prf(label+seed,req_bytes=12,full_secret=ms)[2]
 
         #we calculate based on provided hmac by the other party
-        return xor(providedPValue[:12],self.getVerifyHMAC(sha_verify=sha_verify,md5_verify=md5_verify,half=half))
+        return xor(provided_p_value[:12],self.get_verify_hmac(sha_verify=sha_verify,md5_verify=md5_verify,half=half))
 
-    def buildRequest(self, cleartext):
+    def build_request(self, cleartext):
         '''Constructs the raw bytes to send over TCP
         for a given client request. Implicitly the request
         will be less than 16kB and therefore only 1 SSL record.
         This can in principle be used more than once.'''
         bytes_to_send = appd+tlsver #app data, tls version
 
-        record_mac = self.buildRecordMac(False,cleartext,appd)
+        record_mac = self.build_record_mac(False,cleartext,appd)
         cleartext += record_mac
-        if self.chosenCipherSuite in [4,5]:
-            ciphertext, self.clientRC4State = RC4crypt(bytearray(cleartext),self.clientEncKey,self.clientRC4State)
-        elif self.chosenCipherSuite in [47,53]:
-            cleartextList = map(ord,cleartext)
-            #clientEncList = map(ord,self.clientEncKey)
-            clientEncList = bi2ba(ba2int(self.clientEncKey))
-            padding = getCBCPadding(len(cleartextList))
-            paddedCleartext = bytearray(cleartextList) + padding
-            key_size = self.cipherSuites[self.chosenCipherSuite][3]
+        if self.chosen_cipher_suite in [4,5]:
+            ciphertext, self.client_rc4_state = rc4_crypt(bytearray(cleartext),self.client_enc_key,self.client_rc4_state)
+        elif self.chosen_cipher_suite in [47,53]:
+            cleartext_list = map(ord,cleartext)
+            #client_enc_list = map(ord,self.client_enc_key)
+            client_enc_list = bi2ba(ba2int(self.client_enc_key))
+            padding = get_cbc_padding(len(cleartext_list))
+            padded_cleartext = bytearray(cleartext_list) + padding
+            key_size = self.cipher_suites[self.chosen_cipher_suite][3]
             moo = AESModeOfOperation()
-            mode, origLen, ciphertext = \
-            moo.encrypt(str(paddedCleartext), moo.modeOfOperation['CBC'], \
-            clientEncList, key_size , self.lastClientCiphertextBlock)
+            mode, orig_len, ciphertext = \
+            moo.encrypt(str(padded_cleartext), moo.modeOfOperation['CBC'], \
+            client_enc_list, key_size , self.last_client_ciphertext_block)
         else:
-            raise Exception ("Error, unrecognized cipher suite in buildRequest")
+            raise Exception ("Error, unrecognized cipher suite in build_request")
 
         cpt_len = bi2ba(len(ciphertext),fixed=2)
         bytes_to_send += cpt_len + bytearray(ciphertext)
         #just in case we plan to send more data,
         #update the client ssl state
-        self.clientSeqNo += 1
-        self.lastClientCiphertextBlock = ciphertext[-16:]
+        self.client_seq_no += 1
+        self.last_client_ciphertext_block = ciphertext[-16:]
         return bytes_to_send
 
-    def buildRecordMac(self, isFromServer, cleartext, recordType):
+    def build_record_mac(self, is_from_server, cleartext, record_type):
         '''Note: the fragment should be the cleartext of the record
         before mac and pad; but for handshake messages there is a header
         to the fragment, of the form (handshake type), 24 bit length.'''
-        mac_algo = md5 if self.chosenCipherSuite == 4 else sha1
+        mac_algo = md5 if self.chosen_cipher_suite == 4 else sha1
         
-        seqNo = self.serverSeqNo if isFromServer else self.clientSeqNo
+        seq_no = self.server_seq_no if is_from_server else self.client_seq_no
         #build sequence number bytes; 64 bit integer #TODO make this tidier
-        seqByteList = bigint_to_list(seqNo)
-        seqByteList = [0]*(8-len(seqByteList)) + seqByteList
-        seqNoBytes = ''.join(map(chr,seqByteList))
-        macKey = self.serverMacKey if isFromServer else self.clientMacKey
-        if not macKey:
+        seq_byte_list = bigint_to_list(seq_no)
+        seq_byte_list = [0]*(8-len(seq_byte_list)) + seq_byte_list
+        seq_no_bytes = ''.join(map(chr,seq_byte_list))
+        mac_key = self.server_mac_key if is_from_server else self.client_mac_key
+        if not mac_key:
             raise Exception("Failed to build mac; mac key is missing")
         fragment_len = bi2ba(len(cleartext),fixed=2)    
-        record_mac = hmac.new(macKey,seqNoBytes + recordType + \
+        record_mac = hmac.new(mac_key,seq_no_bytes + record_type + \
                     tlsver+fragment_len + cleartext, mac_algo).digest()
         return record_mac
 
-    def getCKECCSF(self,providedPValue = None):
+    def get_cke_ccs_f(self,provided_p_value = None):
         '''sets the handshake messages change cipher spec and finished,
         and returns the three final handshake messages client key exchange,
         change cipher spec and finished.
-        If providedPValue is non null, it means the caller does not have
+        If provided_p_value is non null, it means the caller does not have
         access to the full master secret, and is providing the pvalue to be
-        passed into getVerifyDataForFinished.'''
-        assert self.encPMS
-        assert self.handshakeMessages[4] #cke
-        assert self.handshakeMessages[5] #ccs
+        passed into get_verify_data_for_finished.'''
+        assert self.enc_pms
+        assert self.handshake_messages[4] #cke
+        assert self.handshake_messages[5] #ccs
         #CKE and CCS were already prepared earlier
         #start processing for Finished
-        if providedPValue:
-            verifyData = self.getVerifyDataForFinished(providedPValue=providedPValue,half=2)
+        if provided_p_value:
+            verify_data = self.get_verify_data_for_finished(provided_p_value=provided_p_value,half=2)
         else:
-            verifyData = self.getVerifyDataForFinished()
-        assert verifyData,'Verify data was null'
+            verify_data = self.get_verify_data_for_finished()
+        assert verify_data,'Verify data was null'
 
         #HMAC and encrypt the verify_data
         hs_header = h_fin + bi2ba(12,fixed=3)
-        hmacVerify = self.buildRecordMac(False,hs_header + verifyData,hs)
-        cleartext = hs_header + verifyData + hmacVerify
-        self.unencryptedClientFinished = hs_header + verifyData
-        assert self.chosenCipherSuite in self.cipherSuites.keys(), "invalid cipher suite"
-        if self.chosenCipherSuite in [4,5]:
-            hmacedVerifyData, self.clientRC4State = RC4crypt(cleartext,self.clientEncKey)
-        elif self.chosenCipherSuite in [47,53]:
-            cleartextList,clientEncList,clientIVList = \
-                [map(ord,str(x)) for x in [cleartext,self.clientEncKey,self.clientIV]]
-            paddedCleartext = cleartext + getCBCPadding(len(cleartext))
+        hmac_verify = self.build_record_mac(False,hs_header + verify_data,hs)
+        cleartext = hs_header + verify_data + hmac_verify
+        self.unencrypted_client_finished = hs_header + verify_data
+        assert self.chosen_cipher_suite in self.cipher_suites.keys(), "invalid cipher suite"
+        if self.chosen_cipher_suite in [4,5]:
+            hmaced_verify_data, self.client_rc4_state = rc4_crypt(cleartext,self.client_enc_key)
+        elif self.chosen_cipher_suite in [47,53]:
+            cleartext_list,client_enc_list,client_iv_list = \
+                [map(ord,str(x)) for x in [cleartext,self.client_enc_key,self.clientIV]]
+            padded_cleartext = cleartext + get_cbc_padding(len(cleartext))
             moo = AESModeOfOperation()
-            mode, origLen, hmacedVerifyData = \
-            moo.encrypt( str(paddedCleartext), moo.modeOfOperation['CBC'], \
-                         clientEncList, len(self.clientEncKey), clientIVList)
-            self.lastClientCiphertextBlock = hmacedVerifyData[-16:]
+            mode, orig_len, hmaced_verify_data = \
+            moo.encrypt( str(padded_cleartext), moo.modeOfOperation['CBC'], \
+                         client_enc_list, len(self.client_enc_key), client_iv_list)
+            self.last_client_ciphertext_block = hmaced_verify_data[-16:]
 
-        self.clientSeqNo += 1
-        self.handshakeMessages[6] = hs + tlsver + bi2ba(len(hmacedVerifyData),fixed=2) \
-            + bytearray(hmacedVerifyData)
-        return bytearray('').join(self.handshakeMessages[4:])
+        self.client_seq_no += 1
+        self.handshake_messages[6] = hs + tlsver + bi2ba(len(hmaced_verify_data),fixed=2) \
+            + bytearray(hmaced_verify_data)
+        return bytearray('').join(self.handshake_messages[4:])
 
-    def processServerCCSFinished(self, data, providedPValue):
+    def process_server_ccs_finished(self, data, provided_p_value):
         if data[:6] != chcis + tlsver + bi2ba(1,fixed=2)+'\x01':
             print ("Got response:",binascii.hexlify(data))
             raise Exception("Server CCSFinished did not contain CCS")
-        self.serverFinished = data[6:]
-        assert self.serverFinished[:3] == hs+tlsver,"Server CCSFinished does not contain Finished"
-        recordLen = ba2int(self.serverFinished[3:5])
-        assert recordLen == len(self.serverFinished[5:]), "unexpected data at end of server finished."
+        self.server_finished = data[6:]
+        assert self.server_finished[:3] == hs+tlsver,"Server CCSFinished does not contain Finished"
+        record_len = ba2int(self.server_finished[3:5])
+        assert record_len == len(self.server_finished[5:]), "unexpected data at end of server finished."
         #For CBC only: because the verify data is 12 bytes and the handshake header
         #is a further 4, and the mac is another 20, we have 36 bytes, meaning
         #that the padding is 12 bytes long, making a total of 48 bytes record length
-        if recordLen != 48 and self.chosenCipherSuite in [47,53]:
-            raise Exception("Server Finished record record length should be 48, is: ",recordLen)
+        if record_len != 48 and self.chosen_cipher_suite in [47,53]:
+            raise Exception("Server Finished record record length should be 48, is: ",record_len)
         
         #decrypt:
-        if self.chosenCipherSuite in [4,5]:
-            decrypted,self.serverRC4State = RC4crypt(bytearray(self.serverFinished[5:5+recordLen]),self.serverEncKey) #box is null for first record
-        elif self.chosenCipherSuite in [47,53]:
-            ciphertextList,serverEncList,serverIVList = \
-                [map(ord,x) for x in [self.serverFinished[5:5+recordLen],str(self.serverEncKey),str(self.serverIV)]]
+        if self.chosen_cipher_suite in [4,5]:
+            decrypted,self.server_rc4_state = rc4_crypt(bytearray(self.server_finished[5:5+record_len]),self.server_enc_key) #box is null for first record
+        elif self.chosen_cipher_suite in [47,53]:
+            ciphertext_list,server_enc_list,server_iv_list = \
+                [map(ord,x) for x in [self.server_finished[5:5+record_len],str(self.server_enc_key),str(self.serverIV)]]
             moo = AESModeOfOperation()
-            key_size = self.cipherSuites[self.chosenCipherSuite][4]
-            decrypted = moo.decrypt(ciphertextList,recordLen,moo.modeOfOperation['CBC'],serverEncList,key_size,serverIVList)
+            key_size = self.cipher_suites[self.chosen_cipher_suite][4]
+            decrypted = moo.decrypt(ciphertext_list,record_len,moo.modeOfOperation['CBC'],server_enc_list,key_size,server_iv_list)
             #for CBC, unpad
-            decrypted = cbcUnpad(decrypted)
+            decrypted = cbc_unpad(decrypted)
                 
-        #strip the mac (NB The mac cannot be checked, as in tlsnotary, the serverMacKey
+        #strip the mac (NB The mac cannot be checked, as in tlsnotary, the server_mac_key
         #is garbage until after the commitment. This mac check occurs in 
-        #processServerAppDataRecords)
-        hash_len = sha1_hash_len if self.chosenCipherSuite in [5,47,53] else md5_hash_len
+        #process_server_app_data_records)
+        hash_len = sha1_hash_len if self.chosen_cipher_suite in [5,47,53] else md5_hash_len
         received_mac = decrypted[-hash_len:]
         plaintext = decrypted[:-hash_len]
         
         #check the finished message header
         assert plaintext[:4] == h_fin+bi2ba(12,fixed=3), "The server Finished verify data is invalid"
         #Verify the verify data
-        verifyData = plaintext[4:]
-        sha_verify,md5_verify = self.getServerHandshakeHashes()
+        verify_data = plaintext[4:]
+        sha_verify,md5_verify = self.get_server_handshake_hashes()
         if len(plaintext[4:]) != 12:
             print ("Wrong length of plaintext")
-        verifyDataCheck = xor(providedPValue,\
-                            self.getVerifyHMAC(sha_verify=sha_verify,md5_verify=md5_verify,half=2,isForClient=False))
-        assert verifyData == verifyDataCheck, "Server Finished record verify data is not valid."
+        verify_data_check = xor(provided_p_value,\
+                            self.get_verify_hmac(sha_verify=sha_verify,md5_verify=md5_verify,half=2,is_for_client=False))
+        assert verify_data == verify_data_check, "Server Finished record verify data is not valid."
         #now the server finished is verified (except mac), we store
         #the plaintext of the message for later mac check 
         #(after auditor has passed server mac key)
-        self.decryptedServerFinished = (plaintext,received_mac)
+        self.decrypted_server_finished = (plaintext,received_mac)
         #necessary for CBC
-        self.lastServerCiphertextBlock = self.serverFinished[-16:]
+        self.last_server_ciphertext_block = self.server_finished[-16:]
         return True
 
-    def storeServerAppDataRecords(self, response):
+    def store_server_app_data_records(self, response):
         self.serverAppDataRecords = response
         #extract the ciphertext from the raw records as a list
         #for maximum flexibility in decryption
@@ -638,31 +638,31 @@ class TLSNSSLClientSession(object):
                     print ("Got encrypted alert, done")
                     break
                 raise Exception('Invalid TLS Header for App Data record')
-            recordLen = ba2int(response[3:5])
-            if self.chosenCipherSuite in [47,53] and recordLen %16: 
+            record_len = ba2int(response[3:5])
+            if self.chosen_cipher_suite in [47,53] and record_len %16: 
                 raise Exception('Invalid ciphertext length for App Data')
-            one_record = response[5:5+recordLen]
-            if len(one_record) != recordLen:
+            one_record = response[5:5+record_len]
+            if len(one_record) != record_len:
                 #TODO - we may want to rerun the audit for this page
                 raise Exception ('Invalid record length')
-            self.serverResponseCiphertexts.append(one_record)
+            self.server_response_ciphertexts.append(one_record)
             #prepare for next record, if there is one:
-            if len(response) == 5+len(self.serverResponseCiphertexts[-1]):
+            if len(response) == 5+len(self.server_response_ciphertexts[-1]):
                 break
-            response = response[5+recordLen:]
-        print ("We got this many record ciphertexts:",len(self.serverResponseCiphertexts))
+            response = response[5+record_len:]
+        print ("We got this many record ciphertexts:",len(self.server_response_ciphertexts))
 
 
 #used only during testing. Get ciphertexts which will be shipped off to browser
 #for AES decryption
     def getCiphertexts(self):
-        assert len(self.serverResponseCiphertexts),"Could not process the server response, no ciphertext found."
-        if not self.chosenCipherSuite in [47,53]: #AES-CBC
+        assert len(self.server_response_ciphertexts),"Could not process the server response, no ciphertext found."
+        if not self.chosen_cipher_suite in [47,53]: #AES-CBC
             raise Exception("non-AES cipher suite.")                    
         ciphertexts = [] #each item contains a tuple (ciphertext, encryption_key, iv)
-        for ciphertext in self.serverResponseCiphertexts:
-            ciphertexts.append( (ciphertext, self.serverEncKey, self.lastServerCiphertextBlock) )
-            self.lastServerCiphertextBlock = ciphertext[-16:] #ready for next record
+        for ciphertext in self.server_response_ciphertexts:
+            ciphertexts.append( (ciphertext, self.server_enc_key, self.last_server_ciphertext_block) )
+            self.last_server_ciphertext_block = ciphertext[-16:] #ready for next record
         return ciphertexts
 
 
@@ -672,10 +672,10 @@ class TLSNSSLClientSession(object):
         mac_stripped_plaintext = ''
         for idx,raw_plaintext in enumerate(plaintexts):
             #need correct sequence number for macs            
-            self.serverSeqNo += 1
-            hash_len = sha1_hash_len if self.chosenCipherSuite in [5,47,53] else md5_hash_len
+            self.server_seq_no += 1
+            hash_len = sha1_hash_len if self.chosen_cipher_suite in [5,47,53] else md5_hash_len
             received_mac = raw_plaintext[-hash_len:]
-            check_mac = self.buildRecordMac(True,raw_plaintext[:-hash_len],appd)
+            check_mac = self.build_record_mac(True,raw_plaintext[:-hash_len],appd)
             if received_mac != check_mac:
                 raise Exception ("Warning, record mac check failed. in index:" + str(idx))
             mac_stripped_plaintext += raw_plaintext[:-hash_len]
@@ -683,8 +683,8 @@ class TLSNSSLClientSession(object):
         
         
  
-    def processServerAppDataRecords(self,checkFinished=False):
-        '''Using the encrypted records in self.serverResponseCiphertexts, 
+    def process_server_app_data_records(self,checkFinished=False):
+        '''Using the encrypted records in self.server_response_ciphertexts, 
         containing the response from
         the server to a GET or POST request (the *first* request after
         the handshake), this function will process the response one record
@@ -693,45 +693,45 @@ class TLSNSSLClientSession(object):
         along with the number of record mac failures (more than zero means
         the response is unauthenticated/corrupted).
         Notes:
-        self.serverSeqNo should be set to zero before executing this function.
+        self.server_seq_no should be set to zero before executing this function.
         This will occur by default if the session object has not undergone
         any handshake, or if it has undergone a handshake, so no intervention
         should, in theory, be required.'''
         bad_record_mac = 0
         if checkFinished:
             #before beginning, we must authenticate the server finished
-            check_mac = self.buildRecordMac(True,self.decryptedServerFinished[0],hs)
-            if self.decryptedServerFinished[1] != check_mac:
+            check_mac = self.build_record_mac(True,self.decrypted_server_finished[0],hs)
+            if self.decrypted_server_finished[1] != check_mac:
                 print ("Warning, record mac check failed from server Finished message.")
                 bad_record_mac += 1
                 return None        #TODO - exception here?        
         plaintext = ''
         
-        assert len(self.serverResponseCiphertexts),"Could not process the server response, no ciphertext found."
+        assert len(self.server_response_ciphertexts),"Could not process the server response, no ciphertext found."
         
-        for ciphertext in self.serverResponseCiphertexts:
+        for ciphertext in self.server_response_ciphertexts:
             #need correct sequence number for macs
-            self.serverSeqNo += 1
-            if self.chosenCipherSuite in [4,5]: #RC4
-                raw_plaintext, self.serverRC4State = RC4crypt(bytearray(ciphertext),self.serverEncKey,\
-                                                            self.serverRC4State)
-            elif self.chosenCipherSuite in [47,53]: #AES-CBC
-                ciphertextList,serverEncList,serverIVList = \
-                    [map(ord,x) for x in [ciphertext,str(self.serverEncKey),self.lastServerCiphertextBlock]]
+            self.server_seq_no += 1
+            if self.chosen_cipher_suite in [4,5]: #RC4
+                raw_plaintext, self.server_rc4_state = rc4_crypt(bytearray(ciphertext),self.server_enc_key,\
+                                                            self.server_rc4_state)
+            elif self.chosen_cipher_suite in [47,53]: #AES-CBC
+                ciphertext_list,server_enc_list,server_iv_list = \
+                    [map(ord,x) for x in [ciphertext,str(self.server_enc_key),self.last_server_ciphertext_block]]
                 moo = AESModeOfOperation()
-                key_size = self.cipherSuites[self.chosenCipherSuite][4]
-                raw_plaintext = moo.decrypt(ciphertextList,len(ciphertextList),\
-                                moo.modeOfOperation['CBC'],serverEncList,key_size,serverIVList)
+                key_size = self.cipher_suites[self.chosen_cipher_suite][4]
+                raw_plaintext = moo.decrypt(ciphertext_list,len(ciphertext_list),\
+                                moo.modeOfOperation['CBC'],server_enc_list,key_size,server_iv_list)
                 #unpad (and verify padding)
-                raw_plaintext = cbcUnpad(raw_plaintext)
-                self.lastServerCiphertextBlock = ciphertext[-16:] #ready for next record
+                raw_plaintext = cbc_unpad(raw_plaintext)
+                self.last_server_ciphertext_block = ciphertext[-16:] #ready for next record
             else:
                 raise Exception("Unrecognized cipher suite.")
 
             #mac check
-            hash_len = sha1_hash_len if self.chosenCipherSuite in [5,47,53] else md5_hash_len
+            hash_len = sha1_hash_len if self.chosen_cipher_suite in [5,47,53] else md5_hash_len
             received_mac = raw_plaintext[-hash_len:]
-            check_mac = self.buildRecordMac(True,raw_plaintext[:-hash_len],appd)
+            check_mac = self.build_record_mac(True,raw_plaintext[:-hash_len],appd)
             if received_mac != check_mac:
                 raise Exception ("Warning, record mac check failed.")
                 #bad_record_mac += 1
@@ -739,26 +739,26 @@ class TLSNSSLClientSession(object):
 
         return (plaintext, bad_record_mac)
 
-    def completeHandshake(self, rsapms2):
+    def complete_handshake(self, rsapms2):
         '''Called from prepare_pms(). For auditee only,
         who passes the second half of the encrypted
         PMS product (see TLSNotary.pdf under documentation).'''
-        self.extractCertificate()
-        self.extractModAndExp()
-        self.setAuditeeSecret()
-        self.setMasterSecretHalf() #default values means full MS created
-        self.doKeyExpansion()
-        self.encSecondHalfPMS = ba2int(rsapms2)
-        self.setEncFirstHalfPMS()
-        self.setEncryptedPMS()
-        self.setHandshakeHashes()         
-        return self.getCKECCSF()
+        self.extract_certificate()
+        self.extract_mod_and_exp()
+        self.set_auditee_secret()
+        self.set_master_secret_half() #default values means full MS created
+        self.do_key_expansion()
+        self.enc_second_half_pms = ba2int(rsapms2)
+        self.set_enc_first_half_pms()
+        self.set_encrypted_pms()
+        self.set_handshake_hashes()         
+        return self.get_cke_ccs_f()
         
-def getCBCPadding(data_length):
+def get_cbc_padding(data_length):
     req_padding = 16 - data_length % 16
     return chr(req_padding-1) * req_padding
 
-def cbcUnpad(pt):
+def cbc_unpad(pt):
     '''Given binary string pt, return
     unpadded string, raise fatal exception
     if padding format is not valid'''
@@ -768,7 +768,7 @@ def cbcUnpad(pt):
         raise Exception ("Invalid CBC padding.")
     return pt[:-(padLen+1)]    
                     
-def RC4crypt(data, key, state=None):
+def rc4_crypt(data, key, state=None):
     """RC4 algorithm.
     Symmetric, so performs encryption and decryption
     'state', if passed, is a tuple of three values,
@@ -796,7 +796,7 @@ def RC4crypt(data, key, state=None):
     out_state = (box, x, y)
     return (''.join(out), out_state )
 
-def TLS10PRF(seed, req_bytes = 48, first_half=None,second_half=None,full_secret=None):
+def tls_10_prf(seed, req_bytes = 48, first_half=None,second_half=None,full_secret=None):
     '''
     Calculates all or part of the pseudo random function PRF
     as defined in the TLS 1.0 RFC 2246 Section 5. If only first_half or
@@ -962,38 +962,38 @@ class TLSNSSLClientSession_Paillier(TLSNSSLClientSession):
         super(TLSNSSLClientSession_Paillier, self).__init__(server, port, ccs)
         #prepare the secrets right away. Depending on who will be using this class - 
         #auditee or auditor, accordingly secrets will be used
-        self.auditeeSecret = os.urandom(22)
-        self.auditeePaddingSecret = random_non_zero(103)
-        self.auditeePaddedRSAHalf = '\x02' + self.auditeePaddingSecret + '\x00'*102 + '\x00\x03\x01' + self.auditeeSecret + '\x00'*24        
+        self.auditee_secret = os.urandom(22)
+        self.auditee_padding_secret = random_non_zero(103)
+        self.auditee_padded_rsa_half = '\x02' + self.auditee_padding_secret + '\x00'*102 + '\x00\x03\x01' + self.auditee_secret + '\x00'*24        
         
-        self.auditorSecret = os.urandom(24)
-        self.auditorPaddingSecret = random_non_zero(102)
-        self.auditorPaddedRSAHalf = self.auditorPaddingSecret + '\x00'*25 + self.auditorSecret
+        self.auditor_secret = os.urandom(24)
+        self.auditor_padding_secret = random_non_zero(102)
+        self.auditor_padded_rsa_half = self.auditor_padding_secret + '\x00'*25 + self.auditor_secret
     
     #overriden
-    def setAuditeeSecret(self):
+    def set_auditee_secret(self):
         '''Sets up the auditee's half of the preparatory
         secret material to create the master secret.'''
-        assert self.clientRandom and self.serverRandom,"one of client or server random not set"
+        assert self.client_random and self.server_random,"one of client or server random not set"
         label = 'master secret'
-        seed = self.clientRandom + self.serverRandom
-        pms1 = '\x03\x01'+ self.auditeeSecret
-        self.pAuditee = TLS10PRF(label+seed,first_half = pms1)[0]
+        seed = self.client_random + self.server_random
+        pms1 = '\x03\x01'+ self.auditee_secret
+        self.p_auditee = tls_10_prf(label+seed,first_half = pms1)[0]
         #encrypted PMS has already been calculated before the audit began
-        return (self.pAuditee)
+        return (self.p_auditee)
     
     #overriden
-    def setAuditorSecret(self):
+    def set_auditor_secret(self):
         '''Sets up the auditor's half of the preparatory
         secret material to create the master secret, and
         the encrypted premaster secret.
-        'secret' should be a bytearray of length nAuditorEntropy'''
-        assert (self.clientRandom and self.serverRandom), "one of client or server random not set"
+        'secret' should be a bytearray of length n_auditor_entropy'''
+        assert (self.client_random and self.server_random), "one of client or server random not set"
         label = 'master secret'
-        seed = self.clientRandom + self.serverRandom
-        pms2 = self.auditorSecret
-        self.pAuditor = TLS10PRF(label+seed,second_half = pms2)[1]
-        return (self.pAuditor)    
+        seed = self.client_random + self.server_random
+        pms2 = self.auditor_secret
+        self.p_auditor = tls_10_prf(label+seed,second_half = pms2)[1]
+        return (self.p_auditor)    
 
       
 class Paillier_scheme_auditor():
@@ -1102,8 +1102,8 @@ class Paillier_scheme_auditee():
     
     def do_ninth_round(self, PSum):
         A = ba2int(self.padded_RSA_half)
-        encPMS = (self.P.decrypt(PSum) + (A * self.X)) % self.N
-        return encPMS 
+        enc_pms = (self.P.decrypt(PSum) + (A * self.X)) % self.N
+        return enc_pms 
         
         
             
