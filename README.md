@@ -1,18 +1,23 @@
-TLSNotary Overview
+TLSNotary project
 ==================
 
-1. [For the generally curious - a FAQ](/data/documentation/TLSNotaryFAQ.md)
-2. [How to install and run](#how-to-install-and-run)
-2. [User Guide](#user-guide) and in detail, for auditor: [Auditor Guide](/data/documentation/AuditorGuide.md).
-3. [Video version of the above](https://www.youtube.com/watch?v=kKdEhuiXYz4&list=PLnSCooZY6_w9j5tQ8jAeZtrl9l4NnL48G&index=3) for a more hands-on education style.
-5. [Algorithm white paper](/data/documentation/TLSNotary.pdf)  (here be dragons). Discussion of algorithm in [video](https://www.youtube.com/watch?v=b4ukd4I8S9A&list=PLnSCooZY6_w9j5tQ8jAeZtrl9l4NnL48G&index=2).
-5. [Peer messaging protocol spec](/data/documentation/TLSNotary_messaging.md) - technical details of auditor/auditee communication.
+1. [FAQ](/data/documentation/TLSNotaryFAQ.md)
+2. [Installation](#how-to-install-and-run)
+2. [User guide for auditee](#user-guide)
+2. [User guide for auditor](/data/documentation/AuditorGuide.md)
+3. [User guide (video)](https://www.youtube.com/watch?v=kKdEhuiXYz4&list=PLnSCooZY6_w9j5tQ8jAeZtrl9l4NnL48G&index=3)
+5. [Algorithm white paper](/data/documentation/TLSNotary.pdf)
+5. [Algorithm discussion (video)](https://www.youtube.com/watch?v=b4ukd4I8S9A&list=PLnSCooZY6_w9j5tQ8jAeZtrl9l4NnL48G&index=2)
+5. [Peer messaging protocol specification](/data/documentation/TLSNotary_messaging.md) - technical details of auditor/auditee communication
 
 
-###Really, really short version: ###
+###Introduction###
 
-TLSNotary is a browser add-on which allows you (the auditee) to prove to the auditor that a certain HTTPS page is present in your browser, without compromising your internet connection, passwords, credentials or anything else. This can be used e.g. when you must prove to the auditor that you made a bank transfer.
-What makes TLSNotary unique is that it does not use MITM (man-in-the-middle) approach but relies on SSL/TLS cryptography only.
+TLSNotary is a browser add-on which allows you (the auditee) to prove to the auditor that a certain HTTPS page is present in a web browser, without compromising your internet connection, passwords or credentials. TLSNotary can be used e.g. to prove to the auditor that you made an online bank transfer.
+
+TLSNotary does not do man-in-the-middle snooping, but relies on SSL/TLS cryptography. TLSNotary page captures are non-forgeable.
+
+![](/data/documentation/walkthrough_diagram_simplified.svg)
 
 ##How to install and run##
 
@@ -31,7 +36,7 @@ If you were successful you should see a new Firefox window (separate from any ex
 
 ![](/data/documentation/startwindow.png)
 
-##User guide.##
+##User guide##
 
 *This is a guide for a user who is to be audited. The guide for auditors is* [here](/data/documentation/AuditorGuide.md).
 
@@ -54,7 +59,7 @@ Notice two things: "Page decryption successful" in the status bar, and that a ne
 Once you're satisfied on these two points, you can click 'FINISH'. Note: in self-test mode, you are only "auditing yourself", so **no one else will see the data at this stage**. After a few seconds, you should see a message saying "Congratulations, the audit has acknowledged..." etc. This means the audit is succcessfully completed. Go to `tlsnotary/data/auditor/sessions/[session timestamp]/decrypted` and in that folder, you should see a decrypted copy of your chosen audited html page. It should be identical to what you see in the Firefox browser, as well as what's stored in `tlsnotary/data/auditee/sessions/[session timestamp]/commit`.
 
 ###Logging out###
-An important security step for a real audit; but, you **must** know in advance that it will work, so you **must** do it in self-test first. 
+An important security step for a real audit; but, you **must** know in advance that it will work, so you **must** do it in self-test first.
 
 In case the server is providing cookies (or equivalent session preserving data) in the response which you're about to send to the auditor, you don't want to give the auditor (even though they ought to be trustworthy for obvious reasons) any information that might let them login to your account, even temporarily. There is a simple solution. Follow these steps (in self-test and real audits):
 

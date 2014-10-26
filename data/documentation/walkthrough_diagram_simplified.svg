@@ -14,7 +14,7 @@
    id="svg2"
    version="1.1"
    inkscape:version="0.48.2 r9819"
-   sodipodi:docname="walkthrough_diagram_simplified.svg">
+   sodipodi:docname="walkthrough_diagram_simplified.png">
   <defs
      id="defs4">
     <marker
@@ -58,9 +58,9 @@
      borderopacity="1.0"
      inkscape:pageopacity="0.0"
      inkscape:pageshadow="2"
-     inkscape:zoom="0.5"
-     inkscape:cx="452.04724"
-     inkscape:cy="316.54137"
+     inkscape:zoom="2"
+     inkscape:cx="217.48299"
+     inkscape:cy="683.68004"
      inkscape:document-units="px"
      inkscape:current-layer="layer1"
      showgrid="false"
@@ -437,20 +437,20 @@
        style="fill:#ffffff;fill-opacity:1;stroke:#000000;stroke-width:1.95067322;stroke-miterlimit:4.0999999;stroke-opacity:1;stroke-dasharray:none" />
     <text
        xml:space="preserve"
-       style="font-size:16px;font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;text-align:start;line-height:125%;letter-spacing:0px;word-spacing:0px;writing-mode:lr-tb;text-anchor:start;fill:#000000;fill-opacity:1;stroke:none;font-family:Ubuntu Condensed;-inkscape-font-specification:'Ubuntu Condensed,'"
-       x="122.36517"
+       style="font-size:16px;font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;text-align:center;line-height:125%;letter-spacing:0px;word-spacing:0px;writing-mode:lr-tb;text-anchor:middle;fill:#000000;fill-opacity:1;stroke:none;font-family:Ubuntu Condensed;-inkscape-font-specification:'Ubuntu Condensed,'"
+       x="172.36517"
        y="249.64485"
        id="text4544-8-4"
        sodipodi:linespacing="125%"><tspan
          sodipodi:role="line"
-         x="122.36517"
+         x="172.36517"
          y="249.64485"
-         style="font-size:16px;font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;text-align:start;line-height:125%;writing-mode:lr-tb;text-anchor:start;font-family:Ubuntu Condensed;-inkscape-font-specification:'Ubuntu Condensed,'"
-         id="tspan4677-3">Start TLS Notary</tspan><tspan
+         style="font-size:16px;font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;text-align:center;line-height:125%;writing-mode:lr-tb;text-anchor:middle;font-family:Ubuntu Condensed;-inkscape-font-specification:'Ubuntu Condensed,'"
+         id="tspan4677-3">Start TLSNotary</tspan><tspan
          sodipodi:role="line"
-         x="122.36517"
-         y="269.64487"
-         style="font-size:16px;font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;text-align:start;line-height:125%;writing-mode:lr-tb;text-anchor:start;font-family:Ubuntu Condensed;-inkscape-font-specification:'Ubuntu Condensed,'"
+         x="172.36517"
+         y="269.64484"
+         style="font-size:16px;font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;text-align:center;line-height:125%;writing-mode:lr-tb;text-anchor:middle;font-family:Ubuntu Condensed;-inkscape-font-specification:'Ubuntu Condensed,'"
          id="tspan5203">auditing software</tspan></text>
     <path
        style="fill:none;stroke:#000000;stroke-width:2;stroke-linecap:butt;stroke-linejoin:miter;stroke-miterlimit:4;stroke-opacity:1;stroke-dasharray:none;marker-end:url(#Arrow2Lend)"
@@ -564,7 +564,7 @@
          x="411.53049"
          y="481.37326"
          style="font-size:16px;font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;text-align:center;line-height:125%;writing-mode:lr-tb;text-anchor:middle;font-family:Ubuntu Condensed;-inkscape-font-specification:'Ubuntu Condensed,'"
-         id="tspan5272">All TLS except</tspan><tspan
+         id="tspan5272">All TLS keys except</tspan><tspan
          sodipodi:role="line"
          x="411.53049"
          y="501.37326"
