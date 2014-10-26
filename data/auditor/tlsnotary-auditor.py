@@ -325,13 +325,13 @@ class Handler(SimpleHTTPServer.SimpleHTTPRequestHandler):
     
     def respond(self, headers):
         # we need to adhere to CORS and add extra headers in server replies        
-            keys = [k for k in headers]
-            self.send_response(200)
-            self.send_header('Access-Control-Allow-Origin', '*')
-            self.send_header('Access-Control-Expose-Headers', ','.join(keys))
-            for key in headers:
-                self.send_header(key, headers[key])
-            self.end_headers()                    
+        keys = [k for k in headers]
+        self.send_response(200)
+        self.send_header('Access-Control-Allow-Origin', '*')
+        self.send_header('Access-Control-Expose-Headers', ','.join(keys))
+        for key in headers:
+            self.send_header(key, headers[key])
+        self.end_headers()                    
 
     def do_HEAD(self):                
         print ('minihttp received ' + self.path + ' request',end='\r\n')
@@ -431,7 +431,6 @@ def new_keypair():
     if not os.path.exists(os.path.join(datadir, 'recentkeys')): os.makedirs(os.path.join(datadir, 'recentkeys'))
     with open(os.path.join(datadir, 'recentkeys' , 'myprivkey'), 'w') as f: f.write(my_privkey_pem)
     with open(os.path.join(datadir, 'recentkeys', 'mypubkey'), 'w') as f: f.write(my_pubkey_pem)
-    my_pubkey = rsa.PublicKey.load_pkcs1(my_pubkey_pem)
     my_pubkey_export = base64.b64encode(shared.bi2ba(my_pub_key.n))
     return my_pubkey_export
 
@@ -472,6 +471,7 @@ def register_auditee_thread():
                         #and as a sanity check compare his pubkey with ours
                         assert rs_modulus_byte == shared.reliable_sites[domain_bytes][1].decode('hex'),\
                         "Auditee provided pubkey for : "+domain_bytes+ " did not match ours; investigate."
+                        assert 65537 == shared.ba2int(rs_exponent_byte) , "Public key exponent is not the standard 65537"
                         rs_choice = domain_bytes
                         print ('Auditee successfully verified')
                         b_is_auditee_registered = True
