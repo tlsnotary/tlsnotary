@@ -17,7 +17,7 @@ TLSNotary is a browser add-on which allows you (the auditee) to prove to the aud
 
 TLSNotary does not do man-in-the-middle snooping, but relies on SSL/TLS cryptography. TLSNotary page captures are non-forgeable.
 
-![](/data/documentation/walkthrough_diagram_simplified.svg)
+![](/data/documentation/walkthrough_diagram_simplified.png)
 
 ##How to install and run##
 
