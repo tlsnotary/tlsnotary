@@ -13,8 +13,8 @@
    height="1052.3622047"
    id="svg2"
    version="1.1"
-   inkscape:version="0.48.2 r9819"
-   sodipodi:docname="walkthrough_diagram_simplified.png">
+   inkscape:version="0.48.5 r10040"
+   sodipodi:docname="walkthrough_diagram_simplified.svg">
   <defs
      id="defs4">
     <marker
@@ -50,6 +50,34 @@
        inkscape:vp_y="0 : 1000 : 0"
        inkscape:vp_x="0 : 112.90748 : 1"
        sodipodi:type="inkscape:persp3d" />
+    <marker
+       inkscape:stockid="Arrow2Lend"
+       orient="auto"
+       refY="0"
+       refX="0"
+       id="Arrow2Lend-0"
+       style="overflow:visible">
+      <path
+         inkscape:connector-curvature="0"
+         id="path3779-6"
+         style="font-size:12px;fill-rule:evenodd;stroke-width:0.625;stroke-linejoin:round"
+         d="M 8.7185878,4.0337352 -2.2072895,0.01601326 8.7185884,-4.0017078 c -1.7454984,2.3720609 -1.7354408,5.6174519 -6e-7,8.035443 z"
+         transform="matrix(-1.1,0,0,-1.1,-1.1,0)" />
+    </marker>
+    <marker
+       inkscape:stockid="Arrow2Lend"
+       orient="auto"
+       refY="0"
+       refX="0"
+       id="Arrow2Lend-7"
+       style="overflow:visible">
+      <path
+         inkscape:connector-curvature="0"
+         id="path3779-3"
+         style="font-size:12px;fill-rule:evenodd;stroke-width:0.625;stroke-linejoin:round"
+         d="M 8.7185878,4.0337352 -2.2072895,0.01601326 8.7185884,-4.0017078 c -1.7454984,2.3720609 -1.7354408,5.6174519 -6e-7,8.035443 z"
+         transform="matrix(-1.1,0,0,-1.1,-1.1,0)" />
+    </marker>
   </defs>
   <sodipodi:namedview
      id="base"
@@ -58,16 +86,16 @@
      borderopacity="1.0"
      inkscape:pageopacity="0.0"
      inkscape:pageshadow="2"
-     inkscape:zoom="2"
-     inkscape:cx="217.48299"
-     inkscape:cy="683.68004"
+     inkscape:zoom="1"
+     inkscape:cx="413.04127"
+     inkscape:cy="403.68004"
      inkscape:document-units="px"
      inkscape:current-layer="layer1"
      showgrid="false"
-     inkscape:window-width="1867"
-     inkscape:window-height="1036"
-     inkscape:window-x="1440"
-     inkscape:window-y="0"
+     inkscape:window-width="1855"
+     inkscape:window-height="1056"
+     inkscape:window-x="65"
+     inkscape:window-y="24"
      inkscape:window-maximized="1"
      showguides="true"
      inkscape:guide-bbox="true">
@@ -77,7 +105,7 @@
        id="guide4647" />
     <sodipodi:guide
        orientation="0,1"
-       position="296.59736,119.13534"
+       position="302,40"
        id="guide5065" />
     <sodipodi:guide
        orientation="0,1"
@@ -92,7 +120,7 @@
         <dc:format>image/svg+xml</dc:format>
         <dc:type
            rdf:resource="http://purl.org/dc/dcmitype/StillImage" />
-        <dc:title></dc:title>
+        <dc:title />
       </cc:Work>
     </rdf:RDF>
   </metadata>
@@ -103,11 +131,11 @@
     <path
        inkscape:connector-curvature="0"
        id="path4199"
-       d="m 176.58946,209.83661 0,721.32358"
-       style="fill:none;stroke:#000000;stroke-width:3;stroke-linecap:butt;stroke-linejoin:miter;stroke-miterlimit:4.09999990000000025;stroke-opacity:1;stroke-dasharray:none;marker-end:url(#Arrow2Lend)" />
+       d="m 176.58946,209.83661 0,785.62853"
+       style="fill:none;stroke:#000000;stroke-width:3.13086843;stroke-linecap:butt;stroke-linejoin:miter;stroke-miterlimit:4.0999999;stroke-opacity:1;stroke-dasharray:none;marker-end:url(#Arrow2Lend)" />
     <path
-       style="fill:none;stroke:#000000;stroke-width:3;stroke-linecap:butt;stroke-linejoin:miter;stroke-miterlimit:4.0999999;stroke-opacity:1;stroke-dasharray:none;marker-end:url(#Arrow2Lend)"
-       d="m 408.40021,209.83661 0,723.39023"
+       style="fill:none;stroke:#000000;stroke-width:3.11618519;stroke-linecap:butt;stroke-linejoin:miter;stroke-miterlimit:4.0999999;stroke-opacity:1;stroke-dasharray:none;marker-end:url(#Arrow2Lend)"
+       d="m 408.40021,209.83661 0,780.50672"
        id="path4201"
        inkscape:connector-curvature="0" />
     <g
@@ -164,12 +192,12 @@
        id="rect4361"
        style="fill:#ffffff;fill-opacity:1;stroke:#000000;stroke-width:1.52515566;stroke-miterlimit:4.0999999;stroke-opacity:1;stroke-dasharray:none" />
     <rect
-       y="677.96759"
+       y="667.96759"
        x="305.00513"
-       height="42.12867"
+       height="29.885565"
        width="208.00273"
        id="rect4365"
-       style="fill:#ffffff;fill-opacity:1;stroke:#000000;stroke-width:1.68110538;stroke-miterlimit:4.0999999;stroke-opacity:1;stroke-dasharray:none" />
+       style="fill:#ffffff;fill-opacity:1;stroke:#000000;stroke-width:1.4159137;stroke-miterlimit:4.0999999;stroke-opacity:1;stroke-dasharray:none" />
     <g
        id="g4966"
        transform="matrix(0.48676192,0,0,0.48676192,293.37302,63.320105)">
@@ -321,8 +349,8 @@
     <path
        inkscape:connector-curvature="0"
        id="path4649"
-       d="m 599.34677,209.83663 0,721.75065"
-       style="fill:none;stroke:#000000;stroke-width:3;stroke-linecap:butt;stroke-linejoin:miter;stroke-miterlimit:4.0999999;stroke-opacity:1;stroke-dasharray:none;marker-end:url(#Arrow2Lend)" />
+       d="m 599.34677,209.83663 0,775.91924"
+       style="fill:none;stroke:#000000;stroke-width:3.11054087;stroke-linecap:butt;stroke-linejoin:miter;stroke-miterlimit:4.0999999;stroke-opacity:1;stroke-dasharray:none;marker-end:url(#Arrow2Lend)" />
     <text
        xml:space="preserve"
        style="font-size:16.42915535px;font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;text-align:center;line-height:125%;letter-spacing:0px;word-spacing:0px;writing-mode:lr-tb;text-anchor:middle;fill:#000000;fill-opacity:1;stroke:none;font-family:Ubuntu Condensed;-inkscape-font-specification:'Ubuntu Condensed,'"
@@ -335,12 +363,12 @@
          x="281.66571"
          y="417.50891"
          style="font-size:16.42915535px;font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;text-align:center;line-height:125%;writing-mode:lr-tb;text-anchor:middle;font-family:Ubuntu Condensed;-inkscape-font-specification:'Ubuntu Condensed,'"
-         id="tspan4677">TLS secret</tspan><tspan
+         id="tspan4677">TLS key</tspan><tspan
          sodipodi:role="line"
          x="281.66571"
          y="438.04535"
          style="font-size:16.42915535px;font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;text-align:center;line-height:125%;writing-mode:lr-tb;text-anchor:middle;font-family:Ubuntu Condensed;-inkscape-font-specification:'Ubuntu Condensed,'"
-         id="tspan5248">splitting</tspan></text>
+         id="tspan5248">generation</tspan></text>
     <path
        inkscape:connector-curvature="0"
        id="path4883"
@@ -351,13 +379,13 @@
        xml:space="preserve"
        style="font-size:16px;font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;text-align:start;line-height:125%;letter-spacing:0px;word-spacing:0px;writing-mode:lr-tb;text-anchor:start;fill:#000000;fill-opacity:1;stroke:none;font-family:Ubuntu Condensed;-inkscape-font-specification:'Ubuntu Condensed,'"
        x="353.74579"
-       y="760.62402"
+       y="747.59497"
        id="text4885"
        sodipodi:linespacing="125%"><tspan
          id="tspan4891"
          sodipodi:role="line"
          x="353.74579"
-         y="760.62402"
+         y="747.59497"
          style="font-size:16px;font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;text-align:start;line-height:125%;writing-mode:lr-tb;text-anchor:start;font-family:Ubuntu Condensed;-inkscape-font-specification:'Ubuntu Condensed,'">Log out</tspan></text>
     <flowRoot
        xml:space="preserve"
@@ -369,7 +397,7 @@
            height="60.407497"
            x="567.51251"
            y="661.3031" /></flowRegion><flowPara
-         id="flowPara4937"></flowPara></flowRoot>    <path
+         id="flowPara4937" /></flowRoot>    <path
        inkscape:connector-curvature="0"
        id="path4939"
        d="m 495.96088,370.91834 c -19.55767,0 -39.11532,0 -58.67299,0 -3.581,0 -7.16196,0 -10.74297,0 -1.10183,0 -2.20365,0 -3.30551,0 -0.82639,0 -1.6688,-0.1 -2.47914,0 -0.60398,0.0745 -1.0552,0.41762 -1.65276,0.50977 -0.85604,0.13202 -2.35794,0 -3.30551,0 -2.20368,0 -4.40737,0 -6.61105,0"
@@ -396,36 +424,36 @@
        style="fill:none;stroke:#000000;stroke-width:2;stroke-linecap:butt;stroke-linejoin:miter;stroke-miterlimit:4;stroke-opacity:1;stroke-dasharray:none;marker-end:url(#Arrow2Lend)" />
     <path
        style="fill:none;stroke:#000000;stroke-width:2;stroke-linecap:butt;stroke-linejoin:miter;stroke-miterlimit:4;stroke-opacity:1;stroke-dasharray:none;marker-end:url(#Arrow2Lend)"
-       d="m 514.10115,697.2715 c 17.9189,0 35.83779,0 53.75668,0 3.28094,0 6.56185,0 9.84279,0 1.00951,0 2.01901,0 3.02854,0 0.75714,0 1.52896,-0.1 2.2714,0 0.55338,0.0745 0.96679,0.41762 1.51428,0.50977 0.7843,0.13202 2.16036,0 3.02854,0 2.01903,0 4.03806,0 6.05709,0"
+       d="m 514.10115,683.2715 c 17.9189,0 35.83779,0 53.75668,0 3.28094,0 6.56185,0 9.84279,0 1.00951,0 2.01901,0 3.02854,0 0.75714,0 1.52896,-0.1 2.2714,0 0.55338,0.0745 0.96679,0.41762 1.51428,0.50977 0.7843,0.13202 2.16036,0 3.02854,0 2.01903,0 4.03806,0 6.05709,0"
        id="path5029"
        inkscape:connector-curvature="0" />
     <rect
-       style="fill:#ffffff;fill-opacity:1;stroke:#000000;stroke-width:2.09901237;stroke-miterlimit:4.0999999;stroke-opacity:1;stroke-dasharray:none"
+       style="fill:#ffffff;fill-opacity:1;stroke:#000000;stroke-width:1.8961997;stroke-miterlimit:4.0999999;stroke-opacity:1;stroke-dasharray:none"
        id="rect5047"
        width="208.00273"
-       height="65.677704"
+       height="53.59893"
        x="76.612053"
-       y="808.93524" />
+       y="891.01404" />
     <text
        xml:space="preserve"
        style="font-size:16px;font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;text-align:start;line-height:125%;letter-spacing:0px;word-spacing:0px;writing-mode:lr-tb;text-anchor:start;fill:#000000;fill-opacity:1;stroke:none;font-family:Ubuntu Condensed;-inkscape-font-specification:'Ubuntu Condensed,'"
-       x="181.53891"
-       y="836.24774"
+       x="177.53891"
+       y="914.24774"
        id="text5069"
        sodipodi:linespacing="125%"><tspan
          sodipodi:role="line"
-         x="181.53891"
-         y="836.24774"
+         x="177.53891"
+         y="914.24774"
          style="font-size:16px;font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;text-align:center;line-height:125%;writing-mode:lr-tb;text-anchor:middle;font-family:Ubuntu Condensed;-inkscape-font-specification:'Ubuntu Condensed,'"
-         id="tspan5088">Verify the server MAC and</tspan><tspan
+         id="tspan3173">Decrypt then inspect</tspan><tspan
          sodipodi:role="line"
-         x="181.53891"
-         y="856.24774"
+         x="177.53891"
+         y="934.24774"
          style="font-size:16px;font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;text-align:center;line-height:125%;writing-mode:lr-tb;text-anchor:middle;font-family:Ubuntu Condensed;-inkscape-font-specification:'Ubuntu Condensed,'"
-         id="tspan5869">inspect the page</tspan></text>
+         id="tspan3177">the HTML page</tspan></text>
     <path
        style="fill:none;stroke:#000000;stroke-width:2;stroke-linecap:butt;stroke-linejoin:miter;stroke-miterlimit:4;stroke-opacity:1;stroke-dasharray:none;marker-end:url(#Arrow2Lend)"
-       d="m 302.36843,766.0968 c -27.39883,0 -54.79764,0 -82.19646,0 -5.0167,0 -10.03336,0 -15.05008,0 -1.54357,0 -3.08717,0 -4.63077,0 -1.1577,0 -2.33787,-0.1 -3.47308,0 -0.84614,0.0745 -1.47826,0.41762 -2.31539,0.50977 -1.19924,0.13202 -3.30331,0 -4.63079,0 -3.08719,0 -6.17438,0 -9.26157,0"
+       d="m 302.36843,842.0968 c -27.39883,0 -54.79764,0 -82.19646,0 -5.0167,0 -10.03336,0 -15.05008,0 -1.54357,0 -3.08717,0 -4.63077,0 -1.1577,0 -2.33787,-0.1 -3.47308,0 -0.84614,0.0745 -1.47826,0.41762 -2.31539,0.50977 -1.19924,0.13202 -3.30331,0 -4.63079,0 -3.08719,0 -6.17438,0 -9.26157,0"
        id="path5092"
        inkscape:connector-curvature="0" />
     <rect
@@ -528,25 +556,6 @@
        id="path5250"
        inkscape:connector-curvature="0" />
     <rect
-       style="fill:#ffffff;fill-opacity:1;stroke:#000000;stroke-width:1.68624449;stroke-miterlimit:4.0999999;stroke-opacity:1;stroke-dasharray:none"
-       id="rect5252"
-       width="155.43224"
-       height="56.722713"
-       x="87.958221"
-       y="458.63614" />
-    <text
-       sodipodi:linespacing="125%"
-       id="text5254"
-       y="490.23581"
-       x="119.83929"
-       style="font-size:16px;font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;text-align:start;line-height:125%;letter-spacing:0px;word-spacing:0px;writing-mode:lr-tb;text-anchor:start;fill:#000000;fill-opacity:1;stroke:none;font-family:Ubuntu Condensed;-inkscape-font-specification:'Ubuntu Condensed,'"
-       xml:space="preserve"><tspan
-         id="tspan5258"
-         style="font-size:16px;font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;text-align:start;line-height:125%;writing-mode:lr-tb;text-anchor:start;font-family:Ubuntu Condensed;-inkscape-font-specification:'Ubuntu Condensed,'"
-         y="490.23581"
-         x="119.83929"
-         sodipodi:role="line">Server MAC key</tspan></text>
-    <rect
        y="456.74176"
        x="343.47778"
        height="56.722713"
@@ -601,30 +610,40 @@
          y="639.69824"
          style="font-size:16px;font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;text-align:center;line-height:125%;writing-mode:lr-tb;text-anchor:middle;font-family:Ubuntu Condensed;-inkscape-font-specification:'Ubuntu Condensed,'" /></text>
     <rect
-       y="738.32684"
+       y="814.32684"
        x="303.10019"
-       height="57.498631"
+       height="87.231308"
        width="208.00273"
        id="rect5288"
-       style="fill:#ffffff;fill-opacity:1;stroke:#000000;stroke-width:1.96396983;stroke-miterlimit:4.0999999;stroke-opacity:1;stroke-dasharray:none" />
+       style="fill:#ffffff;fill-opacity:1;stroke:#000000;stroke-width:2.41903567;stroke-miterlimit:4.0999999;stroke-opacity:1;stroke-dasharray:none" />
     <text
        transform="scale(1.0857616,0.9210125)"
        xml:space="preserve"
        style="font-size:16px;font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;text-align:start;line-height:125%;letter-spacing:0px;word-spacing:0px;writing-mode:lr-tb;text-anchor:start;fill:#000000;fill-opacity:1;stroke:none;font-family:Ubuntu Condensed;-inkscape-font-specification:'Ubuntu Condensed,'"
        x="374.776"
-       y="827.93677"
+       y="906.11127"
        id="text5290"
        sodipodi:linespacing="125%"><tspan
-         id="tspan5292"
-         sodipodi:role="line"
-         x="374.776"
-         y="827.93677"
-         style="font-size:16px;font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;text-align:center;line-height:125%;writing-mode:lr-tb;text-anchor:middle;font-family:Ubuntu Condensed;-inkscape-font-specification:'Ubuntu Condensed,'">Deliver the</tspan><tspan
          id="tspan5294"
          sodipodi:role="line"
          x="374.776"
-         y="847.93677"
-         style="font-size:16px;font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;text-align:center;line-height:125%;writing-mode:lr-tb;text-anchor:middle;font-family:Ubuntu Condensed;-inkscape-font-specification:'Ubuntu Condensed,'">captured page</tspan></text>
+         y="906.11127"
+         style="font-size:16px;font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;text-align:center;line-height:125%;writing-mode:lr-tb;text-anchor:middle;font-family:Ubuntu Condensed;-inkscape-font-specification:'Ubuntu Condensed,'">Webserver traffic can now</tspan><tspan
+         sodipodi:role="line"
+         x="374.776"
+         y="926.11127"
+         style="font-size:16px;font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;text-align:center;line-height:125%;writing-mode:lr-tb;text-anchor:middle;font-family:Ubuntu Condensed;-inkscape-font-specification:'Ubuntu Condensed,'"
+         id="tspan3294"> be authenticated.</tspan><tspan
+         sodipodi:role="line"
+         x="376.3385"
+         y="946.11127"
+         style="font-size:16px;font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;text-align:center;line-height:125%;writing-mode:lr-tb;text-anchor:middle;font-family:Ubuntu Condensed;-inkscape-font-specification:'Ubuntu Condensed,'"
+         id="tspan3292">View, then deliver </tspan><tspan
+         sodipodi:role="line"
+         x="374.776"
+         y="966.11127"
+         style="font-size:16px;font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;text-align:center;line-height:125%;writing-mode:lr-tb;text-anchor:middle;font-family:Ubuntu Condensed;-inkscape-font-specification:'Ubuntu Condensed,'"
+         id="tspan3169">the HTML page (encrypted)</tspan></text>
     <rect
        style="fill:#ffffff;fill-opacity:1;stroke:#000000;stroke-width:1.76792812;stroke-miterlimit:4.0999999;stroke-opacity:1;stroke-dasharray:none"
        id="rect5296"
@@ -661,13 +680,8 @@
          sodipodi:role="line"
          id="tspan5306" /></text>
     <path
-       style="fill:none;stroke:#000000;stroke-width:2;stroke-linecap:butt;stroke-linejoin:miter;stroke-opacity:1;marker-mid:none;marker-end:url(#Arrow2Lend);stroke-miterlimit:4;stroke-dasharray:none"
-       d="m 292.37169,441.72843 -49.25484,45.46601"
-       id="path5312"
-       inkscape:connector-curvature="0" />
-    <path
-       style="fill:none;stroke:#000000;stroke-width:2;stroke-linecap:butt;stroke-linejoin:miter;stroke-opacity:1;marker-end:url(#Arrow2Lend);stroke-miterlimit:4;stroke-dasharray:none"
-       d="m 293.00316,441.72843 47.9919,39.78276"
+       style="fill:none;stroke:#000000;stroke-width:2.04956675;stroke-linecap:butt;stroke-linejoin:miter;stroke-miterlimit:4;stroke-opacity:1;stroke-dasharray:none;marker-end:url(#Arrow2Lend)"
+       d="m 293.02794,441.75321 46.96408,42.69345"
        id="path5678"
        inkscape:connector-curvature="0" />
     <path
@@ -675,5 +689,95 @@
        d="m 490.9467,627.27415 c -18.85448,0 -37.70895,0 -56.56345,0 -3.45223,0 -6.90444,0 -10.3567,0 -1.06221,0 -2.12442,0 -3.18667,0 -0.79667,0 -1.60879,-0.1 -2.38999,0 -0.58227,0.0745 -1.01727,0.41762 -1.59334,0.50977 -0.82526,0.13202 -2.27317,0 -3.18667,0 -2.12444,0 -4.24889,0 -6.37335,0"
        id="path5862"
        inkscape:connector-curvature="0" />
+    <rect
+       y="710.29785"
+       x="303.99863"
+       height="42.12867"
+       width="208.00273"
+       id="rect4365-2"
+       style="fill:#ffffff;fill-opacity:1;stroke:#000000;stroke-width:1.68110538;stroke-miterlimit:4.0999999;stroke-opacity:1;stroke-dasharray:none" />
+    <text
+       transform="scale(1.0857616,0.9210125)"
+       xml:space="preserve"
+       style="font-size:16px;font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;text-align:start;line-height:125%;letter-spacing:0px;word-spacing:0px;writing-mode:lr-tb;text-anchor:start;fill:#000000;fill-opacity:1;stroke:none;font-family:Ubuntu Condensed;-inkscape-font-specification:'Ubuntu Condensed,'"
+       x="281.84506"
+       y="798.12482"
+       id="text4885-6"
+       sodipodi:linespacing="125%"><tspan
+         id="tspan4891-6"
+         sodipodi:role="line"
+         x="281.84506"
+         y="798.12482"
+         style="font-size:16px;font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;text-align:start;line-height:125%;writing-mode:lr-tb;text-anchor:start;font-family:Ubuntu Condensed;-inkscape-font-specification:'Ubuntu Condensed,'">Send SHA256 of encrypted page</tspan></text>
+    <path
+       style="fill:none;stroke:#000000;stroke-width:2;stroke-linecap:butt;stroke-linejoin:miter;stroke-miterlimit:4;stroke-opacity:1;stroke-dasharray:none;marker-end:url(#Arrow2Lend)"
+       d="m 302.60709,729.81718 c -27.39883,0 -54.79764,0 -82.19646,0 -5.0167,0 -10.03336,0 -15.05008,0 -1.54357,0 -3.08717,0 -4.63077,0 -1.1577,0 -2.33787,-0.1 -3.47308,0 -0.84614,0.0745 -1.47826,0.41762 -2.31539,0.50977 -1.19924,0.13202 -3.30331,0 -4.63079,0 -3.08719,0 -6.17438,0 -9.26157,0"
+       id="path5092-8"
+       inkscape:connector-curvature="0" />
+    <rect
+       y="759.29785"
+       x="78.998627"
+       height="42.12867"
+       width="208.00273"
+       id="rect4365-2-0"
+       style="fill:#ffffff;fill-opacity:1;stroke:#000000;stroke-width:1.68110538;stroke-miterlimit:4.0999999;stroke-opacity:1;stroke-dasharray:none" />
+    <text
+       transform="scale(1.0857616,0.9210125)"
+       xml:space="preserve"
+       style="font-size:16px;font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;text-align:start;line-height:125%;letter-spacing:0px;word-spacing:0px;writing-mode:lr-tb;text-anchor:start;fill:#000000;fill-opacity:1;stroke:none;font-family:Ubuntu Condensed;-inkscape-font-specification:'Ubuntu Condensed,'"
+       x="91.250443"
+       y="850.9054"
+       id="text4885-6-8"
+       sodipodi:linespacing="125%"><tspan
+         id="tspan4891-6-3"
+         sodipodi:role="line"
+         x="91.250443"
+         y="850.9054"
+         style="font-size:16px;font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;text-align:start;line-height:125%;writing-mode:lr-tb;text-anchor:start;font-family:Ubuntu Condensed;-inkscape-font-specification:'Ubuntu Condensed,'">Data for server MAC key</tspan></text>
+    <path
+       inkscape:connector-curvature="0"
+       id="path5027-8"
+       d="m 289.73672,781.88764 c 25.87858,0 51.75712,0 77.63566,0 4.73835,0 9.47666,0 14.215,0 1.45796,0 2.91588,0 4.37384,0 1.09348,0 2.20814,-0.1 3.28038,0 0.79919,0.0745 1.39624,0.41762 2.18692,0.50977 1.1327,0.13202 3.12002,0 4.37384,0 2.91589,0 5.8318,0 8.74768,0"
+       style="fill:none;stroke:#000000;stroke-width:2.27325034;stroke-linecap:butt;stroke-linejoin:miter;stroke-miterlimit:4;stroke-opacity:1;stroke-dasharray:none;marker-end:url(#Arrow2Lend)" />
+    <rect
+       style="fill:#ffffff;fill-opacity:1;stroke:#000000;stroke-width:0.97522825;stroke-miterlimit:4.0999999;stroke-opacity:1;stroke-dasharray:none"
+       id="rect4363-0"
+       width="97.80513"
+       height="30.151438"
+       x="77.196228"
+       y="398.50705" />
+    <text
+       xml:space="preserve"
+       style="font-size:16.42915535px;font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;text-align:center;line-height:125%;letter-spacing:0px;word-spacing:0px;writing-mode:lr-tb;text-anchor:middle;fill:#000000;fill-opacity:1;stroke:none;font-family:Ubuntu Condensed;-inkscape-font-specification:'Ubuntu Condensed,'"
+       x="123.88343"
+       y="429.27948"
+       id="text4544-8-8"
+       sodipodi:linespacing="125%"
+       transform="scale(1.0268222,0.97387843)"><tspan
+         sodipodi:role="line"
+         x="123.88343"
+         y="429.27948"
+         style="font-size:16.42915535px;font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;text-align:center;line-height:125%;writing-mode:lr-tb;text-anchor:middle;font-family:Ubuntu Condensed;-inkscape-font-specification:'Ubuntu Condensed,'"
+         id="tspan5248-9">secret data</tspan></text>
+    <rect
+       style="fill:#ffffff;fill-opacity:1;stroke:#000000;stroke-width:0.97522825;stroke-miterlimit:4.0999999;stroke-opacity:1;stroke-dasharray:none"
+       id="rect4363-0-4"
+       width="97.80513"
+       height="30.151438"
+       x="409.09741"
+       y="398.28644" />
+    <text
+       xml:space="preserve"
+       style="font-size:16.42915535px;font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;text-align:center;line-height:125%;letter-spacing:0px;word-spacing:0px;writing-mode:lr-tb;text-anchor:middle;fill:#000000;fill-opacity:1;stroke:none;font-family:Ubuntu Condensed;-inkscape-font-specification:'Ubuntu Condensed,'"
+       x="447.11441"
+       y="429.05261"
+       id="text4544-8-8-7"
+       sodipodi:linespacing="125%"
+       transform="scale(1.0268222,0.97387843)"><tspan
+         sodipodi:role="line"
+         x="447.11441"
+         y="429.05261"
+         style="font-size:16.42915535px;font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;text-align:center;line-height:125%;writing-mode:lr-tb;text-anchor:middle;font-family:Ubuntu Condensed;-inkscape-font-specification:'Ubuntu Condensed,'"
+         id="tspan5248-9-3">secret data</tspan></text>
   </g>
 </svg>
