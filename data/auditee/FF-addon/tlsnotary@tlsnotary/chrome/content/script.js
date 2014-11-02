@@ -10,12 +10,6 @@ var tab_url_full = "";//full URL at the time when AUDIT* is pressed
 var tab_url = ""; //the URL at the time when AUDIT* is pressed (only the domain part up to the first /)
 var session_path = "";
 var audited_browser; //the FF's internal browser which contains the audited HTML
-var help;
-var button_record_enabled;
-var button_record_disabled;
-var button_spinner;
-var button_stop_enabled;
-var button_stop_disabled;
 var testingMode = false;
 var headers="";
 var dict_of_certs = {};
@@ -40,6 +34,33 @@ function popupShow(text) {
 	);
 }
 
+function notBarShow(text,usebutton){
+    var win = Services.wm.getMostRecentWindow('navigator:browser'); //this is the target window
+    var _gNB = win.document.getElementById("global-notificationbox"); //global notification box area
+    _gNB.removeAllNotifications();
+    if (typeof(usebutton)==='undefined'){
+	buttons = null;}
+    else{
+	var buttons = [{
+	    label: 'AUDIT THIS PAGE',
+	    accessKey: 'A',
+	    popup: null,
+	    callback: startRecording
+	},
+	{
+	    label: 'FINISH',
+	    accessKey: 'F',
+	    popup: null,
+	    callback: stopRecording
+	    }];
+    }
+	const priority = _gNB.PRIORITY_INFO_MEDIUM;
+	_gNB.appendNotification(text, 'popup-blocked',
+			     'chrome://tlsnotary/skin/security-icon.png',
+			      priority, buttons);
+}
+
+
 //poll the env var to see if IRC started so that we can display a help message on the addon toolbar
 //We do this from here rather than from auditee.html to make it easier to debug
 var prevMsg = "";
@@ -49,7 +70,6 @@ function pollEnvvar(){
 	var msg = Cc["@mozilla.org/process/environment;1"].getService(Ci.nsIEnvironment).get("TLSNOTARY_MSG");
 	if (msg != prevMsg) {
 		prevMsg = msg;
-		document.getElementById("help").value = msg;
 	}
 	var envvarvalue = Cc["@mozilla.org/process/environment;1"].getService(Ci.nsIEnvironment).get("TLSNOTARY_IRC_STARTED");
 	if (!envvarvalue.startsWith("true")) {
@@ -57,19 +77,12 @@ function pollEnvvar(){
 		return;
 	}
 	//else if envvar was set, init all global vars
-	help = document.getElementById("help");
-	button_record_enabled = document.getElementById("button_record_enabled");
-	button_record_disabled = document.getElementById("button_record_disabled");
-	button_spinner = document.getElementById("button_spinner");
-	button_stop_enabled = document.getElementById("button_stop_enabled");
-	button_stop_disabled = document.getElementById("button_stop_disabled");
-
-	help.value = "Go to a page and press AUDIT THIS PAGE. Then wait for the page to reload automatically.";
-	button_record_disabled.hidden = true;
-	button_record_enabled.hidden = false;
+	
+	
 	var tmode = envvarvalue.charAt(envvarvalue.length -1)
 	if (tmode=='0'){
 	popupShow("The self testing audit connection is established. You may now open a new tab and go to a webpage. Please follow the instructions on the status bar below. ");
+	notBarShow("Go to a page and press AUDIT THIS PAGE. Then wait for the page to reload automatically.",1);
 	}
 	else {
 	popupShow("The connection to the auditor has been established. You may now open a new tab and go to a webpage. Please follow the instructions on the status bar below.");
@@ -91,26 +104,25 @@ function startListening(){
 }
 
 function startRecording(){
+    notBarShow('Audit is underway, please wait...');
     audited_browser = gBrowser.selectedBrowser;
     tab_url_full = audited_browser.contentWindow.location.href;
     //remove hashes - they are not URLs but are used for internal page mark-up
 	sanitized_url = tab_url_full.split("#")[0];
     if (!sanitized_url.startsWith("https://")){
-		help.value = "ERROR You can only audit pages which start with https://";
-		return;
+	notBarShow("ERROR You can only audit pages which start with https://",1);
+	return;
     }
     if (dict_of_status[sanitized_url] != "secure"){
 	alert("Do not attempt to audit this page! It does not have a valid SSL certificate.");
+	notBarShow("Go to a page and press AUDIT THIS PAGE. Then wait for the page to reload automatically.",1);
 	return;
     }
     
     var x = sanitized_url.split('/');
     x.splice(0,3);
     tab_url = x.join('/');
-	button_record_enabled.hidden = true;
-	button_spinner.hidden = false;
-	button_stop_disabled.hidden = false;
-	button_stop_enabled.hidden = true;
+	
     var httpChannel = dict_of_httpchannels[sanitized_url]
 	headers = "";
 	headers += httpChannel.requestMethod + " /" + tab_url + " HTTP/1.1" + "\r\n";
@@ -129,7 +141,7 @@ function buildBase64DER(chars){
 
 
 function startAudit(urldata){
-    help.value = "Audit is underway; please be patient";
+    notBarShow("Audit is underway, please be patient.");
 	reqStartAudit = new XMLHttpRequest();
     reqStartAudit.onload = responseStartAudit;
     var cert = dict_of_certs[urldata];
@@ -152,7 +164,7 @@ function startAudit(urldata){
 function responseStartAudit(iteration){
     if (typeof iteration == "number"){
         if (iteration > 100){
-			help.value = "ERROR responseStartAudit timed out";
+	    notBarShow("ERROR: responseStartAudit timed out");
             return;
         }
         if (!bStopStartAudit) setTimeout(responseStartAudit, 1000, ++iteration)
@@ -163,19 +175,16 @@ function responseStartAudit(iteration){
     var query = reqStartAudit.getResponseHeader("response");
     var status = reqStartAudit.getResponseHeader("status");
    	if (query != "start_audit"){
-		help.value = "ERROR Internal error. Wrong response header: " +query;
+		notBarShow("ERROR Internal error. Wrong response header: " +query);
         return;
     }
     if (status != "success"){
         if (testingMode == true) {
-            help.value = "ERROR Received an error message: " + status;
+	    notBarShow("ERROR Received an error message: " + status,1);
             return; //failure to find HTML is considered a fatal error during testing
         }
-        help.value = "ERROR Received an error message: " + status + ". Page decryption FAILED. Try pressing AUDIT THIS PAGE again";
-        button_record_enabled.hidden = false;
-        button_spinner.hidden = true;
-        button_stop_disabled.hidden = true;
-        button_stop_enabled.hidden = false;
+        notBarShow("ERROR Received an error message: " + status + ". Page decryption FAILED. Try pressing AUDIT THIS PAGE again",1);
+        
         return;
     }
 
@@ -192,11 +201,8 @@ function responseStartAudit(iteration){
         var browser = gBrowser.getBrowserForTab(gBrowser.addTab(html_paths[i]));
     }
 
-    help.value = "Page decryption successful. Press FINISH or go to another page and press AUDIT THIS PAGE";
-    button_record_enabled.hidden = false;
-    button_spinner.hidden = true;
-    button_stop_disabled.hidden = true;
-    button_stop_enabled.hidden = false;
+    notBarShow("Page decryption successful. Press FINISH or go to another page and press AUDIT THIS PAGE",1);
+    
 }
 
 
@@ -209,11 +215,8 @@ function go_offline_for_a_moment(){
 
 
 function stopRecording(){
-    help.value = "Preparing the data to be sent to the auditor"
-    button_spinner.hidden = true;
-    button_record_enabled.hidden = true;
-    button_stop_enabled.hidden = true;
-    button_record_disabled.hidden = false;
+    notBarShow("Preparing the data to be sent to the auditor");
+    
 
     reqStopRecording = new XMLHttpRequest();
     reqStopRecording.onload = responseStopRecording;
@@ -225,9 +228,9 @@ function stopRecording(){
 function responseStopRecording(iteration){
     if (typeof iteration == "number"){
 		var timeout = 100;
-		if (testingMode == True) timeout = 2000;
+		if (testingMode) timeout = 2000;
         if (iteration > timeout){
-			help.value = "ERROR responseStopRecording timed out ";
+	    notBarShow("ERROR responseStopRecording timed out ");
             return;
         }
         if (!bStopRecordingResponded) setTimeout(responseStopRecording, 1000, ++iteration)
@@ -238,19 +241,18 @@ function responseStopRecording(iteration){
     var query = reqStopRecording.getResponseHeader("response");
     var status = reqStopRecording.getResponseHeader("status");
     session_path = reqStopRecording.getResponseHeader("session_path");
-	button_spinner.hidden = true;
-	button_stop_disabled.hidden = false;
+	
     if (query != "stop_recording"){
-		help.value = "ERROR Internal error. Wrong response header: "+query;
+		notBarShow("ERROR Internal error. Wrong response header: "+query);
         return;
     }
 	if (status != "success"){
-		help.value = "ERROR Received an error message: " + status;
+		notBarShow("ERROR Received an error message: " + status);
 		return;
 	}
 
 	popupShow("Congratulations. The auditor has acknowledged successful receipt of your audit data. You may now close the browser");
-	help.value = "Auditing session ended successfully";
+	notBarShow("Auditing session ended successfully");
 	return;
 }
 
@@ -366,8 +368,8 @@ function responseReadyToDecrypt(iteration){
     var b64key = reqReadyToDecrypt.getResponseHeader("key");
     var b64iv = reqReadyToDecrypt.getResponseHeader("iv");
    	if (query != "ready_to_decrypt"){
-		alert(iteration)
-		help.value = "ERROR Internal error. Wrong response header: " +query;
+		alert(iteration);
+		notBarShow("ERROR Internal error. Wrong response header: " +query);
         return;
     }
     var b64cleartext = aes_decrypt(b64ciphertext, b64key, b64iv);
@@ -421,7 +423,7 @@ function ss_checkStarted(){
 	//else
 	pb_start(); //from pipebytes.js
 	setTimeout(pb_checkStarted, 20000)
-	help.value = "Preparing the data to be sent to auditor using pipebytes.com..."
+	notBarShow("Preparing the data to be sent to auditor using pipebytes.com...");
 }
 
 function pb_checkStarted(){
@@ -431,7 +433,7 @@ function pb_checkStarted(){
 	//else
 	jb_start(); //from jetbytes.js
 	setTimeout(jb_checkStarted, 20000)
-	help.value = "Preparing the data to be sent to auditor using jetbytes.com..."
+	notBarShow("Preparing the data to be sent to auditor using jetbytes.com...");
 }
 
 function jb_checkStarted(){
@@ -439,5 +441,5 @@ function jb_checkStarted(){
 		 return;
 	 }
 	//else
-	help.value = "ERROR. Failed to transfer the file to auditor. You will have to do it manually"
+	notBarShow("ERROR. Failed to transfer the file to auditor. You will have to do it manually");
 }
