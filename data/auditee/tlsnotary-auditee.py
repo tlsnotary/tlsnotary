@@ -833,7 +833,7 @@ def start_firefox(FF_to_backend_port, firefox_install_path, AES_decryption_port)
         bundles_dir = os.path.join(local_ff_copy, 'distribution', 'bundles')
     if not os.path.exists(bundles_dir):
         os.makedirs(bundles_dir)    
-    for ext_dir in ['tlsnotary@tlsnotary','ClassicThemeRestorer@ArisT2Noia4dev']:
+    for ext_dir in ['tlsnotary@tlsnotary']:
         if not os.path.exists(join(bundles_dir,ext_dir)):
             shutil.copytree(join(data_dir, 'FF-addon', ext_dir),join(bundles_dir, ext_dir))                  
     os.putenv('FF_to_backend_port', str(FF_to_backend_port))
