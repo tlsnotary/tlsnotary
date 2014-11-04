@@ -553,10 +553,21 @@ def stop_recording():
         if not onefile.startswith(('response', 'md5hmac', 'domain','IV','cs')): continue
         zipf.write(join(commit_dir, onefile), onefile)
     zipf.close()
-    try: link = shared.sendspace_getlink(join(trace_dir, 'mytrace.zip'),requests.get,requests.post)
-    except:
-        try: link = shared.pipebytes_getlink(join(trace_dir, 'mytrace.zip'))
-        except: return 'failure'
+    path = join(trace_dir, 'mytrace.zip')
+    ul_sites = [shared.sendspace_getlink, shared.pipebytes_getlink, 
+                shared.qfs_getlink, shared.loadto_getlink]
+    #try a random upload site until we either succeed or deplete the list of sites
+    while True:
+        if not len(ul_sites):
+            raise Exception ('Could not use any of the available upload websites.')
+        idx = random.randint(0, len(ul_sites)-1)
+        try:
+            print ('Uploading trace using ' +  str(ul_sites[idx]))
+            link = ul_sites[idx](path, requests.get, requests.post)
+            break #success
+        except:
+            print ('Error sending file using ' + str(ul_sites[idx]) + " Trying another site.")
+            ul_sites.pop(idx)
     return send_link(link)
 
 #reconstruct correct http headers

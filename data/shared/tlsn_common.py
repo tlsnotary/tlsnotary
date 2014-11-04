@@ -21,31 +21,46 @@ smallprimes = (2,3,5,7,11,13,17,19,23,29,31,37,41,43,47,53,59,61,67,71,73,79,83,
 #ciphertext to auditor
 def sendspace_getlink(mfile,rg,rp):
     reply = rg('https://www.sendspace.com/', timeout=25)
-    url_start = reply.text.find('<form method="post" action="https://') + len('<form method="post" action="')
-    url_len = reply.text[url_start:].find('"')
-    url = reply.text[url_start:url_start+url_len]
+    url_start_pos = reply.text.find('<form method="post" action="https://') + len('<form method="post" action="')
+    if url_start_pos == -1:
+        print ('sendspace.com changed its API. Please let the developers know')        
+        raise Exception ('sendspace.com changed its API. Please let the developers know')        
+    url_len = reply.text[url_start_pos:].find('"')
+    url = reply.text[url_start_pos:url_start_pos+url_len]
     
-    sig_start = reply.text.find('name="signature" value="') + len('name="signature" value="')
-    sig_len = reply.text[sig_start:].find('"')
-    sig = reply.text[sig_start:sig_start+sig_len]
+    sig_start_pos = reply.text.find('name="signature" value="') + len('name="signature" value="')
+    if sig_start_pos == -1:
+        print ('sendspace.com changed its API. Please let the developers know')        
+        raise Exception ('sendspace.com changed its API. Please let the developers know')        
+    sig_len = reply.text[sig_start_pos:].find('"')
+    sig = reply.text[sig_start_pos:sig_start_pos+sig_len]
     
-    progr_start = reply.text.find('name="PROGRESS_URL" value="') + len('name="PROGRESS_URL" value="')
-    progr_len = reply.text[progr_start:].find('"')
-    progr = reply.text[progr_start:progr_start+progr_len]
+    progr_start_pos = reply.text.find('name="PROGRESS_URL" value="') + len('name="PROGRESS_URL" value="')
+    if progr_start_pos == -1:
+        print ('sendspace.com changed its API. Please let the developers know')        
+        raise Exception ('sendspace.com changed its API. Please let the developers know')        
+    progr_len = reply.text[progr_start_pos:].find('"')
+    progr = reply.text[progr_start_pos:progr_start_pos+progr_len]
     
     r=rp(url, files={'upload_file[]': open(mfile, 'rb')}, data={
         'signature':sig, 'PROGRESS_URL':progr, 'js_enabled':'0', 
         'upload_files':'', 'terms':'1', 'file[]':'', 'description[]':'',
         'recpemail_fcbkinput':'recipient@email.com', 'ownemail':'', 'recpemail':''}, timeout=25)
     
-    link_start = r.text.find('"share link">') + len('"share link">')
-    link_len = r.text[link_start:].find('</a>')
-    link = r.text[link_start:link_start+link_len]
+    link_start_pos = r.text.find('"share link">') + len('"share link">')
+    if link_start_pos == -1:
+        print ('sendspace.com changed its API. Please let the developers know')        
+        raise Exception ('sendspace.com changed its API. Please let the developers know')        
+    link_len = r.text[link_start_pos:].find('</a>')
+    link = r.text[link_start_pos:link_start_pos+link_len]
     
     dl_req = rg(link)
-    dl_start = dl_req.text.find('"download_button" href="') + len('"download_button" href="')
-    dl_len = dl_req.text[dl_start:].find('"')
-    dl_link = dl_req.text[dl_start:dl_start+dl_len]
+    dl_start_pos = dl_req.text.find('"download_button" href="') + len('"download_button" href="')
+    if dl_start_pos == -1:
+        print ('sendspace.com changed its API. Please let the developers know')        
+        raise Exception ('sendspace.com changed its API. Please let the developers know')        
+    dl_len = dl_req.text[dl_start_pos:].find('"')
+    dl_link = dl_req.text[dl_start_pos:dl_start_pos+dl_len]
     return dl_link
 
 #pipebytes is not currently used; a backup for failure of sendspace.
@@ -59,15 +74,85 @@ def pipebytes_getlink(mfile,rg,rp):
     reply1 = rg('http://host03.pipebytes.com/getkey.php?r='+
                           ('%.16f' % random.uniform(0,1)), timeout=5)
     key = reply1.text
+    #check that key is a string of integers
+    try:
+        int(key)
+    except:
+        print ('pipebytes.com changed its API. Please let the developers know')        
+        raise Exception ('pipebytes.com changed its API. Please let the developers know')        
     rp('http://host03.pipebytes.com/setmessage.php?r='+
                            ('%.16f' % random.uniform(0,1))+'&key='+key, {'message':''}, timeout=5)
-    thread = threading.Thread(target= pipebytes_post, args=(key, mfile))
+    thread = threading.Thread(target= pipebytes_post, args=(key, mfile, rp))
     thread.daemon = True
     thread.start()
     time.sleep(1)               
     rg('http://host03.pipebytes.com/status.py?key='+key+
                           '&touch=yes&r='+('%.16f' % random.uniform(0,1)), timeout=5)
     return ('http://host03.pipebytes.com/get.py?key='+key)
+
+def qfs_getlink(mfile, rg, rp):
+    reply1 = rp('http://qfs.mobi/upload.aspx', files={'file': open(mfile, 'rb')})
+    html = reply1.text
+    magicstr = 'has been uploaded to'
+    magicstr_pos = html.find(magicstr)
+    if magicstr == -1:
+        print ('qfs.mobi changed its API. Please let the developers know')        
+        raise Exception ('qfs.mobi changed its API. Please let the developers know')
+    start = magicstr_pos + len(magicstr)
+    open_quote = start + html[start:].find('href="') + len('href="')
+    close_quote = open_quote + html[open_quote+1:].find('"')
+    url1 = html[open_quote:close_quote+1]
+    
+    html = rg(url1).text
+    magicstr = '/downloadCached'
+    magicstr_pos = html.find(magicstr)
+    if magicstr == -1:
+        print ('qfs.mobi changed its API. Please let the developers know')        
+        raise Exception ('qfs.mobi changed its API. Please let the developers know')
+    open_quote = magicstr_pos
+    close_quote = open_quote + html[open_quote+1:].find('"')
+    url_part = html[open_quote:close_quote+1]
+    full_url = 'http://qfs.mobi'+url_part.replace('amp;','')
+    return full_url
+    
+def loadto_getlink(mfile, rg, rp):
+    html = rg('http://load.to').text
+    magicstr = 'enctype="multipart/form-data" action="'
+    magicstr_pos = html.find(magicstr)
+    if magicstr == -1:
+        print ('load.to changed its API. Please let the developers know')        
+        raise Exception ('load.to changed its API. Please let the developers know')
+    start =  magicstr_pos + len(magicstr)
+    open_quote = start
+    close_quote = open_quote + html[open_quote+1:].find('"')
+    posturl = html[open_quote:close_quote+1]
+        
+    postreply = rp(posturl, files={'upfile_0': open(mfile, 'rb')},
+                  data ={'imbedded_progress_bar':'0', 'upload_range':'1', 'email':'',
+                         'filecomment':'', 'submit':'Upload'})
+    posthtml = postreply.text
+    
+    magicstr = 'Download:'
+    magicstr_pos = posthtml.find(magicstr)
+    if magicstr_pos == -1:
+        print ('load.to changed its API. Please let the developers know')        
+        raise Exception ('load.to changed its API. Please let the developers know')
+    start =  magicstr_pos + len(magicstr)
+    open_quote = start + posthtml[start:].find('href="') + len('href="')
+    close_quote = open_quote + posthtml[open_quote+1:].find('"')
+    dlurl = posthtml[open_quote:close_quote+1]
+    
+    dlpagehtml = rg(dlurl).text
+    magicstr = 'form method="post" action="'
+    magicstr_pos = dlpagehtml.find(magicstr)
+    if magicstr_pos == -1:
+        print ('load.to changed its API. Please let the developers know')        
+        raise Exception ('load.to changed its API. Please let the developers know')
+    start =magicstr_pos + len(magicstr)
+    open_quote = start
+    close_quote = open_quote + dlpagehtml[open_quote+1:].find('"')
+    finaldllink = dlpagehtml[open_quote:close_quote+1]
+    return finaldllink    
 
 #end file transfer functions
 
