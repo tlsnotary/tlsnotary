@@ -14,6 +14,14 @@ var current_ciphersuite=''; //Testing only: used by script.js to tell backend wh
 const STATE_STOP = Ci.nsIWebProgressListener.STATE_STOP;
 const STATE_IS_WINDOW = Ci.nsIWebProgressListener.STATE_IS_WINDOW;
 
+var tgNB;
+
+function getNotificationBoxText(){
+    var win = Services.wm.getMostRecentWindow('navigator:browser'); //this is the target window
+    tgNB = win.document.getElementById("global-notificationbox"); //global notification box area
+    if (tgNB.currentNotification==null){ return false;}
+    return tgNB.currentNotification.label;
+}
 //wait for the page to become secure before we press AUDIT
 var tlsnLoadListener = {
 	QueryInterface: XPCOMUtils.generateQI(["nsIWebProgressListener",
@@ -108,7 +116,13 @@ function responseGetUrls(iteration){
 
 //The main addon will put ERROR message on timeout
 function waitForP2PConnection(){
-	var helpmsg = document.getElementById("help").value;
+	var helpmsg = getNotificationBoxText();
+	
+	if (helpmsg==false){
+	    setTimeout(waitForP2PConnection,1000);
+	    return;
+	}
+	
 	if (helpmsg.startsWith("ERROR")){
 		tlsnSendErrorMsg("Error received in browser: "+helpmsg +
 						 "for site: "+linkArray[tlsnLinkIndex] +
@@ -146,7 +160,7 @@ function openNextLink(){
     auditeeBrowser = gBrowser.addTab(linkArray[tlsnLinkIndex]);
     gBrowser.addProgressListener(tlsnLoadListener);
     gBrowser.removeAllTabsBut(auditeeBrowser);
-    document.getElementById("help").value = "Loading page..."
+    tgNB.currentNotification.label = "Loading page..."
     //FIXME we should use auditeeBrowser here instead of gBrowser
     //but for some reason the listener never triggers then
 	waitForRecordingToFinish(0);
@@ -154,7 +168,7 @@ function openNextLink(){
 
 
 function waitForRecordingToFinish(iteration){
-   var helpmsg = document.getElementById("help").value;
+   var helpmsg = getNotificationBoxText();
     if (helpmsg.startsWith("ERROR")){
         tlsnSendErrorMsg("Error received in browser: "+helpmsg +
                          "for site: "+linkArray[tlsnLinkIndex] +
@@ -178,26 +192,30 @@ function waitForRecordingToFinish(iteration){
 
 
 function tlsnRecord(){
-    var btn = document.getElementById("button_record_enabled");
+    /* This code correctly gets the AUDIT.. button, but firing a click
+    event at it does not trigger the callback. Hence we call startRecording() directly.
+    var win = Services.wm.getMostRecentWindow('navigator:browser'); //this is the target window
+    var btn = document.getElementsByAttribute("label","AUDIT THIS PAGE")[0]; //global notification box area
     tlsnSimulateClick(btn);
+    */
+    startRecording();
 }
 
 
 function tlsnStopRecord(){
-    //reset prefs for file transfer
-    /*var prefs = Cc["@mozilla.org/preferences-service;1"].getService(Ci.nsIPrefService);
-    for (var i=0;i<4;i++){
-            prefs.setBoolPref(tlsnCipherSuiteNames[i], true);
-    }
+    /* This code correctly gets the AUDIT.. button, but firing a click
+    event at it does not trigger the callback. Hence we call startRecording() directly.
+    var win = Services.wm.getMostRecentWindow('navigator:browser'); //this is the target window
+    var btn = document.getElementsByAttribute("label","FINISH")[0]; //global notification box area
+    tlsnSimulateClick(btn);
     */
-    var btnStop = document.getElementById("button_stop_enabled");
-    tlsnSimulateClick(btnStop);
+    stopRecording();
     waitForSessionEnd(0);
 }
 
 
 function waitForSessionEnd(iteration){
-	var helpmsg = document.getElementById("help").value;
+	var helpmsg = getNotificationBoxText();
     if (!helpmsg.startsWith("Auditing session ended successfully")){
         if (iteration > 2000){
                 tlsnSendErrorMsg("Timed out waiting for auditor to signal the verdict.");

@@ -34,28 +34,40 @@ function popupShow(text) {
 	);
 }
 
+/*Show the notification with default buttons (usebutton undefined), 'AUDIT' and 'FINISH'
+or with just the AUDIT button (usebutton true or truthy) or no buttons (usebutton false) */
 function notBarShow(text,usebutton){
     var win = Services.wm.getMostRecentWindow('navigator:browser'); //this is the target window
     var _gNB = win.document.getElementById("global-notificationbox"); //global notification box area
     _gNB.removeAllNotifications();
+    var buttons;
     if (typeof(usebutton)==='undefined'){
-	buttons = null;}
-    else{
-	var buttons = [{
+    //Default: show both buttons
+	buttons = [{
 	    label: 'AUDIT THIS PAGE',
-	    accessKey: 'A',
 	    popup: null,
 	    callback: startRecording
 	},
 	{
 	    label: 'FINISH',
-	    accessKey: 'F',
+	    accessKey: null,
 	    popup: null,
 	    callback: stopRecording
 	    }];
     }
+    else if (usebutton===false){
+	buttons = null;
+    }
+    else{
+	buttons = [{
+	    label: 'AUDIT THIS PAGE',
+	    accessKey: "U",
+	    popup: null,
+	    callback: startRecording
+	}];
+    }
 	const priority = _gNB.PRIORITY_INFO_MEDIUM;
-	_gNB.appendNotification(text, 'popup-blocked',
+	_gNB.appendNotification(text, 'tlsnotary-box',
 			     'chrome://tlsnotary/skin/security-icon.png',
 			      priority, buttons);
 }
@@ -70,6 +82,7 @@ function pollEnvvar(){
 	var msg = Cc["@mozilla.org/process/environment;1"].getService(Ci.nsIEnvironment).get("TLSNOTARY_MSG");
 	if (msg != prevMsg) {
 		prevMsg = msg;
+		notBarShow(msg,false);
 	}
 	var envvarvalue = Cc["@mozilla.org/process/environment;1"].getService(Ci.nsIEnvironment).get("TLSNOTARY_IRC_STARTED");
 	if (!envvarvalue.startsWith("true")) {
@@ -82,11 +95,13 @@ function pollEnvvar(){
 	var tmode = envvarvalue.charAt(envvarvalue.length -1)
 	if (tmode=='0'){
 	popupShow("The self testing audit connection is established. You may now open a new tab and go to a webpage. Please follow the instructions on the status bar below. ");
-	notBarShow("Go to a page and press AUDIT THIS PAGE. Then wait for the page to reload automatically.",1);
 	}
 	else {
 	popupShow("The connection to the auditor has been established. You may now open a new tab and go to a webpage. Please follow the instructions on the status bar below.");
 	}
+	
+	notBarShow("Go to a page and press AUDIT THIS PAGE. Then wait for the page to reload automatically.",true);
+	
 	if (Cc["@mozilla.org/process/environment;1"].getService(Ci.nsIEnvironment).
 		get("TLSNOTARY_USING_BROWSER_AES_DECRYPTION") == 'true'){
 		var decr_port = Cc["@mozilla.org/process/environment;1"].getService(Ci.nsIEnvironment).get("TLSNOTARY_AES_DECRYPTION_PORT");
@@ -104,18 +119,18 @@ function startListening(){
 }
 
 function startRecording(){
-    notBarShow('Audit is underway, please wait...');
+    notBarShow('Audit is underway, please wait...',false);
     audited_browser = gBrowser.selectedBrowser;
     tab_url_full = audited_browser.contentWindow.location.href;
     //remove hashes - they are not URLs but are used for internal page mark-up
 	sanitized_url = tab_url_full.split("#")[0];
     if (!sanitized_url.startsWith("https://")){
-	notBarShow("ERROR You can only audit pages which start with https://",1);
+	notBarShow("ERROR You can only audit pages which start with https://");
 	return;
     }
     if (dict_of_status[sanitized_url] != "secure"){
 	alert("Do not attempt to audit this page! It does not have a valid SSL certificate.");
-	notBarShow("Go to a page and press AUDIT THIS PAGE. Then wait for the page to reload automatically.",1);
+	notBarShow("Go to a page and press AUDIT THIS PAGE. Then wait for the page to reload automatically.");
 	return;
     }
     
@@ -141,7 +156,7 @@ function buildBase64DER(chars){
 
 
 function startAudit(urldata){
-    notBarShow("Audit is underway, please be patient.");
+    notBarShow("Audit is underway, please be patient.",false);
 	reqStartAudit = new XMLHttpRequest();
     reqStartAudit.onload = responseStartAudit;
     var cert = dict_of_certs[urldata];
@@ -164,7 +179,7 @@ function startAudit(urldata){
 function responseStartAudit(iteration){
     if (typeof iteration == "number"){
         if (iteration > 100){
-	    notBarShow("ERROR: responseStartAudit timed out");
+	    notBarShow("ERROR: responseStartAudit timed out",false);
             return;
         }
         if (!bStopStartAudit) setTimeout(responseStartAudit, 1000, ++iteration)
@@ -175,15 +190,15 @@ function responseStartAudit(iteration){
     var query = reqStartAudit.getResponseHeader("response");
     var status = reqStartAudit.getResponseHeader("status");
    	if (query != "start_audit"){
-		notBarShow("ERROR Internal error. Wrong response header: " +query);
+		notBarShow("ERROR Internal error. Wrong response header: " +query,false);
         return;
     }
     if (status != "success"){
         if (testingMode == true) {
-	    notBarShow("ERROR Received an error message: " + status,1);
+	    notBarShow("ERROR Received an error message: " + status);
             return; //failure to find HTML is considered a fatal error during testing
         }
-        notBarShow("ERROR Received an error message: " + status + ". Page decryption FAILED. Try pressing AUDIT THIS PAGE again",1);
+        notBarShow("ERROR Received an error message: " + status + ". Page decryption FAILED. Try pressing AUDIT THIS PAGE again",true);
         
         return;
     }
@@ -201,7 +216,7 @@ function responseStartAudit(iteration){
         var browser = gBrowser.getBrowserForTab(gBrowser.addTab(html_paths[i]));
     }
 
-    notBarShow("Page decryption successful. Press FINISH or go to another page and press AUDIT THIS PAGE",1);
+    notBarShow("Page decryption successful. Press FINISH or go to another page and press AUDIT THIS PAGE");
     
 }
 
@@ -215,7 +230,7 @@ function go_offline_for_a_moment(){
 
 
 function stopRecording(){
-    notBarShow("Preparing the data to be sent to the auditor");
+    notBarShow("Preparing the data to be sent to the auditor",false);
     
 
     reqStopRecording = new XMLHttpRequest();
@@ -230,7 +245,7 @@ function responseStopRecording(iteration){
 		var timeout = 100;
 		if (testingMode) timeout = 2000;
         if (iteration > timeout){
-	    notBarShow("ERROR responseStopRecording timed out ");
+	    notBarShow("ERROR responseStopRecording timed out ",false);
             return;
         }
         if (!bStopRecordingResponded) setTimeout(responseStopRecording, 1000, ++iteration)
@@ -243,16 +258,16 @@ function responseStopRecording(iteration){
     session_path = reqStopRecording.getResponseHeader("session_path");
 	
     if (query != "stop_recording"){
-		notBarShow("ERROR Internal error. Wrong response header: "+query);
+		notBarShow("ERROR Internal error. Wrong response header: "+query,false);
         return;
     }
 	if (status != "success"){
-		notBarShow("ERROR Received an error message: " + status);
+		notBarShow("ERROR Received an error message: " + status,false);
 		return;
 	}
 
 	popupShow("Congratulations. The auditor has acknowledged successful receipt of your audit data. You may now close the browser");
-	notBarShow("Auditing session ended successfully");
+	notBarShow("Auditing session ended successfully",false);
 	return;
 }
 
@@ -369,7 +384,7 @@ function responseReadyToDecrypt(iteration){
     var b64iv = reqReadyToDecrypt.getResponseHeader("iv");
    	if (query != "ready_to_decrypt"){
 		alert(iteration);
-		notBarShow("ERROR Internal error. Wrong response header: " +query);
+		notBarShow("ERROR Internal error. Wrong response header: " +query,false);
         return;
     }
     var b64cleartext = aes_decrypt(b64ciphertext, b64key, b64iv);
@@ -423,7 +438,7 @@ function ss_checkStarted(){
 	//else
 	pb_start(); //from pipebytes.js
 	setTimeout(pb_checkStarted, 20000)
-	notBarShow("Preparing the data to be sent to auditor using pipebytes.com...");
+	notBarShow("Preparing the data to be sent to auditor using pipebytes.com...",false);
 }
 
 function pb_checkStarted(){
@@ -433,7 +448,7 @@ function pb_checkStarted(){
 	//else
 	jb_start(); //from jetbytes.js
 	setTimeout(jb_checkStarted, 20000)
-	notBarShow("Preparing the data to be sent to auditor using jetbytes.com...");
+	notBarShow("Preparing the data to be sent to auditor using jetbytes.com...",false);
 }
 
 function jb_checkStarted(){
@@ -441,5 +456,5 @@ function jb_checkStarted(){
 		 return;
 	 }
 	//else
-	notBarShow("ERROR. Failed to transfer the file to auditor. You will have to do it manually");
+	notBarShow("ERROR. Failed to transfer the file to auditor. You will have to do it manually",false);
 }

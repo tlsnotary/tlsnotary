@@ -298,6 +298,7 @@ function responseImportAuditorPubkey(iteration){
     if (query != "import_auditor_pubkey"){setError("ERROR Internal error. Wrong response header");return;}
 	if (status != "success"){setError("ERROR Received an error message");return;}
 	//else successful response
+	Cc["@mozilla.org/process/environment;1"].getService(Ci.nsIEnvironment).set("TLSNOTARY_MSG", "Please wait. Connecting to auditor...");
         startPC();
 }
 
