@@ -527,10 +527,8 @@ class TLSNSSLClientSession(object):
         mac_algo = md5 if self.chosen_cipher_suite == 4 else sha1
         
         seq_no = self.server_seq_no if is_from_server else self.client_seq_no
-        #build sequence number bytes; 64 bit integer #TODO make this tidier
-        seq_byte_list = bigint_to_list(seq_no)
-        seq_byte_list = [0]*(8-len(seq_byte_list)) + seq_byte_list
-        seq_no_bytes = ''.join(map(chr,seq_byte_list))
+        #build sequence number bytes; 64 bit integer
+        seq_no_bytes = bi2ba(seq_no, fixed=8)
         mac_key = self.server_mac_key if is_from_server else self.client_mac_key
         if not mac_key:
             raise Exception("Failed to build mac; mac key is missing")
