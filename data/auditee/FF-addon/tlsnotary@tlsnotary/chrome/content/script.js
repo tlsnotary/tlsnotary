@@ -119,13 +119,21 @@ function startListening(){
 }
 
 function startRecording(){
-    notBarShow('Audit is underway, please wait...',false);
     audited_browser = gBrowser.selectedBrowser;
     tab_url_full = audited_browser.contentWindow.location.href;
+    
     //remove hashes - they are not URLs but are used for internal page mark-up
-	sanitized_url = tab_url_full.split("#")[0];
+    sanitized_url = tab_url_full.split("#")[0];
+    
     if (!sanitized_url.startsWith("https://")){
-	notBarShow("ERROR You can only audit pages which start with https://");
+	var btn = document.getElementsByAttribute("label","FINISH")[0]; //global notification box area
+	errmsg="ERROR You can only audit pages which start with https://";
+	if (typeof(btn)==='undefined'){
+	    notBarShow(errmsg,true);
+	}
+	else{
+	    notBarShow(errmsg);
+	}
 	return;
     }
     if (dict_of_status[sanitized_url] != "secure"){
@@ -134,6 +142,7 @@ function startRecording(){
 	return;
     }
     
+    //passed tests, secure, grab headers, update status bar and start audit:
     var x = sanitized_url.split('/');
     x.splice(0,3);
     tab_url = x.join('/');
@@ -143,6 +152,7 @@ function startRecording(){
 	headers += httpChannel.requestMethod + " /" + tab_url + " HTTP/1.1" + "\r\n";
 	httpChannel.visitRequestHeaders(function(header,value){
                                   headers += header +": " + value + "\r\n";});
+    notBarShow('Audit is underway, please wait...',false);
     startAudit(sanitized_url);
 }
 
@@ -157,7 +167,7 @@ function buildBase64DER(chars){
 
 function startAudit(urldata){
     notBarShow("Audit is underway, please be patient.",false);
-	reqStartAudit = new XMLHttpRequest();
+    reqStartAudit = new XMLHttpRequest();
     reqStartAudit.onload = responseStartAudit;
     var cert = dict_of_certs[urldata];
     var len = new Object();
