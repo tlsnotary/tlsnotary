@@ -1,0 +1,443 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>tlsnotary</title>
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+</head>
+
+<body onload="homepageLoaded()">
+
+<div align="right">
+	
+	<div class="btn-group" data-toggle="buttons">
+  <label class="btn btn-primary">
+    <input type="radio" name="options" id="option1" onclick="normalMode()">Normal mode
+  </label>
+  <label class="btn btn-primary">
+    <input type="radio" name="options" id="option2" onclick="selftestMode()" checked="checked">Selftest mode
+  </label>
+  <label class="btn btn-primary">
+    <input type="radio" name="options" id="option3" onclick="advancedMode()">Advanced
+  </label>
+	</div>
+
+</div>
+
+
+<div id="selftest_screen" class="hero-unit">
+	<ul>
+	<li>You are running tlsnotary in a selftest mode.</li>
+	<li>This mode is useful to determine if your website is compatible with tlsnotary</li>
+	<li>Press "Start selftest" and follow the prompt on the statusbar below</li>
+	</ul>
+	<table>
+	<tr>
+	<td>
+	<button id="selftest_button" autofocus="autofocus" class="btn btn-primary btn-lg" style="width:100%;" onclick="startSelftest()">Start selftest</button>		
+	</td>
+	</tr>
+	<tr>
+	<td>
+	<progress id="progress_bar_selftest" value="0" max="100" style="visibility:hidden"></progress>
+	</td>
+	</tr>
+	</table>
+</div>
+
+
+<div id="advanced_screen" class="hero-unit">
+
+        <p>Only change these settings by negotiation with your auditor.</p>
+        <p>If you are unsure, don't change anything and return to 'self-test' or 'normal'.</p>
+        <div>
+                <p>IRC server</p>
+                <textarea id="textarea_ircserver" cols="40" rows="1" type="text" name="irc_server" style="width:40%;resize:none;" autocomplete="off">chat.freenode.net</textarea>
+        </div>
+        <div>
+                <p>IRC port</p>
+                <textarea id="textarea_ircport" cols="10" rows="1" type="text" name="irc_port" style="width:40%;resize:none;" autocomplete="off">6667</textarea>
+        </div>
+        <div>
+                <p>IRC channel name (omit '#')</p>
+                <textarea id="textarea_ircchannel" cols="40" rows="1" type="text" name="irc_channel" style="width:40%;resize:none;" autocomplete="off">tlsnotary</textarea>
+        </div>
+        <table>
+        <tr>
+        <td>
+        <button id="update_advanced" autofocus="autofocus" class="btn btn-primary btn-lg" style="width:100%;" onclick="advancedUpdate()">Update</button>
+        </td>
+        </tr>
+        </table>
+</div>
+
+<div id="normal_screen" class="hero-unit" style="margin-top:0;margin-bottom:0";>
+	<p  style="margin-left:0;margin-bottom:0;margin-top:-3%;">In order to be audited please do the following.
+	</p>
+	<ul>
+	<li>Give the auditor your key</li>
+	<li>Paste the Auditor's key</li>
+	<li>Wait for the auditor to inform you that they are ready to audit you</li>
+	<li>Press "Connect"</li>
+	</ul>
+
+	<table>
+	<tr>
+	<td>
+	<button id="start_button" autofocus="autofocus" class="btn btn-primary btn-lg" style="width:100%;" onclick="startPressed()">Connect</button>
+	</td>
+	</tr>
+	<tr>
+	<td>
+	<progress id="progress_bar" value="0" max="100" style="visibility:hidden"></progress>
+	</td>
+	</tr>
+	</table>
+
+	<div id="key_area">
+		
+		<table style="width:80%">
+			<tr>
+				<td>
+					<p>Your key:</p>
+				</td>
+				<td style="text-align:right;">
+					<a id="new_keypair" href="#" onclick="newKeypair();"><h6>Expert only: generate a new key</h6></a>
+					<h6 id="generating_cell">Generating...</h6>
+				</td>
+			</tr>
+			<tr>
+				<td colspan="2">	
+					<textarea id="textarea_mykey" cols="40" rows="2" type="text" name="key" style="width:100%;resize:none;" autocomplete="off" oninput="inputReceived()" readonly>
+					</textarea>
+				</td>
+			</tr>
+		</table>
+			
+		<div>
+			<p>Auditor's key:</p>
+			<textarea id="textarea_auditorkey" cols="40" rows="2" type="text" name="key" style="width:80%;resize:none;" autocomplete="off" oninput="inputReceived()">
+			</textarea>
+		</div>
+
+	</div>
+</div>
+
+
+
+<script>
+const Ci = Components.interfaces;
+const Cc = Components.classes;
+var port = Cc["@mozilla.org/process/environment;1"].getService(Ci.nsIEnvironment).get("FF_to_backend_port");
+var bGetRecentKeysResponded = false;
+var bGetAdvancedResponded = false;
+var bImportAuditorPubkeyResponded = false;
+var bStartPCResponded = false;
+var bNewKeypairResponded = false;
+var reqGetRecentKeys;
+var reqImportAuditorPubkey;
+var reqStartPC;
+var reqNewKeypair;
+var mode = 0; //0 - test mode, 1 - normal mode
+
+
+function selftestMode(){
+	mode = 0;
+        toggleDisplay("selftest_screen");
+}
+
+function normalMode(){
+	mode = 1;
+        toggleDisplay("normal_screen");
+}
+
+function advancedMode(){
+        toggleDisplay("advanced_screen");
+}
+
+function toggleDisplay(tabChoice){
+    document.getElementById("normal_screen").style.display="none";
+    document.getElementById("selftest_screen").style.display="none";
+    document.getElementById("generating_cell").style.display = "none";
+    document.getElementById("advanced_screen").style.display = "none";
+    document.getElementById(tabChoice).style.display = "";
+}
+
+function setError(errortext){
+	Cc["@mozilla.org/process/environment;1"].getService(Ci.nsIEnvironment).set("TLSNOTARY_ERROR", errortext);	
+	//just in case, make sure the value has been set, because alert that follows will freeze the code execution
+	var check_value = Cc["@mozilla.org/process/environment;1"].getService(Ci.nsIEnvironment).get("TLSNOTARY_ERROR");
+	if (errortext != check_value){ alert("Internal error - could not set the error text"); return;}
+	alert(errortext);
+}
+
+
+function inputReceived(){
+    var start_button = document.getElementById("start_button");
+    var input_fields = document.getElementsByName("key");
+    for (var i = 0; i < input_fields.length; i++) {
+        if (input_fields[i].value == ""){
+            start_button.setAttribute("disabled", "true");
+            return;
+        }
+    }
+    //activate the button only when all fields contain some text
+    start_button.removeAttribute("disabled");
+}
+
+function advancedUpdate(){
+    var server_val = document.getElementById("textarea_ircserver").value.trim();
+    var channel_val = document.getElementById("textarea_ircchannel").value.trim();
+    var port_val = document.getElementById("textarea_ircport").value.trim();
+
+    if (server_val == "" || channel_val == "" || port_val == ""){
+        alert("All settings are mandatory");
+        return;
+    }
+
+    if (channel_val.startsWith("#")){
+        alert("Omit # from channel name");
+        document.getElementById("textarea_ircchannel").value = channel_val.substr(1);
+        return;
+    }
+
+    var intTest = /^-?(\d+|0)$/;
+    if (!(intTest.test(port_val)) || port_val < 0 || port_val > 65535){
+        alert("You must enter a valid port - an integer between 0 and 65535");
+        return;
+    }
+
+    reqAdvancedUpdate = new XMLHttpRequest();
+    //not setting a response 'onload' because: the backend is not given
+    //any choice on how to respond; if it fails to respond other error messages will
+    //pick that up anyway.
+
+    reqAdvancedUpdate.open("HEAD", "http://127.0.0.1:"+port+"/set_advanced?server_val="+server_val+",channel_val="+channel_val+",port_val="+port_val, true);
+    reqAdvancedUpdate.send();
+}
+
+function homepageLoaded () {
+    selftestMode();
+    reqGetAdvanced = new XMLHttpRequest();
+    reqGetAdvanced.onload = responseGetAdvanced;
+    reqGetAdvanced.open("HEAD","http://127.0.0.1:"+port+"/get_advanced",true);
+    reqGetAdvanced.send();
+    responseGetAdvanced(0);
+
+    reqGetRecentKeys = new XMLHttpRequest();
+    reqGetRecentKeys.onload = responseGetRecentKeys;
+    reqGetRecentKeys.open("HEAD", "http://127.0.0.1:"+port+"/get_recent_keys", true);
+    reqGetRecentKeys.send();
+    responseGetRecentKeys(0);
+}
+
+function responseGetAdvanced(iteration){
+    if (typeof iteration == "number"){
+        if (iteration > 5){setError("ERROR responseGetAdvanced timed out");return;}
+        if (!bGetAdvancedResponded){ setTimeout(responseGetAdvanced, 1000, ++iteration); }
+        return;
+    }
+    bGetAdvancedResponded = true;
+    document.getElementById("textarea_ircserver").value = reqGetAdvanced.getResponseHeader("irc_server");
+    document.getElementById("textarea_ircchannel").value = reqGetAdvanced.getResponseHeader("channel_name");
+    document.getElementById("textarea_ircport").value = reqGetAdvanced.getResponseHeader("irc_port");
+}
+
+function responseGetRecentKeys(iteration){
+    if (typeof iteration == "number"){
+        if (iteration > 40){setError("ERROR responseGetRecentKeys timed out");return;}
+        if (!bGetRecentKeysResponded){ setTimeout(responseGetRecentKeys, 1000, ++iteration); }
+        return;
+    }
+    //else: not a timeout but a response from the server
+	bGetRecentKeysResponded = true;
+    var query = reqGetRecentKeys.getResponseHeader("response");
+    var mypubkey = reqGetRecentKeys.getResponseHeader("mypubkey");
+    var auditorpubkey = reqGetRecentKeys.getResponseHeader("auditorpubkey");
+    if (query != "get_recent_keys"){setError("ERROR Internal error. Wrong response header");return;}
+	//else correct response
+	var textarea_mykey = document.getElementById("textarea_mykey");
+	var textarea_auditorkey = document.getElementById("textarea_auditorkey");
+    textarea_mykey.value = mypubkey;
+    textarea_auditorkey.value = auditorpubkey;
+	//we get an empty pubkey on the very first run, request a new pubkey
+	if (mypubkey == null){
+		newKeypair();
+	}
+	else {
+		Cc["@mozilla.org/process/environment;1"].getService(Ci.nsIEnvironment).set("AUDITEE_HTML", "true"); //signal to test addon that we're loaded
+	}
+}
+
+function startPressed(){
+    //use the auditor pubkey, regardless if it is a newly-pasted key
+    //or one of the recent keys. We still import it explicitely
+    //rather than relying on the backend to remember which keys were
+    //provided during the get_recent_keys() call. Makes life simpler.
+    var textarea_auditorkey = document.getElementById("textarea_auditorkey");
+    var auditorpubkey = textarea_auditorkey.value;
+    if (auditorpubkey.length != 172){setError("ERROR Wrong auditee pubkey length. Expected 172 characters");return;}
+    reqImportAuditorPubkey = new XMLHttpRequest();
+    reqImportAuditorPubkey.onload = responseImportAuditorPubkey;
+    reqImportAuditorPubkey.open("HEAD", "http://127.0.0.1:"+port+"/import_auditor_pubkey?pubkey="+auditorpubkey, true);
+    reqImportAuditorPubkey.send();
+    responseImportAuditorPubkey(0);
+        //the response function will also call startPC()
+}
+
+function responseImportAuditorPubkey(iteration){
+    if (typeof iteration == "number"){
+        if (iteration > 5){setError("ERROR responseImportAuditorPubkey timed out");return;}
+        if (!bImportAuditorPubkeyResponded) setTimeout(responseImportAuditorPubkey, 1000, ++iteration)
+        return;
+    }
+    //else: not a timeout but a response from the server
+	bImportAuditorPubkeyResponded = true;
+    var query = reqImportAuditorPubkey.getResponseHeader("response");
+    var status = reqImportAuditorPubkey.getResponseHeader("status");
+    if (query != "import_auditor_pubkey"){setError("ERROR Internal error. Wrong response header");return;}
+	if (status != "success"){setError("ERROR Received an error message");return;}
+	//else successful response
+	Cc["@mozilla.org/process/environment;1"].getService(Ci.nsIEnvironment).set("TLSNOTARY_MSG", "Please wait. Connecting to auditor...");
+        startPC();
+}
+
+function progressBar(){
+	var progress_bar = document.getElementById("progress_bar");
+	var progress_bar_selftest = document.getElementById("progress_bar_selftest");
+	if (mode == 1) { 
+		if (progress_bar.value >= 100){return;} 
+		progress_bar.value += 2;
+	}
+	if (mode == 0) { 
+		if (progress_bar_selftest.value >= 100){return;} 
+		progress_bar_selftest.value += 1;
+	}
+	setTimeout(progressBar, 400);
+
+}
+
+var bSelfTestResponded = false;
+var reqSelfTest;
+function startSelftest(){
+    Cc["@mozilla.org/process/environment;1"].getService(Ci.nsIEnvironment).set("TLSNOTARY_MSG", "Please wait. Connecting auditor (1/2)");	 
+    var selftest_button = document.getElementById("selftest_button");
+    var progress_bar_selftest = document.getElementById("progress_bar_selftest");
+    progress_bar_selftest.style.visibility = "visible";
+    selftest_button.setAttribute("disabled", "true");
+    var normalbutton = document.getElementById("option1")
+    normalbutton.setAttribute("disabled","true");
+    var advbutton = document.getElementById("option3");
+    advbutton.setAttribute("disabled","true");
+    setTimeout(progressBar, 1);
+    reqSelfTest = new XMLHttpRequest();
+    reqSelfTest.onload = responseSelfTest;
+    reqSelfTest.open("HEAD", "http://127.0.0.1:"+port+"/selftest", true);
+    reqSelfTest.send();
+    responseSelfTest(0);
+}
+
+
+function responseSelfTest(iteration){
+	if (typeof iteration == "number"){
+        if (iteration > 20){setError("ERROR responseSelfTest timed out");return;}
+        if (!bSelfTestResponded) setTimeout(responseSelfTest, 1000, ++iteration)
+        return;
+    }
+    //else: not a timeout but a response from the server
+	bSelfTestResponded = true;
+    var query = reqSelfTest.getResponseHeader("response");
+    var status = reqSelfTest.getResponseHeader("status");
+    if (query != "selftest"){setError("ERROR Internal error. Wrong response header" + query);return;}
+	if (status != "success"){setError("ERROR Received an error message");return;}
+	//else successful response
+	Cc["@mozilla.org/process/environment;1"].getService(Ci.nsIEnvironment).set("TLSNOTARY_MSG", "Please wait. Connecting auditee (2/2)");
+        startPC();
+}
+
+function startPC(){
+	if (mode == 1) {
+		setTimeout(progressBar, 1);
+		var button_start_button = document.getElementById("start_button");
+		var button_new_keypair = document.getElementById("new_keypair");
+		var progress_bar = document.getElementById("progress_bar");
+		progress_bar.style.visibility = "visible";
+		var stbutton = document.getElementById("option2")
+		stbutton.setAttribute("disabled","true");
+		var advbutton = document.getElementById("option3");
+		advbutton.setAttribute("disabled","true");
+		button_start_button.setAttribute("disabled", "true");
+		button_new_keypair.setAttribute("disabled", "true");
+		progress_bar.setAttribute("disabled", "true");
+	}
+
+        reqStartPC = new XMLHttpRequest();
+    reqStartPC.onload = responseStartPC;
+    reqStartPC.open("HEAD", "http://127.0.0.1:"+port+"/start_peer_connection", true);
+    reqStartPC.send();
+    responseStartPC(0);
+}
+
+function responseStartPC(iteration){
+    if (typeof iteration == "number"){
+        if (iteration > 40){setError("ERROR responseStartPC timed out");return;}
+        if (!bStartPCResponded) setTimeout(responseStartPC, 1000, ++iteration)
+        return;
+    }
+    //else: not a timeout but a response from the server
+        bStartPCResponded = true;
+    var query = reqStartPC.getResponseHeader("response");
+    var status = reqStartPC.getResponseHeader("status");
+    var pms_status = reqStartPC.getResponseHeader("pms_status");
+    if (query != "start_peer_connection"){setError("ERROR Internal error. Wrong response header" + query);return;}
+	if (status != "success"){setError("ERROR Received an error message");return;}
+        if (pms_status != "success"){setError("ERROR Failed to negotiate pre master secret.");return;}
+	//else successful response
+	document.getElementById("progress_bar").value = 100;
+	document.getElementById("progress_bar_selftest").value = 100;
+	//inform the addon. We use env var as IPC
+	//NB: we can set envvar from this JS code only because this file is part of the addon
+	//When debugging this file by simple loading into the browser, we won't be able to access env vars
+	Cc["@mozilla.org/process/environment;1"].getService(Ci.nsIEnvironment).set("TLSNOTARY_IRC_STARTED", "true"+mode);	 
+
+}
+
+function newKeypair() {
+	document.getElementById("generating_cell").style.display = "";
+	document.getElementById("new_keypair").style.display = "none";
+	reqNewKeypair = new XMLHttpRequest();
+    reqNewKeypair.onload = responseNewKeypair;
+    reqNewKeypair.open("HEAD", "http://127.0.0.1:"+port+"/new_keypair", true);
+    reqNewKeypair.send();
+    responseNewKeypair(0);
+}
+
+function responseNewKeypair(iteration){
+    if (typeof iteration == "number"){
+        if (iteration > 5){setError("ERROR responseNewKeypair timed out");return;}
+        if (!bNewKeypairResponded) setTimeout(responseNewKeypair, 1000, ++iteration)
+        return;
+    }
+    //else: not a timeout but a response from the server
+	bNewKeypairResponded = true;
+    var query = reqNewKeypair.getResponseHeader("response");
+    var status = reqNewKeypair.getResponseHeader("status");
+    var mypubkey = reqNewKeypair.getResponseHeader("pubkey");
+    if (query != "new_keypair"){setError("ERROR responseNewKeypair timed out");return;}
+	if (status != "success"){setError("ERROR Received an error message" + status);return;}
+	//else successful response
+	var textarea_mykey = document.getElementById("textarea_mykey");
+    textarea_mykey.value = mypubkey;
+    document.getElementById("generating_cell").style.display = "none";
+	document.getElementById("new_keypair").style.display = "";
+	Cc["@mozilla.org/process/environment;1"].getService(Ci.nsIEnvironment).set("AUDITEE_HTML", "true"); //signal to test addon that we're loade}
+}
+
+
+</script>
+
+<script src="jquery-2.0.3.min.js"></script>
+<script src="bootstrap-modal.js"></script>
+<script src="bootstrap-transition.js"></script>
+</body>
+</html>

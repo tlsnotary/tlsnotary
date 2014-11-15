@@ -1,0 +1,678 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!-- Created with Inkscape (http://www.inkscape.org/) -->
+
+<svg
+   xmlns:dc="http://purl.org/dc/elements/1.1/"
+   xmlns:cc="http://creativecommons.org/ns#"
+   xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+   xmlns:svg="http://www.w3.org/2000/svg"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   width="744.09448819"
+   height="1052.3622047"
+   id="svg2"
+   version="1.1"
+   inkscape:version="0.48.2 r9819"
+   sodipodi:docname="walkthrough_diagram.svg">
+  <defs
+     id="defs4">
+    <marker
+       inkscape:stockid="Arrow2Lend"
+       orient="auto"
+       refY="0.0"
+       refX="0.0"
+       id="Arrow2Lend"
+       style="overflow:visible;">
+      <path
+         id="path3779"
+         style="font-size:12.0;fill-rule:evenodd;stroke-width:0.62500000;stroke-linejoin:round;"
+         d="M 8.7185878,4.0337352 L -2.2072895,0.016013256 L 8.7185884,-4.0017078 C 6.9730900,-1.6296469 6.9831476,1.6157441 8.7185878,4.0337352 z "
+         transform="scale(1.1) rotate(180) translate(1,0)" />
+    </marker>
+    <inkscape:perspective
+       id="perspective15"
+       inkscape:persp3d-origin="154.48819 : 75.271652 : 1"
+       inkscape:vp_z="308.97638 : 112.90748 : 1"
+       inkscape:vp_y="0 : 1000 : 0"
+       inkscape:vp_x="0 : 112.90748 : 1"
+       sodipodi:type="inkscape:persp3d" />
+  </defs>
+  <sodipodi:namedview
+     id="base"
+     pagecolor="#ffffff"
+     bordercolor="#666666"
+     borderopacity="1.0"
+     inkscape:pageopacity="0.0"
+     inkscape:pageshadow="2"
+     inkscape:zoom="0.62906099"
+     inkscape:cx="181.28672"
+     inkscape:cy="643.0203"
+     inkscape:document-units="px"
+     inkscape:current-layer="layer1"
+     showgrid="false"
+     inkscape:window-width="1565"
+     inkscape:window-height="850"
+     inkscape:window-x="1440"
+     inkscape:window-y="0"
+     inkscape:window-maximized="0"
+     showguides="true"
+     inkscape:guide-bbox="true">
+    <sodipodi:guide
+       orientation="0,1"
+       position="-344.9586,1088.9246"
+       id="guide4647" />
+    <sodipodi:guide
+       orientation="0,1"
+       position="254.34736,23.845065"
+       id="guide5065" />
+  </sodipodi:namedview>
+  <metadata
+     id="metadata7">
+    <rdf:RDF>
+      <cc:Work
+         rdf:about="">
+        <dc:format>image/svg+xml</dc:format>
+        <dc:type
+           rdf:resource="http://purl.org/dc/dcmitype/StillImage" />
+        <dc:title></dc:title>
+      </cc:Work>
+    </rdf:RDF>
+  </metadata>
+  <g
+     inkscape:label="Layer 1"
+     inkscape:groupmode="layer"
+     id="layer1">
+    <path
+       inkscape:connector-curvature="0"
+       id="path4929"
+       d="m 576.97841,574.4112 c -18.0558,0 -36.11158,0 -54.16736,0 -3.30601,0 -6.61198,0 -9.91799,0 -1.01722,0 -2.03444,0 -3.05167,0 -0.76293,0 -1.54065,-0.1 -2.28876,0 -0.55761,0.0745 -0.97418,0.41762 -1.52584,0.50977 -0.7903,0.13202 -2.17687,0 -3.05168,0 -2.03446,0 -4.06891,0 -6.10337,0"
+       style="fill:none;stroke:#000000;stroke-width:3;stroke-linecap:butt;stroke-linejoin:miter;stroke-miterlimit:4;stroke-opacity:1;stroke-dasharray:none;marker-end:url(#Arrow2Lend)" />
+    <path
+       style="fill:none;stroke:#000000;stroke-width:3.6154964;stroke-linecap:butt;stroke-linejoin:miter;stroke-miterlimit:4.0999999;stroke-opacity:1;stroke-dasharray:none;marker-end:url(#Arrow2Lend)"
+       d="m 118.25192,209.83659 0,818.68051"
+       id="path2985"
+       inkscape:connector-curvature="0" />
+    <path
+       inkscape:connector-curvature="0"
+       id="path4199"
+       d="m 290.98801,209.83659 0,818.68051"
+       style="fill:none;stroke:#000000;stroke-width:3.93302131;stroke-linecap:butt;stroke-linejoin:miter;stroke-miterlimit:4.0999999;stroke-opacity:1;stroke-dasharray:none;marker-end:url(#Arrow2Lend)" />
+    <path
+       style="fill:none;stroke:#000000;stroke-width:3.91024709;stroke-linecap:butt;stroke-linejoin:miter;stroke-miterlimit:4.0999999;stroke-opacity:1;stroke-dasharray:none;marker-end:url(#Arrow2Lend)"
+       d="m 498.06928,209.83659 0,818.68051"
+       id="path4201"
+       inkscape:connector-curvature="0" />
+    <g
+       transform="matrix(0.18788587,0,0,0.18788587,239.32263,23.144776)"
+       id="g4309">
+      <path
+         style="fill:#000000;stroke:none"
+         id="path4311"
+         d="m -629.47405,678.98697 c 39.82658,0 72.1183,-32.2859 72.1183,-72.11636 0,-39.83046 -32.29172,-72.12218 -72.1183,-72.12218 -39.83238,0 -72.12216,32.29172 -72.12216,72.12218 0,39.83046 32.28978,72.11636 72.12216,72.11636 z"
+         inkscape:connector-curvature="0" />
+      <path
+         sodipodi:nodetypes="ccsssc"
+         style="fill:#000000;stroke:none"
+         id="path4313"
+         d="m -725.43183,880.94942 c 23.95529,0 194.1308,0.0434 194.1308,0.0434 0,0 -0.16314,-69.30944 -0.16314,-98.86886 0,-53.51704 -43.38783,-96.90488 -96.89966,-96.90488 -53.51963,0 -96.90486,43.38784 -96.90486,96.90488 0,53.51704 -0.16314,31.29722 -0.16314,98.82551 z"
+         inkscape:connector-curvature="0" />
+    </g>
+    <text
+       xml:space="preserve"
+       style="font-size:40px;font-style:normal;font-weight:normal;line-height:125%;letter-spacing:0px;word-spacing:0px;fill:#000000;fill-opacity:1;stroke:none;font-family:Sans"
+       x="74.815361"
+       y="101.80865"
+       id="text4315"
+       sodipodi:linespacing="125%"><tspan
+         sodipodi:role="line"
+         id="tspan4317"
+         x="74.815361"
+         y="101.80865"
+         style="font-size:24px;font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-family:Ubuntu;-inkscape-font-specification:Ubuntu">Auditor</tspan></text>
+    <text
+       xml:space="preserve"
+       style="font-size:40px;font-style:normal;font-weight:normal;line-height:125%;letter-spacing:0px;word-spacing:0px;fill:#000000;fill-opacity:1;stroke:none;font-family:Sans"
+       x="441.68393"
+       y="96.501701"
+       id="text4315-6"
+       sodipodi:linespacing="125%"><tspan
+         sodipodi:role="line"
+         id="tspan4317-5"
+         x="441.68393"
+         y="96.501701"
+         style="font-size:24px;font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-family:Ubuntu;-inkscape-font-specification:Ubuntu">Auditee</tspan></text>
+    <rect
+       style="fill:#ffffff;fill-opacity:1;stroke:#000000;stroke-width:2.39432788;stroke-miterlimit:4.0999999;stroke-opacity:1;stroke-dasharray:none"
+       id="rect4340"
+       width="208.00273"
+       height="85.458488"
+       x="387.21317"
+       y="214.98932" />
+    <rect
+       y="332.24124"
+       x="188.65974"
+       height="85.458488"
+       width="208.00273"
+       id="rect4361"
+       style="fill:#ffffff;fill-opacity:1;stroke:#000000;stroke-width:2.39432788;stroke-miterlimit:4.0999999;stroke-opacity:1;stroke-dasharray:none" />
+    <rect
+       style="fill:#ffffff;fill-opacity:1;stroke:#000000;stroke-width:2.39432788;stroke-miterlimit:4.0999999;stroke-opacity:1;stroke-dasharray:none"
+       id="rect4363"
+       width="208.00273"
+       height="85.458488"
+       x="391.50821"
+       y="431.83514" />
+    <rect
+       y="639.11804"
+       x="395.30566"
+       height="62.322433"
+       width="208.00273"
+       id="rect4365"
+       style="fill:#ffffff;fill-opacity:1;stroke:#000000;stroke-width:2.04469371;stroke-miterlimit:4.0999999;stroke-opacity:1;stroke-dasharray:none" />
+    <g
+       id="g4966"
+       transform="matrix(0.48676192,0,0,0.48676192,358.22223,56.428169)">
+      <g
+         id="layer1-1"
+         inkscape:label="Calque 1"
+         transform="matrix(0.42622585,0,0,0.42622585,502.03718,124.15281)">
+        <rect
+           id="rect2404"
+           ry="0"
+           style="fill:none;stroke:#000000;stroke-width:5.37279987;stroke-linecap:round;stroke-linejoin:round"
+           inkscape:export-filename="I:\Documents and Settings\Eric\Bureau\techicons.png"
+           rx="0"
+           transform="matrix(0.86603,-0.5,0,1,0,0)"
+           height="212.60001"
+           width="141.73"
+           inkscape:export-xdpi="61.308788"
+           inkscape:export-ydpi="61.308788"
+           y="308.26999"
+           x="318.89999" />
+        <path
+           inkscape:connector-curvature="0"
+           id="path3178"
+           style="fill:none;stroke:#000000;stroke-width:5;stroke-linecap:round;stroke-linejoin:round"
+           d="m 184.12,95.669 v 212.6 c 15.34,26.57 61.37,53.15 92.05,53.15 v -212.6 c -30.68,0 -76.71,-26.58 -92.05,-53.151 z"
+           inkscape:export-ydpi="61.308788"
+           sodipodi:nodetypes="ccccc"
+           inkscape:export-filename="I:\Documents and Settings\Eric\Bureau\techicons.png"
+           inkscape:export-xdpi="61.308788" />
+        <path
+           inkscape:connector-curvature="0"
+           id="path3207"
+           style="fill:none;stroke:#000000;stroke-width:5;stroke-linecap:round;stroke-linejoin:round"
+           d="m 264.04,183.06 c -27.47,-5.91 -54.23,-20.89 -72.82,-42.04"
+           inkscape:export-ydpi="61.308788"
+           sodipodi:nodetypes="cc"
+           inkscape:export-filename="I:\Documents and Settings\Eric\Bureau\techicons.png"
+           inkscape:export-xdpi="61.308788" />
+        <path
+           id="path3215"
+           sodipodi:rx="7.6714849"
+           sodipodi:ry="4.4291339"
+           style="fill:none;stroke:#000000;stroke-width:4.25390005;stroke-linecap:round;stroke-linejoin:round"
+           sodipodi:type="arc"
+           d="m 552.3469,507.5787 c 0,2.44615 -3.43464,4.42914 -7.67148,4.42914 -4.23685,0 -7.67149,-1.98299 -7.67149,-4.42914 0,-2.44614 3.43464,-4.42913 7.67149,-4.42913 4.23684,0 7.67148,1.98299 7.67148,4.42913 z"
+           inkscape:export-ydpi="61.308788"
+           inkscape:export-filename="I:\Documents and Settings\Eric\Bureau\techicons.png"
+           transform="matrix(0,-1.3983,2.0715,0,-846.91,1012.3)"
+           sodipodi:cy="507.5787"
+           sodipodi:cx="544.67542"
+           inkscape:export-xdpi="61.308788" />
+        <path
+           id="path3217"
+           sodipodi:rx="7.6714849"
+           sodipodi:ry="4.4291339"
+           style="fill:none;stroke:#000000;stroke-width:4.25390005;stroke-linecap:round;stroke-linejoin:round"
+           sodipodi:type="arc"
+           d="m 552.3469,507.5787 c 0,2.44615 -3.43464,4.42914 -7.67148,4.42914 -4.23685,0 -7.67149,-1.98299 -7.67149,-4.42914 0,-2.44614 3.43464,-4.42913 7.67149,-4.42913 4.23684,0 7.67148,1.98299 7.67148,4.42913 z"
+           inkscape:export-ydpi="61.308788"
+           inkscape:export-filename="I:\Documents and Settings\Eric\Bureau\techicons.png"
+           transform="matrix(0,-1.3523,2.0033,0,-812.59,1020.1)"
+           sodipodi:cy="507.5787"
+           sodipodi:cx="544.67542"
+           inkscape:export-xdpi="61.308788" />
+        <path
+           inkscape:connector-curvature="0"
+           id="path3275"
+           style="fill:none;stroke:#000000;stroke-width:5;stroke-linecap:round;stroke-linejoin:round"
+           d="m 265.34,208.35 c -27.46,-5.9 -54.23,-20.88 -72.82,-42.04"
+           inkscape:export-ydpi="61.308788"
+           sodipodi:nodetypes="cc"
+           inkscape:export-filename="I:\Documents and Settings\Eric\Bureau\techicons.png"
+           inkscape:export-xdpi="61.308788" />
+        <path
+           inkscape:connector-curvature="0"
+           id="path3176"
+           style="fill:none;stroke:#000000;stroke-width:5;stroke-linecap:round;stroke-linejoin:round"
+           d="m 276.17,148.82 c -30.68,0 -76.71,-26.58 -92.05,-53.151 l 122.74,-70.866 92.06,53.15 -122.75,70.867 z"
+           inkscape:export-ydpi="61.308788"
+           sodipodi:nodetypes="ccccc"
+           inkscape:export-filename="I:\Documents and Settings\Eric\Bureau\techicons.png"
+           inkscape:export-xdpi="61.308788" />
+        <path
+           inkscape:connector-curvature="0"
+           id="path3193"
+           style="fill:none;stroke:#000000;stroke-width:10;stroke-linecap:round;stroke-linejoin:round"
+           d="M 306.86,24.803 184.12,95.669 v 212.6 c 15.34,26.57 61.37,53.15 92.05,53.15 l 122.75,-70.87 V 77.949 L 306.86,24.802 z"
+           inkscape:export-ydpi="61.308788"
+           sodipodi:nodetypes="ccccccc"
+           inkscape:export-filename="I:\Documents and Settings\Eric\Bureau\techicons.png"
+           inkscape:export-xdpi="61.308788" />
+      </g>
+    </g>
+    <text
+       xml:space="preserve"
+       style="font-size:16px;font-style:normal;font-weight:normal;line-height:125%;letter-spacing:0px;word-spacing:0px;fill:#000000;fill-opacity:1;stroke:none;font-family:Sans"
+       x="474.7717"
+       y="409.90515"
+       id="text4540"
+       sodipodi:linespacing="125%"><tspan
+         sodipodi:role="line"
+         id="tspan4542"
+         x="474.7717"
+         y="409.90515" /></text>
+    <text
+       xml:space="preserve"
+       style="font-size:16px;font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;text-align:start;line-height:125%;letter-spacing:0px;word-spacing:0px;writing-mode:lr-tb;text-anchor:start;fill:#000000;fill-opacity:1;stroke:none;font-family:Ubuntu Condensed;-inkscape-font-specification:'Ubuntu Condensed,'"
+       x="442.41479"
+       y="250.49863"
+       id="text4544"
+       sodipodi:linespacing="125%"><tspan
+         sodipodi:role="line"
+         id="tspan4546"
+         x="442.41479"
+         y="250.49863"
+         style="font-size:16px;font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;text-align:start;line-height:125%;writing-mode:lr-tb;text-anchor:start;font-family:Ubuntu Condensed;-inkscape-font-specification:'Ubuntu Condensed,'">Open a web page in </tspan><tspan
+         sodipodi:role="line"
+         x="442.41479"
+         y="270.49863"
+         style="font-size:16px;font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;text-align:start;line-height:125%;writing-mode:lr-tb;text-anchor:start;font-family:Ubuntu Condensed;-inkscape-font-specification:'Ubuntu Condensed,'"
+         id="tspan4548">TLSNotary browser</tspan></text>
+    <text
+       xml:space="preserve"
+       style="font-size:40px;font-style:normal;font-weight:normal;line-height:125%;letter-spacing:0px;word-spacing:0px;fill:#000000;fill-opacity:1;stroke:none;font-family:Sans"
+       x="295.75549"
+       y="67.815361"
+       id="text4315-62"
+       sodipodi:linespacing="125%"><tspan
+         sodipodi:role="line"
+         id="tspan4317-2"
+         x="295.75549"
+         y="67.815361"
+         style="font-size:24px;font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;text-align:center;line-height:125%;writing-mode:lr-tb;text-anchor:middle;font-family:Ubuntu;-inkscape-font-specification:Ubuntu">Auditor</tspan><tspan
+         sodipodi:role="line"
+         x="295.75549"
+         y="97.815361"
+         style="font-size:24px;font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;text-align:center;line-height:125%;writing-mode:lr-tb;text-anchor:middle;font-family:Ubuntu;-inkscape-font-specification:Ubuntu"
+         id="tspan4575">server</tspan></text>
+    <text
+       xml:space="preserve"
+       style="font-size:40px;font-style:normal;font-weight:normal;line-height:125%;letter-spacing:0px;word-spacing:0px;fill:#000000;fill-opacity:1;stroke:none;font-family:Sans"
+       x="664.62305"
+       y="34.369579"
+       id="text4315-62-0"
+       sodipodi:linespacing="125%"><tspan
+         sodipodi:role="line"
+         x="667.38867"
+         y="34.369579"
+         style="font-size:24px;font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;text-align:center;line-height:125%;writing-mode:lr-tb;text-anchor:middle;font-family:Ubuntu;-inkscape-font-specification:Ubuntu"
+         id="tspan5033">Online </tspan><tspan
+         sodipodi:role="line"
+         x="667.38867"
+         y="64.369576"
+         style="font-size:24px;font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;text-align:center;line-height:125%;writing-mode:lr-tb;text-anchor:middle;font-family:Ubuntu;-inkscape-font-specification:Ubuntu"
+         id="tspan5037">banking </tspan><tspan
+         sodipodi:role="line"
+         x="664.62305"
+         y="94.369576"
+         style="font-size:24px;font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;text-align:center;line-height:125%;writing-mode:lr-tb;text-anchor:middle;font-family:Ubuntu;-inkscape-font-specification:Ubuntu"
+         id="tspan5039">webserver</tspan></text>
+    <path
+       inkscape:connector-curvature="0"
+       id="path4649"
+       d="m 661.71399,209.83659 0,818.68051"
+       style="fill:none;stroke:#000000;stroke-width:3.91024709;stroke-linecap:butt;stroke-linejoin:miter;stroke-miterlimit:4.0999999;stroke-opacity:1;stroke-dasharray:none;marker-end:url(#Arrow2Lend)" />
+    <text
+       xml:space="preserve"
+       style="font-size:16px;font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;text-align:start;line-height:125%;letter-spacing:0px;word-spacing:0px;writing-mode:lr-tb;text-anchor:start;fill:#000000;fill-opacity:1;stroke:none;font-family:Ubuntu Condensed;-inkscape-font-specification:'Ubuntu Condensed,'"
+       x="236.04332"
+       y="368.09265"
+       id="text4544-8"
+       sodipodi:linespacing="125%"><tspan
+         sodipodi:role="line"
+         x="236.04332"
+         y="368.09265"
+         style="font-size:16px;font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;text-align:start;line-height:125%;writing-mode:lr-tb;text-anchor:start;font-family:Ubuntu Condensed;-inkscape-font-specification:'Ubuntu Condensed,'"
+         id="tspan4548-2">Create the auditor </tspan><tspan
+         sodipodi:role="line"
+         x="236.04332"
+         y="388.09265"
+         style="font-size:16px;font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;text-align:start;line-height:125%;writing-mode:lr-tb;text-anchor:start;font-family:Ubuntu Condensed;-inkscape-font-specification:'Ubuntu Condensed,'"
+         id="tspan4677">part of TLS secret</tspan></text>
+    <text
+       sodipodi:linespacing="125%"
+       id="text4679"
+       y="491.58218"
+       x="451.65598"
+       style="font-size:16px;font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;text-align:start;line-height:125%;letter-spacing:0px;word-spacing:0px;writing-mode:lr-tb;text-anchor:start;fill:#000000;fill-opacity:1;stroke:none;font-family:Ubuntu Condensed;-inkscape-font-specification:'Ubuntu Condensed,'"
+       xml:space="preserve"
+       transform="scale(1.0857616,0.9210125)"><tspan
+         id="tspan4683"
+         style="font-size:16px;font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;text-align:center;line-height:125%;writing-mode:lr-tb;text-anchor:middle;font-family:Ubuntu Condensed;-inkscape-font-specification:'Ubuntu Condensed,'"
+         y="491.58218"
+         x="451.65598"
+         sodipodi:role="line">Download the page</tspan><tspan
+         style="font-size:16px;font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;text-align:center;line-height:125%;writing-mode:lr-tb;text-anchor:middle;font-family:Ubuntu Condensed;-inkscape-font-specification:'Ubuntu Condensed,'"
+         y="511.58221"
+         x="453.21848"
+         sodipodi:role="line"
+         id="tspan5112">using the combined </tspan><tspan
+         style="font-size:16px;font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;text-align:center;line-height:125%;writing-mode:lr-tb;text-anchor:middle;font-family:Ubuntu Condensed;-inkscape-font-specification:'Ubuntu Condensed,'"
+         y="531.58221"
+         x="451.65598"
+         sodipodi:role="line"
+         id="tspan5116">secret  from the auditee</tspan><tspan
+         style="font-size:16px;font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;text-align:center;line-height:125%;writing-mode:lr-tb;text-anchor:middle;font-family:Ubuntu Condensed;-inkscape-font-specification:'Ubuntu Condensed,'"
+         y="551.58221"
+         x="451.65598"
+         sodipodi:role="line"
+         id="tspan5118"> and  the auditor</tspan></text>
+    <path
+       inkscape:connector-curvature="0"
+       id="path4883"
+       d="m 395.82807,375.03933 c 21.77736,0 43.5547,0 65.33205,0 3.98742,0 7.9748,0 11.96223,0 1.22688,0 2.45377,0 3.68067,0 0.92017,0 1.8582,-0.1 2.7605,0 0.67254,0.0745 1.17497,0.41762 1.84034,0.50977 0.95319,0.13202 2.62556,0 3.68068,0 2.45379,0 4.90757,0 7.36136,0"
+       style="fill:none;stroke:#000000;stroke-width:3;stroke-linecap:butt;stroke-linejoin:miter;stroke-miterlimit:4;stroke-opacity:1;stroke-dasharray:none;marker-end:url(#Arrow2Lend)" />
+    <text
+       transform="scale(1.0857616,0.9210125)"
+       xml:space="preserve"
+       style="font-size:16px;font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;text-align:start;line-height:125%;letter-spacing:0px;word-spacing:0px;writing-mode:lr-tb;text-anchor:start;fill:#000000;fill-opacity:1;stroke:none;font-family:Ubuntu Condensed;-inkscape-font-specification:'Ubuntu Condensed,'"
+       x="422.37387"
+       y="729.77069"
+       id="text4885"
+       sodipodi:linespacing="125%"><tspan
+         id="tspan4891"
+         sodipodi:role="line"
+         x="422.37387"
+         y="729.77069"
+         style="font-size:16px;font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;text-align:start;line-height:125%;writing-mode:lr-tb;text-anchor:start;font-family:Ubuntu Condensed;-inkscape-font-specification:'Ubuntu Condensed,'">Log out</tspan></text>
+    <rect
+       style="fill:#ffffff;fill-opacity:1;stroke:#000000;stroke-width:2.0741241;stroke-miterlimit:4.0999999;stroke-opacity:1;stroke-dasharray:none"
+       id="rect4911"
+       width="156.08865"
+       height="85.458488"
+       x="578.56354"
+       y="532.12201" />
+    <text
+       transform="scale(1.0413234,0.96031645)"
+       xml:space="preserve"
+       style="font-size:16px;font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;text-align:start;line-height:125%;letter-spacing:0px;word-spacing:0px;writing-mode:lr-tb;text-anchor:start;fill:#000000;fill-opacity:1;stroke:none;font-family:Ubuntu Condensed;-inkscape-font-specification:'Ubuntu Condensed,'"
+       x="632.00574"
+       y="574.91382"
+       id="text4921"
+       sodipodi:linespacing="125%"><tspan
+         id="tspan4927"
+         sodipodi:role="line"
+         x="632.00574"
+         y="574.91382"
+         style="font-size:16px;font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;text-align:center;line-height:125%;writing-mode:lr-tb;text-anchor:middle;font-family:Ubuntu Condensed;-inkscape-font-specification:'Ubuntu Condensed,'">Sign the web page</tspan><tspan
+         sodipodi:role="line"
+         x="632.00574"
+         y="594.91382"
+         style="font-size:16px;font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;text-align:center;line-height:125%;writing-mode:lr-tb;text-anchor:middle;font-family:Ubuntu Condensed;-inkscape-font-specification:'Ubuntu Condensed,'"
+         id="tspan4949">HTTPS download</tspan><tspan
+         sodipodi:role="line"
+         x="633.56824"
+         y="614.91382"
+         style="font-size:16px;font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;text-align:center;line-height:125%;writing-mode:lr-tb;text-anchor:middle;font-family:Ubuntu Condensed;-inkscape-font-specification:'Ubuntu Condensed,'"
+         id="tspan4951">with the </tspan><tspan
+         sodipodi:role="line"
+         x="632.00574"
+         y="634.91382"
+         style="font-size:16px;font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;text-align:center;line-height:125%;writing-mode:lr-tb;text-anchor:middle;font-family:Ubuntu Condensed;-inkscape-font-specification:'Ubuntu Condensed,'"
+         id="tspan4953">combinet secret</tspan><tspan
+         sodipodi:role="line"
+         x="632.00574"
+         y="654.91382"
+         style="font-size:16px;font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;text-align:center;line-height:125%;writing-mode:lr-tb;text-anchor:middle;font-family:Ubuntu Condensed;-inkscape-font-specification:'Ubuntu Condensed,'"
+         id="tspan4947" /></text>
+    <flowRoot
+       xml:space="preserve"
+       id="flowRoot4931"
+       style="fill:black;stroke:none;stroke-opacity:1;stroke-width:1px;stroke-linejoin:miter;stroke-linecap:butt;fill-opacity:1;font-family:Sans;font-style:normal;font-weight:normal;font-size:40px;line-height:125%;letter-spacing:0px;word-spacing:0px"><flowRegion
+         id="flowRegion4933"><rect
+           id="rect4935"
+           width="138.30138"
+           height="60.407497"
+           x="567.51251"
+           y="661.3031" /></flowRegion><flowPara
+         id="flowPara4937"></flowPara></flowRoot>    <path
+       inkscape:connector-curvature="0"
+       id="path4939"
+       d="m 655.31675,259.65635 c -12.06476,0 -24.12951,0 -36.19426,0 -2.20905,0 -4.41808,0 -6.62713,0 -0.6797,0 -1.3594,0 -2.03911,0 -0.50978,0 -1.02945,-0.1 -1.52933,0 -0.37259,0.0745 -0.65094,0.41762 -1.01956,0.50977 -0.52807,0.13202 -1.45457,0 -2.03911,0 -1.35941,0 -2.71882,0 -4.07823,0"
+       style="fill:none;stroke:#000000;stroke-width:3;stroke-linecap:butt;stroke-linejoin:miter;stroke-miterlimit:4;stroke-opacity:1;stroke-dasharray:none;marker-end:url(#Arrow2Lend)" />
+    <path
+       style="fill:none;stroke:#000000;stroke-width:3;stroke-linecap:butt;stroke-linejoin:miter;stroke-miterlimit:4;stroke-opacity:1;stroke-dasharray:none;marker-end:url(#Arrow2Lend)"
+       d="m 597.71629,472.67225 c 12.06476,0 24.12951,0 36.19426,0 2.20905,0 4.41808,0 6.62713,0 0.6797,0 1.3594,0 2.03911,0 0.50978,0 1.02945,-0.1 1.52933,0 0.37259,0.0745 0.65094,0.41762 1.01956,0.50977 0.52807,0.13202 1.45457,0 2.03911,0 1.35941,0 2.71882,0 4.07823,0"
+       id="path4941"
+       inkscape:connector-curvature="0" />
+    <g
+       transform="matrix(0.48676192,0,0,0.48676192,-10.581436,56.428169)"
+       id="g4977">
+      <g
+         transform="matrix(0.42622585,0,0,0.42622585,502.03718,124.15281)"
+         inkscape:label="Calque 1"
+         id="g4979">
+        <rect
+           x="318.89999"
+           y="308.26999"
+           inkscape:export-ydpi="61.308788"
+           inkscape:export-xdpi="61.308788"
+           width="141.73"
+           height="212.60001"
+           transform="matrix(0.86603,-0.5,0,1,0,0)"
+           rx="0"
+           inkscape:export-filename="I:\Documents and Settings\Eric\Bureau\techicons.png"
+           style="fill:none;stroke:#000000;stroke-width:5.37279987;stroke-linecap:round;stroke-linejoin:round"
+           ry="0"
+           id="rect4981" />
+        <path
+           inkscape:export-xdpi="61.308788"
+           inkscape:export-filename="I:\Documents and Settings\Eric\Bureau\techicons.png"
+           sodipodi:nodetypes="ccccc"
+           inkscape:export-ydpi="61.308788"
+           d="m 184.12,95.669 v 212.6 c 15.34,26.57 61.37,53.15 92.05,53.15 v -212.6 c -30.68,0 -76.71,-26.58 -92.05,-53.151 z"
+           style="fill:none;stroke:#000000;stroke-width:5;stroke-linecap:round;stroke-linejoin:round"
+           id="path4983"
+           inkscape:connector-curvature="0" />
+        <path
+           inkscape:export-xdpi="61.308788"
+           inkscape:export-filename="I:\Documents and Settings\Eric\Bureau\techicons.png"
+           sodipodi:nodetypes="cc"
+           inkscape:export-ydpi="61.308788"
+           d="m 264.04,183.06 c -27.47,-5.91 -54.23,-20.89 -72.82,-42.04"
+           style="fill:none;stroke:#000000;stroke-width:5;stroke-linecap:round;stroke-linejoin:round"
+           id="path4985"
+           inkscape:connector-curvature="0" />
+        <path
+           inkscape:export-xdpi="61.308788"
+           sodipodi:cx="544.67542"
+           sodipodi:cy="507.5787"
+           transform="matrix(0,-1.3983,2.0715,0,-846.91,1012.3)"
+           inkscape:export-filename="I:\Documents and Settings\Eric\Bureau\techicons.png"
+           inkscape:export-ydpi="61.308788"
+           d="m 552.3469,507.5787 c 0,2.44615 -3.43464,4.42914 -7.67148,4.42914 -4.23685,0 -7.67149,-1.98299 -7.67149,-4.42914 0,-2.44614 3.43464,-4.42913 7.67149,-4.42913 4.23684,0 7.67148,1.98299 7.67148,4.42913 z"
+           sodipodi:type="arc"
+           style="fill:none;stroke:#000000;stroke-width:4.25390005;stroke-linecap:round;stroke-linejoin:round"
+           sodipodi:ry="4.4291339"
+           sodipodi:rx="7.6714849"
+           id="path4987" />
+        <path
+           inkscape:export-xdpi="61.308788"
+           sodipodi:cx="544.67542"
+           sodipodi:cy="507.5787"
+           transform="matrix(0,-1.3523,2.0033,0,-812.59,1020.1)"
+           inkscape:export-filename="I:\Documents and Settings\Eric\Bureau\techicons.png"
+           inkscape:export-ydpi="61.308788"
+           d="m 552.3469,507.5787 c 0,2.44615 -3.43464,4.42914 -7.67148,4.42914 -4.23685,0 -7.67149,-1.98299 -7.67149,-4.42914 0,-2.44614 3.43464,-4.42913 7.67149,-4.42913 4.23684,0 7.67148,1.98299 7.67148,4.42913 z"
+           sodipodi:type="arc"
+           style="fill:none;stroke:#000000;stroke-width:4.25390005;stroke-linecap:round;stroke-linejoin:round"
+           sodipodi:ry="4.4291339"
+           sodipodi:rx="7.6714849"
+           id="path4989" />
+        <path
+           inkscape:export-xdpi="61.308788"
+           inkscape:export-filename="I:\Documents and Settings\Eric\Bureau\techicons.png"
+           sodipodi:nodetypes="cc"
+           inkscape:export-ydpi="61.308788"
+           d="m 265.34,208.35 c -27.46,-5.9 -54.23,-20.88 -72.82,-42.04"
+           style="fill:none;stroke:#000000;stroke-width:5;stroke-linecap:round;stroke-linejoin:round"
+           id="path4991"
+           inkscape:connector-curvature="0" />
+        <path
+           inkscape:export-xdpi="61.308788"
+           inkscape:export-filename="I:\Documents and Settings\Eric\Bureau\techicons.png"
+           sodipodi:nodetypes="ccccc"
+           inkscape:export-ydpi="61.308788"
+           d="m 276.17,148.82 c -30.68,0 -76.71,-26.58 -92.05,-53.151 l 122.74,-70.866 92.06,53.15 -122.75,70.867 z"
+           style="fill:none;stroke:#000000;stroke-width:5;stroke-linecap:round;stroke-linejoin:round"
+           id="path4993"
+           inkscape:connector-curvature="0" />
+        <path
+           inkscape:export-xdpi="61.308788"
+           inkscape:export-filename="I:\Documents and Settings\Eric\Bureau\techicons.png"
+           sodipodi:nodetypes="ccccccc"
+           inkscape:export-ydpi="61.308788"
+           d="M 306.86,24.803 184.12,95.669 v 212.6 c 15.34,26.57 61.37,53.15 92.05,53.15 l 122.75,-70.87 V 77.949 L 306.86,24.802 z"
+           style="fill:none;stroke:#000000;stroke-width:10;stroke-linecap:round;stroke-linejoin:round"
+           id="path4995"
+           inkscape:connector-curvature="0" />
+      </g>
+    </g>
+    <g
+       id="g5017"
+       transform="matrix(0.18788587,0,0,0.18788587,617.66432,24.734447)">
+      <path
+         inkscape:connector-curvature="0"
+         d="m -629.47405,678.98697 c 39.82658,0 72.1183,-32.2859 72.1183,-72.11636 0,-39.83046 -32.29172,-72.12218 -72.1183,-72.12218 -39.83238,0 -72.12216,32.29172 -72.12216,72.12218 0,39.83046 32.28978,72.11636 72.12216,72.11636 z"
+         id="path5019"
+         style="fill:#000000;stroke:none" />
+      <path
+         inkscape:connector-curvature="0"
+         d="m -725.43183,880.94942 c 23.95529,0 194.1308,0.0434 194.1308,0.0434 0,0 -0.16314,-69.30944 -0.16314,-98.86886 0,-53.51704 -43.38783,-96.90488 -96.89966,-96.90488 -53.51963,0 -96.90486,43.38784 -96.90486,96.90488 0,53.51704 -0.16314,31.29722 -0.16314,98.82551 z"
+         id="path5021"
+         style="fill:#000000;stroke:none"
+         sodipodi:nodetypes="ccsssc" />
+    </g>
+    <path
+       inkscape:connector-curvature="0"
+       id="path5027"
+       d="m 597.71629,472.67225 c 12.06476,0 24.12951,0 36.19426,0 2.20905,0 4.41808,0 6.62713,0 0.6797,0 1.3594,0 2.03911,0 0.50978,0 1.02945,-0.1 1.52933,0 0.37259,0.0745 0.65094,0.41762 1.01956,0.50977 0.52807,0.13202 1.45457,0 2.03911,0 1.35941,0 2.71882,0 4.07823,0"
+       style="fill:none;stroke:#000000;stroke-width:3;stroke-linecap:butt;stroke-linejoin:miter;stroke-miterlimit:4;stroke-opacity:1;stroke-dasharray:none;marker-end:url(#Arrow2Lend)" />
+    <path
+       style="fill:none;stroke:#000000;stroke-width:3;stroke-linecap:butt;stroke-linejoin:miter;stroke-miterlimit:4;stroke-opacity:1;stroke-dasharray:none;marker-end:url(#Arrow2Lend)"
+       d="m 605.66464,671.38112 c 12.06476,0 24.12951,0 36.19426,0 2.20905,0 4.41808,0 6.62713,0 0.6797,0 1.3594,0 2.03911,0 0.50978,0 1.02945,-0.1 1.52933,0 0.37259,0.0745 0.65094,0.41762 1.01956,0.50977 0.52807,0.13202 1.45457,0 2.03911,0 1.35941,0 2.71882,0 4.07823,0"
+       id="path5029"
+       inkscape:connector-curvature="0" />
+    <rect
+       style="fill:#ffffff;fill-opacity:1;stroke:#000000;stroke-width:2.56117034;stroke-miterlimit:4.0999999;stroke-opacity:1;stroke-dasharray:none"
+       id="rect5047"
+       width="208.00273"
+       height="97.783348"
+       x="179.12172"
+       y="786.88708" />
+    <text
+       sodipodi:linespacing="125%"
+       id="text5049"
+       y="811.61072"
+       x="282.14377"
+       style="font-size:16px;font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;text-align:start;line-height:125%;letter-spacing:0px;word-spacing:0px;writing-mode:lr-tb;text-anchor:start;fill:#000000;fill-opacity:1;stroke:none;font-family:Ubuntu Condensed;-inkscape-font-specification:'Ubuntu Condensed,'"
+       xml:space="preserve"><tspan
+         id="tspan5053"
+         style="font-size:16px;font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;text-align:center;line-height:125%;writing-mode:lr-tb;text-anchor:middle;font-family:Ubuntu Condensed;-inkscape-font-specification:'Ubuntu Condensed,'"
+         y="811.61072"
+         x="282.14377"
+         sodipodi:role="line">Verify the signature</tspan><tspan
+         style="font-size:16px;font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;text-align:center;line-height:125%;writing-mode:lr-tb;text-anchor:middle;font-family:Ubuntu Condensed;-inkscape-font-specification:'Ubuntu Condensed,'"
+         y="831.61072"
+         x="282.14377"
+         sodipodi:role="line"
+         id="tspan5057">matches the auditor</tspan><tspan
+         style="font-size:16px;font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;text-align:center;line-height:125%;writing-mode:lr-tb;text-anchor:middle;font-family:Ubuntu Condensed;-inkscape-font-specification:'Ubuntu Condensed,'"
+         y="851.61072"
+         x="283.70627"
+         sodipodi:role="line"
+         id="tspan5059">secret and the online </tspan><tspan
+         style="font-size:16px;font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;text-align:center;line-height:125%;writing-mode:lr-tb;text-anchor:middle;font-family:Ubuntu Condensed;-inkscape-font-specification:'Ubuntu Condensed,'"
+         y="871.61072"
+         x="282.14377"
+         sodipodi:role="line"
+         id="tspan5110">banking server certificate</tspan></text>
+    <rect
+       y="906.11243"
+       x="12.206265"
+       height="62.687778"
+       width="208.00273"
+       id="rect5067"
+       style="fill:#ffffff;fill-opacity:1;stroke:#000000;stroke-width:2.05067801;stroke-miterlimit:4.0999999;stroke-opacity:1;stroke-dasharray:none" />
+    <text
+       xml:space="preserve"
+       style="font-size:16px;font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;text-align:start;line-height:125%;letter-spacing:0px;word-spacing:0px;writing-mode:lr-tb;text-anchor:start;fill:#000000;fill-opacity:1;stroke:none;font-family:Ubuntu Condensed;-inkscape-font-specification:'Ubuntu Condensed,'"
+       x="113.63865"
+       y="922.88776"
+       id="text5069"
+       sodipodi:linespacing="125%"><tspan
+         id="tspan5075"
+         sodipodi:role="line"
+         x="113.63865"
+         y="922.88776"
+         style="font-size:16px;font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;text-align:center;line-height:125%;writing-mode:lr-tb;text-anchor:middle;font-family:Ubuntu Condensed;-inkscape-font-specification:'Ubuntu Condensed,'">Inspect the content</tspan><tspan
+         sodipodi:role="line"
+         x="113.63865"
+         y="942.88776"
+         style="font-size:16px;font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;text-align:center;line-height:125%;writing-mode:lr-tb;text-anchor:middle;font-family:Ubuntu Condensed;-inkscape-font-specification:'Ubuntu Condensed,'"
+         id="tspan5084">of untampered</tspan><tspan
+         sodipodi:role="line"
+         x="113.63865"
+         y="962.88776"
+         style="font-size:16px;font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;text-align:center;line-height:125%;writing-mode:lr-tb;text-anchor:middle;font-family:Ubuntu Condensed;-inkscape-font-specification:'Ubuntu Condensed,'"
+         id="tspan5088">web page</tspan></text>
+    <path
+       style="fill:none;stroke:#000000;stroke-width:3;stroke-linecap:butt;stroke-linejoin:miter;stroke-miterlimit:4;stroke-opacity:1;stroke-dasharray:none;marker-end:url(#Arrow2Lend)"
+       d="m 388.422,748.61201 c -21.77736,0 -43.5547,0 -65.33205,0 -3.98742,0 -7.9748,0 -11.96223,0 -1.22688,0 -2.45377,0 -3.68067,0 -0.92017,0 -1.8582,-0.1 -2.7605,0 -0.67254,0.0745 -1.17497,0.41762 -1.84034,0.50977 -0.95319,0.13202 -2.62556,0 -3.68068,0 -2.45379,0 -4.90757,0 -7.36136,0"
+       id="path5092"
+       inkscape:connector-curvature="0" />
+    <path
+       inkscape:connector-curvature="0"
+       id="path5094"
+       d="m 289.77274,936.19319 c -14.94932,0 -29.89862,0 -44.84793,0 -2.73721,0 -5.47439,0 -8.21161,0 -0.8422,0 -1.68442,0 -2.52664,0 -0.63166,0 -1.27558,-0.1 -1.89497,0 -0.46168,0.0745 -0.80657,0.41762 -1.26333,0.50977 -0.65432,0.13202 -1.80234,0 -2.52664,0 -1.68443,0 -3.36886,0 -5.05329,0"
+       style="fill:none;stroke:#000000;stroke-width:2.48558903;stroke-linecap:butt;stroke-linejoin:miter;stroke-miterlimit:4;stroke-opacity:1;stroke-dasharray:none;marker-end:url(#Arrow2Lend)" />
+    <rect
+       style="fill:#ffffff;fill-opacity:1;stroke:#000000;stroke-width:2.04469371;stroke-miterlimit:4.0999999;stroke-opacity:1;stroke-dasharray:none"
+       id="rect5096"
+       width="208.00273"
+       height="62.322433"
+       x="390.53665"
+       y="717.01196" />
+    <text
+       sodipodi:linespacing="125%"
+       id="text5098"
+       y="803.98883"
+       x="460.44064"
+       style="font-size:16px;font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;text-align:start;line-height:125%;letter-spacing:0px;word-spacing:0px;writing-mode:lr-tb;text-anchor:start;fill:#000000;fill-opacity:1;stroke:none;font-family:Ubuntu Condensed;-inkscape-font-specification:'Ubuntu Condensed,'"
+       xml:space="preserve"
+       transform="scale(1.0857616,0.9210125)"><tspan
+         style="font-size:16px;font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;text-align:center;line-height:125%;writing-mode:lr-tb;text-anchor:middle;font-family:Ubuntu Condensed;-inkscape-font-specification:'Ubuntu Condensed,'"
+         y="803.98883"
+         x="460.44064"
+         sodipodi:role="line"
+         id="tspan5100">Deliver the</tspan><tspan
+         style="font-size:16px;font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;text-align:center;line-height:125%;writing-mode:lr-tb;text-anchor:middle;font-family:Ubuntu Condensed;-inkscape-font-specification:'Ubuntu Condensed,'"
+         y="823.98883"
+         x="460.44064"
+         sodipodi:role="line"
+         id="tspan5104">captured page</tspan></text>
+  </g>
+</svg>

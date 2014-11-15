@@ -1,0 +1,5 @@
+From within tlsnotary's root folder run
+python data/tlnotary-auditee.py test
+
+
+By default the testdriver uses the file called websitelist.txt
