@@ -1033,7 +1033,8 @@ if __name__ == "__main__":
                 raise Exception('Could not set firefox install path')
         elif OS=='macos':
             if not os.path.exists(join("/","Applications","Firefox.app")):
-                raise Exception("Could not set firefox install path")
+                raise Exception('''Could not set firefox install path. 
+                Please make sure Firefox is in your Applications folder''')
             firefox_install_path = join("/","Applications","Firefox.app")
         else:
             raise Exception("Unrecognised operating system.")
