@@ -152,6 +152,21 @@ function startRecording(){
 	headers += httpChannel.requestMethod + " /" + tab_url + " HTTP/1.1" + "\r\n";
 	httpChannel.visitRequestHeaders(function(header,value){
                                   headers += header +": " + value + "\r\n";});
+    if (httpChannel.requestMethod == "GET"){
+		headers += "\r\n";
+	}       
+    if (httpChannel.requestMethod == "POST"){
+		//for POST, extra "\r\n" is already included in uploaddata (see below) to separate http header from http body 
+		var uploadChannel = httpChannel.QueryInterface(Components.interfaces.nsIUploadChannel);
+		var uploadChannelStream = uploadChannel.uploadStream;
+		uploadChannelStream.QueryInterface(Components.interfaces.nsISeekableStream);                 
+		uploadChannelStream.seek(0,0);                               
+		var stream = Components.classes['@mozilla.org/scriptableinputstream;1'].createInstance(Components.interfaces.nsIScriptableInputStream);
+		stream.init(uploadChannelStream);
+		var uploaddata = stream.read(stream.available());
+		//FF's uploaddata contains Content-Type and Content-Length headers + '\r\n\r\n' + http body
+		headers += uploaddata;
+	}
     notBarShow('Audit is underway, please wait...',false);
     startAudit(sanitized_url);
 }

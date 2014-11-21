@@ -649,7 +649,6 @@ def negotiate_crippled_secrets(tlsn_session, tls_sock):
     
 def make_tlsn_request(headers,tlsn_session,tls_sock):
     '''Send TLS request including http headers and receive server response.'''
-    headers += '\r\n'
     tls_sock.send(tlsn_session.build_request(headers))
     response = shared.recv_socket(tls_sock) #not handshake flag means we wait on timeout
     if not response: 
