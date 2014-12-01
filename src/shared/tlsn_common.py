@@ -4,7 +4,7 @@ from SocketServer import ThreadingMixIn
 from struct import pack
 import os, binascii, itertools, re, random
 import threading, BaseHTTPServer
-import select, time
+import select, time, socket
 #General utility objects used by both auditor and auditee.
 
 config = SafeConfigParser()
@@ -204,6 +204,12 @@ def check_complete_records(d):
     if len(d)< l+5: return False
     elif len(d)==l+5: return True
     else: return check_complete_records(d[l+5:])
+
+def create_sock(server,prt):
+    returned_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    returned_sock.settimeout(int(config.get("General","tcp_socket_timeout"))) 
+    returned_sock.connect((server, prt))    
+    return returned_sock
     
 def recv_socket(sckt,is_handshake=False):
     last_time_data_was_seen_from_server = 0

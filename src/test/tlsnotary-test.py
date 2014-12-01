@@ -233,11 +233,11 @@ def start_run():
             url,code = a.split()
             if not url.startswith('#'):
                 website_list.append(url)
-            #accepted cipher_suites (indexed by tlsnCipherSuiteList above)
-            #are separated by commas:
-            acceptable_cipher_suites = code.split(',')
-            #choose one of the given numbers at random
-            cs_list.append(random.choice(acceptable_cipher_suites))
+                #accepted cipher_suites (indexed by tlsnCipherSuiteList above)
+                #are separated by commas:
+                acceptable_cipher_suites = code.split(',')
+                #choose one of the given numbers at random
+                cs_list.append(random.choice(acceptable_cipher_suites))
     log_to_file("*********START TEST*****************")
     log_to_file("Starting new run for these websites:")
     log_to_file(','.join(website_list))

@@ -57,8 +57,8 @@ def process_messages():
         #the half-pms encrypted to the server's pubkey
         if msg.startswith('rcr_rsr:'):
             msg_data = msg[len('rcr_rsr:'):]
-            tlsn_session = shared.TLSNSSLClientSession()
-            rsp_session = shared.TLSNSSLClientSession()
+            tlsn_session = shared.TLSNClientSession()
+            rsp_session = shared.TLSNClientSession()
             rsp_session.client_random = msg_data[:32]
             rsp_session.server_random = msg_data[32:64]
             #pubkey required to set encrypted pms
@@ -242,7 +242,7 @@ def process_messages():
                 for fname in ['sha1hmac','cr','sr']:
                     with open(os.path.join(commit_dir, fname+seqno), 'rb') as f: 
                         decr_data[fname] = f.read()                    
-                decr_session = shared.TLSNSSLClientSession(ccs = int(decr_data['cs']))
+                decr_session = shared.TLSNClientSession(ccs = int(decr_data['cs']))
                 decr_session.client_random = decr_data['cr']
                 decr_session.server_random = decr_data['sr']
                 decr_session.p_auditee = decr_data['md5hmac']
@@ -250,12 +250,11 @@ def process_messages():
                 decr_session.set_master_secret_half()
                 decr_session.do_key_expansion()
                 decr_session.store_server_app_data_records(decr_data['response'])
-                iv_d = decr_data['IV']
-                if decr_session.chosen_cipher_suite in [47,53]:
-                    decr_session.last_server_ciphertext_block = iv_d
-                else:
-                    decr_session.server_rc4_state=(map(ord,iv_d[:256]),ord(iv_d[256]),ord(iv_d[257]))
-                plaintext, bad_mac = decr_session.process_server_app_data_records()
+                #if RC4, we need to unpack the RC4 state from the IV data
+                IV = (map(ord,decr_data['IV'][:256]),ord(decr_data['IV'][256]),ord(decr_data['IV'][257])) \
+                    if decr_session.chosen_cipher_suite in [4,5] else decr_data['IV']
+                decr_session.IV_after_finished = IV
+                plaintext, bad_mac = decr_session.process_server_app_data_records(is_for_auditor=True)
                 if bad_mac:
                     print ("AUDIT FAILURE - invalid mac")
                     link_response = 'false'
@@ -292,7 +291,7 @@ In Firefox, click the padlock to the left of the URL bar -> More Information -> 
     #Paillier scheme
         elif msg.startswith('p_link:'):
             p_link = msg[len('p_link:'):]
-            tlsn_session = shared.TLSNSSLClientSession_Paillier()            
+            tlsn_session = shared.TLSNClientSession_Paillier()            
             time.sleep(1) #just in case the upload server needs some time to prepare the file
             req = urllib2.Request(p_link)
             resp = urllib2.urlopen(req)
