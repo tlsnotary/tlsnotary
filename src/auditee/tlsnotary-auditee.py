@@ -626,7 +626,6 @@ def negotiate_crippled_secrets(tlsn_session, tls_sock):
     
 def make_tlsn_request(headers,tlsn_session,tls_sock):
     '''Send TLS request including http headers and receive server response.'''
-    headers += '\r\n'
     tlsn_session.build_request(tls_sock,headers)
     response = shared.recv_socket(tls_sock) #not handshake flag means we wait on timeout
     if not response: 
@@ -1011,7 +1010,8 @@ if __name__ == "__main__":
                 raise Exception('Could not set firefox install path')
         elif OS=='macos':
             if not os.path.exists(join("/","Applications","Firefox.app")):
-                raise Exception("Could not set firefox install path")
+                raise Exception('''Could not set firefox install path. 
+                Please make sure Firefox is in your Applications folder''')
             firefox_install_path = join("/","Applications","Firefox.app")
         else:
             raise Exception("Unrecognised operating system.")

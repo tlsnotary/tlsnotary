@@ -274,7 +274,7 @@ In Firefox, click the padlock to the left of the URL bar -> More Information -> 
  -> in Certificate Fields choose Subject\'s Public Key -> Modulus should be: """
                 write_data += '\n\n'
                 #format pubkey in nice rows of 16 hex numbers just like Firefox does
-                for i in range(len(pubkey_data)/48):
+                for i in range(1+len(pubkey_data)/48):
                     write_data += pubkey_data[i*48:(i+1)*48] + '\n' 
                 with open(os.path.join(decr_dir, 'domain'+seqno), 'wb') as f: f.write(write_data)
                
