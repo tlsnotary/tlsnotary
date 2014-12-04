@@ -452,7 +452,6 @@ def prepare_pms():
         pms_session.p_auditor = reply_data[256:304]
         response = pms_session.complete_handshake(tls_sock,rsapms2)
         tls_sock.close()
-        print ("Got this pms response: ",binascii.hexlify(response))
         if not response:
             print ("PMS trial failed")
             continue
@@ -460,8 +459,7 @@ def prepare_pms():
         #Change Cipher Spec record is returned by the server (we could
         #also check the server finished, but it isn't necessary)
         if not response.count(shared.TLSRecord(shared.chcis,f='\x01').serialized):
-            print ("PMS trial failed, server response was: ")
-            print (binascii.hexlify(response))
+            print ("PMS trial failed, retrying. (",binascii.hexlify(response),")")
             continue
         return (pms_session.auditee_secret,pms_session.auditee_padding_secret)
     #no dice after 7 tries
