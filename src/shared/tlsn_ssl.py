@@ -855,7 +855,8 @@ class TLSNClientSession(object):
         assert not remaining, "Server sent spurious non-TLS data"
         self.server_response_app_data = []
         for rec in recs:
-            self.server_response_app_data.extend(tls_record_fragment_decoder(appd,rec.fragment))
+            if rec.content_type==appd:
+                self.server_response_app_data.extend(tls_record_fragment_decoder(appd,rec.fragment))
         #what has been stored is a list of TLSAppData objects in which
         #the .serialized property is still encrypted.
     
