@@ -308,7 +308,9 @@ class TLSAppData(object):
 class TLSAlert(object):
     def __init__(self,serialized=None):
         if serialized:
+            self.serialized = serialized
             print ('Got alert:'+binascii.hexlify(self.serialized))
+            self.discarded=''
         else:
             #TODO - do we need to issue alerts?
             print ("Alert creation not implemented")
@@ -855,8 +857,9 @@ class TLSNClientSession(object):
         assert not remaining, "Server sent spurious non-TLS data"
         self.server_response_app_data = []
         for rec in recs:
-            if rec.content_type==appd:
-                self.server_response_app_data.extend(tls_record_fragment_decoder(appd,rec.fragment))
+            self.server_response_app_data.extend(tls_record_fragment_decoder(rec.content_type,
+                                                                             rec.fragment))    
+                
         #what has been stored is a list of TLSAppData objects in which
         #the .serialized property is still encrypted.
     
@@ -891,10 +894,22 @@ class TLSNClientSession(object):
         if not validity:
             raise Exception ("Server finished mac check failed")
         #NB Note the verify data was verified earlier, no need to do it again here
-        for pt in plaintexts:
-            validity, stripped_pt = dummy_connection_state.verify_mac(pt,appd)
+        for i,pt in enumerate(plaintexts):
+            if type(self.server_response_app_data[i]) is TLSAppData:
+                rt = appd
+            elif type(self.server_response_app_data[i]) is TLSAlert:
+                print ("***WE RECEIVED AN ALERT!!***")
+                rt = alrt
+            else:
+                print ("Got an unexpected record type in the server response: ")
+                
+            validity, stripped_pt = dummy_connection_state.verify_mac(pt,rt)
             assert validity==True, "Fatal error - invalid mac, data not authenticated!"
-            mac_stripped_plaintext += stripped_pt
+            if rt==appd:
+                mac_stripped_plaintext += stripped_pt
+            elif rt==alrt:
+                print ("Decrypted alert: ", binascii.hexlify(stripped_pt))
+
         return mac_stripped_plaintext
     
     def mac_check_server_finished(self):
