@@ -1,1 +1,1 @@
-C:\Python27\python.exe "%~dp0data\auditee\tlsnotary-auditee.py"
+C:\Python27\python.exe "%~dp0src\auditee\tlsnotary-auditee.py"

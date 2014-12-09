@@ -209,14 +209,14 @@ class HandleBrowserRequestsClass(SimpleHTTPServer.SimpleHTTPRequestHandler):
             use_paillier_scheme = True                
         if not use_paillier_scheme:
             if testing: 
-                tlsn_session = shared.TLSNSSLClientSession(server_name, ccs=int(cs))
+                tlsn_session = shared.TLSNClientSession(server_name, ccs=int(cs))
             else: 
-                tlsn_session = shared.TLSNSSLClientSession(server_name)
+                tlsn_session = shared.TLSNClientSession(server_name)
         else: #use_paillier_scheme
             if testing: 
-                tlsn_session = shared.TLSNSSLClientSession_Paillier(server_name, ccs=int(cs))
+                tlsn_session = shared.TLSNClientSession_Paillier(server_name, ccs=int(cs))
             else: 
-                tlsn_session = shared.TLSNSSLClientSession_Paillier(server_name)                
+                tlsn_session = shared.TLSNClientSession_Paillier(server_name)                
 
         global b_comm_channel_busy
         while b_comm_channel_busy:
@@ -240,9 +240,8 @@ class HandleBrowserRequestsClass(SimpleHTTPServer.SimpleHTTPRequestHandler):
             tlsn_session.enc_pms = enc_pms
         
         print ('Peforming handshake with server')
-        tls_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        tls_sock.settimeout(int(shared.config.get("General","tcp_socket_timeout")))
-        start_tls_session(tlsn_session, tls_sock)
+        tls_sock = shared.create_sock(tlsn_session.server_name,tlsn_session.ssl_port)
+        tlsn_session.start_handshake(tls_sock)
         #compare this ongoing audit's cert to the one 
         #we used from the browser in prepare_encrypted_pms
         verify_server(dercert, tlsn_session)
@@ -268,7 +267,7 @@ class HandleBrowserRequestsClass(SimpleHTTPServer.SimpleHTTPRequestHandler):
         return              
           
     def selftest(self):
-        auditor_py = join(install_dir, 'data', 'auditor', 'tlsnotary-auditor.py')
+        auditor_py = join(install_dir, 'src', 'auditor', 'tlsnotary-auditor.py')
         output = check_output([sys.executable, auditor_py, 'daemon', 'genkey'])
         auditor_key = output.split()[-1]
         import_auditor_pubkey(auditor_key)
@@ -419,11 +418,11 @@ def process_certificate_queue():
             continue
         print ('Preparing enc_pms in advance')        
         if not use_paillier_scheme:
-            tls_crypto = shared.TLSNSSLClientSession()
+            tls_crypto = shared.TLSNClientSession()
             pms_secret, pms_padding_secret = prepare_pms()
             prepare_encrypted_pms(tls_crypto, cert_der, pms_secret, pms_padding_secret)
         else:
-            tls_crypto = shared.TLSNSSLClientSession_Paillier()   
+            tls_crypto = shared.TLSNClientSession_Paillier()   
             pms_secret = tls_crypto.auditee_secret
             pms_padding_secret = tls_crypto.auditee_padding_secret
             paillier_prepare_encrypted_pms(tls_crypto, cert_der)
@@ -437,33 +436,30 @@ def process_certificate_queue():
 def prepare_pms():
     for i in range(7): #try 7 times until reliable site check succeeds
         #first 4 bytes of client random are unix time
-        pms_session = shared.TLSNSSLClientSession(rs_choice,shared.reliable_sites[rs_choice][0], ccs=53)
+        pms_session = shared.TLSNClientSession(rs_choice,shared.reliable_sites[rs_choice][0], ccs=53)
         if not pms_session: 
             raise Exception("Client session construction failed in prepare_pms")
-        tls_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        tls_sock.settimeout(int(shared.config.get("General","tcp_socket_timeout")))
-        tls_sock.connect((pms_session.server_name, pms_session.ssl_port))
-        tls_sock.send(pms_session.handshake_messages[0])
-        if not pms_session.process_server_hello(shared.recv_socket(tls_sock,is_handshake=True)):
-            raise Exception("Failure in processing of server Hello from " + pms_session.server_name)
-        reply = send_and_recv('rcr_rsr:'+pms_session.client_random+pms_session.server_random)
+        tls_sock = shared.create_sock(pms_session.server_name,pms_session.ssl_port)
+        pms_session.start_handshake(tls_sock)
+        reply = send_and_recv('rcr_rsr:'+\
+            pms_session.client_random+pms_session.server_random)
         if reply[0] != 'success': 
             raise Exception ('Failed to receive a reply for rcr_rsr:')
         if not reply[1].startswith('rrsapms_rhmac'):
             raise Exception ('bad reply. Expected rrsapms_rhmac:')
         reply_data = reply[1][len('rrsapms_rhmac:'):]
         rsapms2 = reply_data[:256]
-        shahmac = reply_data[256:304]
-        pms_session.p_auditor = shahmac
-        tls_sock.send(pms_session.complete_handshake(rsapms2))
-        response = shared.recv_socket(tls_sock,is_handshake=True)
+        pms_session.p_auditor = reply_data[256:304]
+        response = pms_session.complete_handshake(tls_sock,rsapms2)
         tls_sock.close()
         if not response:
             print ("PMS trial failed")
             continue
-        if not response.count(pms_session.handshake_messages[5]):
-            print ("PMS trial failed, server response was: ")
-            print (binascii.hexlify(response))
+        #judge success/fail based on whether a properly encoded 
+        #Change Cipher Spec record is returned by the server (we could
+        #also check the server finished, but it isn't necessary)
+        if not response.count(shared.TLSRecord(shared.chcis,f='\x01').serialized):
+            print ("PMS trial failed, retrying. (",binascii.hexlify(response),")")
             continue
         return (pms_session.auditee_secret,pms_session.auditee_padding_secret)
     #no dice after 7 tries
@@ -581,27 +577,11 @@ def parse_headers(headers):
         modified_headers = '\r\n'.join(header_lines)
         
     return (server,modified_headers)
-    
-def start_tls_session(tlsn_session, tls_sock):
-    '''Construct ssl client session object and do
-    client hello, server hello, server hello done, certificate
-    initial phase of handshake.'''
-    tls_sock.connect((tlsn_session.server_name, tlsn_session.ssl_port))
-    tls_sock.send(tlsn_session.handshake_messages[0])
-    response = shared.recv_socket(tls_sock,is_handshake=True)
-    #a nasty but necessary hack: check whether server hello, cert, server hello done
-    #is complete; if not, go back to server for more. This arises because we don't
-    #know how the three handshake messages were packaged into records (1,2 or 3).
-    while not response.endswith(shared.h_shd+shared.bi2ba(0,fixed=3)):
-        response += shared.recv_socket(tls_sock,is_handshake=True)
-    if not tlsn_session.process_server_hello(response):
-        raise Exception("Failure in processing of server Hello from " + tlsn_session.server_name)
 
 def verify_server(claimed_cert, tlsn_session):
     '''Verify the server certificate by comparing that provided
-    with the one that firefox already verified.'''
-    tlsn_session.extract_certificate()
-    our_cert_sha = sha1(tlsn_session.server_certificate).digest()
+    with the one that firefox already verified.'''     
+    our_cert_sha = sha1(tlsn_session.server_certificate.asn1cert).digest()
     claimed_cert_sha = sha1(claimed_cert).digest()
     if not our_cert_sha == claimed_cert_sha:
         print ("Tlsnotary session certificate hash was:",binascii.hexlify(our_cert_sha))
@@ -625,7 +605,7 @@ def negotiate_crippled_secrets(tlsn_session, tls_sock):
     if not reply[1].startswith('hmacms_hmacek_hmacverify:'):
         return 'bad reply. Expected hmacms_hmacek_hmacverify: but got reply[1]'
     reply_data = reply[1][len('hmacms_hmacek_hmacverify:'):]
-    expanded_key_len = tlsn_session.cipher_suites[tlsn_session.chosen_cipher_suite][-1]
+    expanded_key_len = shared.tlsn_cipher_suites[tlsn_session.chosen_cipher_suite][-1]
     assert len(reply_data) == 24+expanded_key_len+12
     hmacms = reply_data[:24]    
     hmacek = reply_data[24:24 + expanded_key_len]
@@ -633,23 +613,18 @@ def negotiate_crippled_secrets(tlsn_session, tls_sock):
     tlsn_session.set_master_secret_half(half=2,provided_p_value = hmacms)
     tlsn_session.p_master_secret_auditor = hmacek
     tlsn_session.do_key_expansion()
-    data =tlsn_session.get_cke_ccs_f(provided_p_value=hmacverify)
-    tls_sock.send(data)
-    response = shared.recv_socket(tls_sock,is_handshake=True)
-    #in case the server sent only CCS; wait until we get Finished also
-    while response.count(shared.hs+shared.tlsver) != 1:
-        response += shared.recv_socket(tls_sock,is_handshake=True)
-    sha_digest2,md5_digest2 = tlsn_session.get_server_handshake_hashes()
+    tlsn_session.send_client_finished(tls_sock,provided_p_value=hmacverify)
+    sha_digest2,md5_digest2 = tlsn_session.set_handshake_hashes(server=True)
     reply = send_and_recv('verify_md5sha2:'+md5_digest2+sha_digest2)
     if reply[0] != 'success':return("Failed to receive a reply for verify_md5sha2")
     if not reply[1].startswith('verify_hmac2:'):return("bad reply. Expected verify_hmac2:")
-    if not tlsn_session.process_server_ccs_finished(response,provided_p_value = reply[1][len('verify_hmac2:'):]):
+    if not tlsn_session.check_server_ccs_finished(provided_p_value = reply[1][len('verify_hmac2:'):]):
         raise Exception ("Could not finish handshake with server successfully. Audit aborted")
     return 'success'    
     
 def make_tlsn_request(headers,tlsn_session,tls_sock):
     '''Send TLS request including http headers and receive server response.'''
-    tls_sock.send(tlsn_session.build_request(headers))
+    tlsn_session.build_request(tls_sock,headers)
     response = shared.recv_socket(tls_sock) #not handshake flag means we wait on timeout
     if not response: 
         raise Exception ("Received no response to request, cannot continue audit.")
@@ -660,12 +635,12 @@ def make_tlsn_request(headers,tlsn_session,tls_sock):
 def commit_session(tlsn_session,response,sf):
     '''Commit the encrypted server response and other data to auditor'''
     commit_dir = join(current_session_dir, 'commit')
-    #the IV data is not actually an IV, it's the current cipher state
-    if tlsn_session.chosen_cipher_suite in [47,53]: iv_data = tlsn_session.server_finished[-16:]
-    else: iv_data = bytearray(tlsn_session.server_rc4_state[0])+\
-        chr(tlsn_session.server_rc4_state[1])+chr(tlsn_session.server_rc4_state[2])    
     if not os.path.exists(commit_dir): os.makedirs(commit_dir)
-    stuff_to_be_committed  = {'response':response,'IV':iv_data,'cs':str(tlsn_session.chosen_cipher_suite),\
+    #Serialization of RC4 'IV' requires concatenating the box,x,y elements of the RC4 state tuple
+    IV = shared.rc4_state_to_bytearray(tlsn_session.IV_after_finished) \
+        if tlsn_session.chosen_cipher_suite in [4,5] else tlsn_session.IV_after_finished
+    stuff_to_be_committed  = {'response':response,'IV':IV,
+                              'cs':str(tlsn_session.chosen_cipher_suite),
                               'md5hmac':tlsn_session.p_auditee,'domain':tlsn_session.server_name}
     for k,v in stuff_to_be_committed.iteritems():
         with open(join(commit_dir,k+sf),'wb') as f: f.write(v)    
@@ -685,14 +660,15 @@ def decrypt_html(sha1hmac, tlsn_session,sf):
     for display (optionally render by stripping http headers).'''
     tlsn_session.p_auditor = sha1hmac
     tlsn_session.set_master_secret_half() #without arguments sets the whole MS
-    tlsn_session.do_key_expansion()
+    tlsn_session.do_key_expansion() #also resets encryption connection state
     
-    if int(shared.config.get("General","decrypt_with_slowaes")) or not tlsn_session.chosen_cipher_suite in [47,53]:
+    if int(shared.config.get("General","decrypt_with_slowaes")) or \
+       not tlsn_session.chosen_cipher_suite in [47,53]:
         #either using slowAES or a RC4 ciphersuite
-        plaintext,bad_mac = tlsn_session.process_server_app_data_records(checkFinished=True)
+        plaintext,bad_mac = tlsn_session.process_server_app_data_records()
         if bad_mac: print ("WARNING! Plaintext is not authenticated.")        
-    else: #AES ciphersuite and not using slowaes
-        ciphertexts = tlsn_session.getCiphertexts()
+    else: #AES ciphersuite and not using slowaes        
+        ciphertexts = tlsn_session.get_ciphertexts()
         raw_plaintexts = []
         for one_ciphertext in ciphertexts:
             aes_ciphertext_queue.put(one_ciphertext)
@@ -700,7 +676,7 @@ def decrypt_html(sha1hmac, tlsn_session,sf):
             #crypto-js knows only how to remove pkcs7 padding but not cbc padding
             #which is one byte longer than pkcs7. We remove it manually
             raw_plaintexts.append(raw_plaintext[:-1])
-        plaintext = tlsn_session.macCheckPlaintexts(raw_plaintexts)
+        plaintext = tlsn_session.mac_check_plaintexts(raw_plaintexts)
 
     plaintext = shared.dechunk_http(plaintext)
     if int(shared.config.get("General","gzip_disabled")) == 0:    
@@ -733,7 +709,7 @@ def peer_handshake():
     global my_nick
     global auditor_nick
     global rs_choice
-    shared.import_reliable_sites(join(install_dir,'data','shared'))
+    shared.import_reliable_sites(join(install_dir,'src','shared'))
     #hello contains the first 10 bytes of modulus of the auditor's pubkey
     #this is how the auditor knows that we are addressing him.
     modulus = shared.bi2ba(auditor_pub_key.n)[:10]
@@ -968,12 +944,12 @@ def start_testing():
     import subprocess    
     #initiate an auditor window in daemon mode
     print ("TESTING: starting auditor")    
-    auditor_py = os.path.join(install_dir, 'data', 'auditor', 'tlsnotary-auditor.py')
+    auditor_py = os.path.join(install_dir, 'src', 'auditor', 'tlsnotary-auditor.py')
     auditor_proc = subprocess.Popen(['python', auditor_py,'daemon'])
     global test_auditor_pid 
     test_auditor_pid = auditor_proc.pid    
     print ("TESTING: starting testdriver")
-    testdir = join(install_dir, 'data', 'test')
+    testdir = join(install_dir, 'src', 'test')
     test_py = join(testdir, 'tlsnotary-test.py')
     site_list = join (testdir, 'websitelist.txt')
     #testdriver kills ee/or when test ends, passing PIDs
