@@ -591,6 +591,10 @@ if __name__ == "__main__":
     from slowaes import AESModeOfOperation
     import shared
     shared.load_program_config()
+    #set TLS version according to user preference
+    if int(shared.config.get("General","tls_11")):
+        print ("Setting the tls version")
+        shared.set_tlsver('\x03\x02')    
     thread = shared.ThreadWithRetval(target= http_server)
     thread.daemon = True
     thread.start()

@@ -8,7 +8,7 @@ import select, time, socket
 #General utility objects used by both auditor and auditee.
 
 config = SafeConfigParser()
-
+tlsver='\x03\x01'
 config_location = os.path.join(os.path.dirname(os.path.realpath(__file__)),'tlsnotary.ini')
 
 required_options = {'IRC':['irc_server','irc_port','channel_name']}
@@ -16,7 +16,10 @@ required_options = {'IRC':['irc_server','irc_port','channel_name']}
 reliable_sites = {}
 smallprimes = (2,3,5,7,11,13,17,19,23,29,31,37,41,43,47,53,59,61,67,71,73,79,83,89,97,101)            
 
-
+def set_tlsver(new_ver):
+    global tlsver
+    tlsver = new_ver
+    
 #file transfer functions - currently only used for sending
 #ciphertext to auditor
 def sendspace_getlink(mfile,rg,rp):
@@ -199,7 +202,9 @@ def check_complete_records(d):
     '''Given a response d from a server,
     we want to know if its contents represents
     a complete set of records, however many.'''
-    assert d[1:3]=='\x03\x01',"invalid ssl data"
+    print ("were checking the record with tlsver being: ", binascii.hexlify(tlsver))
+    print ("and d13 being: ", binascii.hexlify(d[:20]))
+    assert d[1:3] == tlsver,"invalid ssl data"
     l = ba2int(d[3:5])
     if len(d)< l+5: return False
     elif len(d)==l+5: return True

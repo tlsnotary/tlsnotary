@@ -9,6 +9,7 @@ from pyasn1.type import univ
 from pyasn1.codec.der import decoder
 from slowaes import AESModeOfOperation
 from slowaes import AES
+import tlsn_common
 
 #*********** TLS CODE ***************************************
 #This is a *heavily* restricted, and modified
@@ -33,8 +34,7 @@ from slowaes import AES
 md5_hash_len = 16
 sha1_hash_len = 20
 
-tlsver='\x03\x01'
-tls_versions = [tlsver]
+tls_versions = ['\x03\x01','\x03\x02']
 #record types
 appd = '\x17' #Application Data
 hs = '\x16' #Handshake
@@ -131,9 +131,9 @@ def tls_record_fragment_decoder(t,d, conn=None, ignore_mac = False):
     return hlpos 
 
 class TLSRecord(object):
-    def __init__(self, ct, v=tlsver, f=None):
+    def __init__(self, ct, v=tlsn_common.tlsver, f=None):
         self.content_type = ct
-        self.content_version = v
+        self.content_version = tlsn_common.tlsver #updated in initialisation TODO
         if f:
             self.fragment = f
             self.length = len(self.fragment)
@@ -184,12 +184,13 @@ class TLSClientHello(TLSHandshake):
                 cr_time = bi2ba(int(time.time()))
                 self.client_random = cr_time + os.urandom(28)
             #last byte is session id length
-            self.serialized = tlsver + self.client_random + '\x00' 
+            self.serialized = tlsn_common.tlsver + self.client_random + '\x00' 
             self.cipher_suites = cipher_suites
             self.serialized += '\x00'+chr(2*len(self.cipher_suites))
             for a in self.cipher_suites:
                 self.serialized += '\x00'+chr(a)                        
-            self.serialized += '\x01\x00' #compression methods - null only       
+            self.serialized += '\x01\x00' #compression methods - null only 
+            print ("Just made a client hello that looks like this: ", binascii.hexlify(self.serialized))
             super(TLSClientHello,self).__init__(None, h_ch)
             super(TLSClientHello,self).serialize()
         
@@ -198,7 +199,7 @@ class TLSServerHello(TLSHandshake):
     def __init__(self,serialized = None,server_random = None, cipher_suite=None):
         if serialized:
             super(TLSServerHello,self).__init__(serialized,h_sh)
-            assert self.serialized[4:6] == tlsver, "Invalid server hello message"
+            assert self.serialized[4:6] == tlsn_common.tlsver, "Invalid server hello message"
             self.server_random = self.serialized[6:38]
             self.session_id_length = ba2int(self.serialized[38])
             if self.session_id_length != 0:
@@ -337,6 +338,8 @@ class TLSConnectionState(object):
         by the specified cipher suite.
         If mac failures occur they will be flagged but
         decrypted result is still made available.'''
+        self.tlsver = tlsn_common.tlsver #either TLS1.0 or 1.1
+        assert self.tlsver in tls_versions, "Unrecognised or invalid TLS version"
         self.cipher_suite = cipher_suite
         self.end = 'client' if is_client else 'server'
         self.mac_algo = md5 if cipher_suite == 4 else sha1
@@ -360,7 +363,7 @@ class TLSConnectionState(object):
         assert self.mac_key, "Failed to build mac; mac key is missing"
         fragment_len = bi2ba(len(cleartext),fixed=2)  
         record_mac = hmac.new(self.mac_key,seq_no_bytes + record_type + \
-                    tlsver+fragment_len + cleartext, self.mac_algo).digest()
+                    tlsn_common.tlsver+fragment_len + cleartext, self.mac_algo).digest()
         return record_mac
     
     def mte(self,cleartext,rec_type):
@@ -409,19 +412,31 @@ class TLSConnectionState(object):
         mode, orig_len, ciphertext = \
         moo.encrypt( str(padded_cleartext), moo.modeOfOperation['CBC'], \
                      enc_list, len(self.enc_key), iv_list)
-        self.IV = bytearray('').join(map(chr,ciphertext[-16:])) #change back to bytearray
-        self.seq_no += 1            
+        if self.tlsver == '\x03\x01':
+            self.IV = bytearray('').join(map(chr,ciphertext[-16:])) #change back to bytearray
+        elif self.tlsver == '\x03\x02':
+            #the per-record IV is now sent as the start of the fragment
+            ciphertext = self.IV + bytearray(ciphertext)
+            self.IV = os.urandom(16) #use a new, random IV for each record
+        self.seq_no += 1 
+        print ("constructed this mac then encrypted data, length: ", \
+               len(ciphertext), " and content: ", binascii.hexlify(bytearray(ciphertext[:10])))
         return bytearray(ciphertext)
     
     def aes_cbc_dum(self,ciphertext,rec_type, return_mac=False):
         #decrypt
+        if self.tlsver == '\x03\x02':
+            self.IV = ciphertext[:16]
+            ciphertext = ciphertext[16:]
+        #else self.IV already stores the correct IV    
         ciphertext_list,enc_list,iv_list = \
             [map(ord,x) for x in [ciphertext,str(self.enc_key),str(self.IV)]]
         moo = AESModeOfOperation()
         key_size = tlsn_cipher_suites[self.cipher_suite][4]
         decrypted = moo.decrypt(ciphertext_list,len(ciphertext),\
             moo.modeOfOperation['CBC'],enc_list,key_size,iv_list)
-        self.IV = ciphertext[-16:]
+        if self.tlsver== '\x03\x01':
+            self.IV = ciphertext[-16:]
         #unpad
         plaintext = cbc_unpad(decrypted) 
         #mac check
@@ -438,6 +453,7 @@ def tls_sender(sckt,msg,rec_type,conn=None):
     if conn:
         msg = conn.mte(msg,rec_type)
     rec = TLSRecord(rec_type, f=msg)
+    print ("About to send out: ", binascii.hexlify(rec.serialized[:20]))
     sckt.send(rec.serialized)
     
 class TLSNClientSession(object):
@@ -490,6 +506,7 @@ class TLSNClientSession(object):
             if ccs else tlsn_cipher_suites
         
         self.chosen_cipher_suite = ccs
+
         
     def dump(self):
         return_str='Session state dump: \n'
@@ -674,7 +691,7 @@ class TLSNClientSession(object):
     def set_enc_first_half_pms(self):
         assert (self.server_modulus and not self.enc_first_half_pms)
         ones_length = 23            
-        pms1 = tlsver+self.auditee_secret + ('\x00' * (24-2-self.n_auditee_entropy))
+        pms1 = tlsn_common.tlsver+self.auditee_secret + ('\x00' * (24-2-self.n_auditee_entropy))
         self.enc_first_half_pms = pow(ba2int('\x02'+('\x01'*(ones_length))+\
         self.auditee_padding_secret+'\x00'+pms1 +'\x00'*23 + '\x01'), self.server_exponent, self.server_modulus)
      
@@ -690,7 +707,7 @@ class TLSNClientSession(object):
             self.auditee_padding_secret = os.urandom(15)
         label = 'master secret'
         seed = cr + sr
-        pms1 = tlsver+self.auditee_secret + ('\x00' * (24-2-self.n_auditee_entropy))
+        pms1 = tlsn_common.tlsver+self.auditee_secret + ('\x00' * (24-2-self.n_auditee_entropy))
         self.p_auditee = tls_10_prf(label+seed,first_half = pms1)[0]
         #encrypted PMS has already been calculated before the audit began
         return (self.p_auditee)
@@ -823,12 +840,7 @@ class TLSNClientSession(object):
         if half==1:
             return tls_10_prf(label+seed,req_bytes=12,first_half = self.master_secret_half_auditor)[0]
         else:
-            return tls_10_prf(label+seed,req_bytes=12,second_half = self.master_secret_half_auditee)[1]        
-        
-    def get_server_handshake_hashes(self):
-        handshake_data = bytearray('').join([x[5:] for x in self.handshake_messages[:5]])
-        handshake_data += self.client_finished.serialized
-        return(sha1(handshake_data).digest(), md5(handshake_data).digest())        
+            return tls_10_prf(label+seed,req_bytes=12,second_half = self.master_secret_half_auditee)[1]              
     
     def check_server_ccs_finished(self, provided_p_value):
         #verify the verify data:     
@@ -871,10 +883,15 @@ class TLSNClientSession(object):
         ciphertexts = [] #each item contains a tuple (ciphertext, encryption_key, iv)
         last_ciphertext_block = self.IV_after_finished
         for appdata in self.server_response_app_data:
-            ciphertexts.append( (appdata.serialized, 
+            if tlsn_common.tlsver == '\x03\x01':
+                ciphertexts.append( (appdata.serialized, 
                                  self.server_connection_state.enc_key, 
                                  last_ciphertext_block) )
-            last_ciphertext_block = appdata.serialized[-16:] #ready for next record
+                last_ciphertext_block = appdata.serialized[-16:] #ready for next record
+            elif tlsn_common.tlsver == '\x03\x02':
+                ciphertexts.append((appdata.serialized[16:],
+                                    self.server_connection_state.enc_key,
+                                    appdata.serialized[:16]))
         return ciphertexts    
     
     def mac_check_plaintexts(self, plaintexts):

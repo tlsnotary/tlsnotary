@@ -434,6 +434,7 @@ def process_certificate_queue():
 #padding, we first try the encrypted PMS with a reliable site and see if it gets rejected.
 #TODO the probability seems to have increased too much w.r.t. random padding, investigate
 def prepare_pms():
+    print ("Starting prepare pms with ver: ", binascii.hexlify(shared.tlsn_common.tlsver))
     for i in range(7): #try 7 times until reliable site check succeeds
         #first 4 bytes of client random are unix time
         pms_session = shared.TLSNClientSession(rs_choice,shared.reliable_sites[rs_choice][0], ccs=53)
@@ -977,7 +978,11 @@ if __name__ == "__main__":
     from slowaes import AESModeOfOperation        
     import shared
     shared.load_program_config()
-    
+    #set TLS version according to user preference
+    if int(shared.config.get("General","tls_11")):
+        print ("Setting the tls version")
+        shared.set_tlsver('\x03\x02')
+        
     firefox_install_path = None
     if len(sys.argv) > 1: firefox_install_path = sys.argv[1]
     if firefox_install_path == 'test': firefox_install_path = None
