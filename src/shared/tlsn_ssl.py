@@ -33,8 +33,10 @@ import tlsn_common
 #constants
 md5_hash_len = 16
 sha1_hash_len = 20
-
-tls_versions = ['\x03\x01','\x03\x02']
+aes_block_size = 16
+tls_ver_1_0 = '\x03\x01'
+tls_ver_1_1 = '\x03\x02'
+tls_versions = [tls_ver_1_0,tls_ver_1_1]
 #record types
 appd = '\x17' #Application Data
 hs = '\x16' #Handshake
@@ -412,12 +414,12 @@ class TLSConnectionState(object):
         mode, orig_len, ciphertext = \
         moo.encrypt( str(padded_cleartext), moo.modeOfOperation['CBC'], \
                      enc_list, len(self.enc_key), iv_list)
-        if self.tlsver == '\x03\x01':
-            self.IV = bytearray('').join(map(chr,ciphertext[-16:])) #change back to bytearray
-        elif self.tlsver == '\x03\x02':
+        if self.tlsver == tls_ver_1_0:
+            self.IV = bytearray('').join(map(chr,ciphertext[-aes_block_size:])) 
+        elif self.tlsver == tls_ver_1_1:
             #the per-record IV is now sent as the start of the fragment
             ciphertext = self.IV + bytearray(ciphertext)
-            self.IV = os.urandom(16) #use a new, random IV for each record
+            self.IV = os.urandom(aes_block_size) #use a new, random IV for each record
         self.seq_no += 1 
         print ("constructed this mac then encrypted data, length: ", \
                len(ciphertext), " and content: ", binascii.hexlify(bytearray(ciphertext[:10])))
@@ -425,9 +427,9 @@ class TLSConnectionState(object):
     
     def aes_cbc_dum(self,ciphertext,rec_type, return_mac=False):
         #decrypt
-        if self.tlsver == '\x03\x02':
-            self.IV = ciphertext[:16]
-            ciphertext = ciphertext[16:]
+        if self.tlsver == tls_ver_1_1:
+            self.IV = ciphertext[:aes_block_size]
+            ciphertext = ciphertext[aes_block_size:]
         #else self.IV already stores the correct IV    
         ciphertext_list,enc_list,iv_list = \
             [map(ord,x) for x in [ciphertext,str(self.enc_key),str(self.IV)]]
@@ -435,8 +437,8 @@ class TLSConnectionState(object):
         key_size = tlsn_cipher_suites[self.cipher_suite][4]
         decrypted = moo.decrypt(ciphertext_list,len(ciphertext),\
             moo.modeOfOperation['CBC'],enc_list,key_size,iv_list)
-        if self.tlsver== '\x03\x01':
-            self.IV = ciphertext[-16:]
+        if self.tlsver== tls_ver_1_0:
+            self.IV = ciphertext[-aes_block_size:]
         #unpad
         plaintext = cbc_unpad(decrypted) 
         #mac check
@@ -883,15 +885,15 @@ class TLSNClientSession(object):
         ciphertexts = [] #each item contains a tuple (ciphertext, encryption_key, iv)
         last_ciphertext_block = self.IV_after_finished
         for appdata in self.server_response_app_data:
-            if tlsn_common.tlsver == '\x03\x01':
+            if tlsn_common.tlsver == tls_ver_1_0:
                 ciphertexts.append( (appdata.serialized, 
                                  self.server_connection_state.enc_key, 
                                  last_ciphertext_block) )
-                last_ciphertext_block = appdata.serialized[-16:] #ready for next record
-            elif tlsn_common.tlsver == '\x03\x02':
-                ciphertexts.append((appdata.serialized[16:],
+                last_ciphertext_block = appdata.serialized[-aes_block_size:]
+            elif tlsn_common.tlsver == tls_ver_1_1:
+                ciphertexts.append((appdata.serialized[aes_block_size:],
                                     self.server_connection_state.enc_key,
-                                    appdata.serialized[:16]))
+                                    appdata.serialized[:aes_block_size]))
         return ciphertexts    
     
     def mac_check_plaintexts(self, plaintexts):
@@ -972,7 +974,7 @@ class TLSNClientSession(object):
         return (plaintexts, bad_record_mac)    
 
 def get_cbc_padding(data_length):
-    req_padding = 16 - data_length % 16
+    req_padding = aes_block_size - data_length % aes_block_size
     return chr(req_padding-1) * req_padding
 
 def cbc_unpad(pt):
