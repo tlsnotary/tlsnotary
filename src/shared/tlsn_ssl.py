@@ -192,7 +192,6 @@ class TLSClientHello(TLSHandshake):
             for a in self.cipher_suites:
                 self.serialized += '\x00'+chr(a)                        
             self.serialized += '\x01\x00' #compression methods - null only 
-            print ("Just made a client hello that looks like this: ", binascii.hexlify(self.serialized))
             super(TLSClientHello,self).__init__(None, h_ch)
             super(TLSClientHello,self).serialize()
         
@@ -312,7 +311,6 @@ class TLSAlert(object):
     def __init__(self,serialized=None):
         if serialized:
             self.serialized = serialized
-            print ('Got alert:'+binascii.hexlify(self.serialized))
             self.discarded=''
         else:
             #TODO - do we need to issue alerts?
@@ -340,6 +338,7 @@ class TLSConnectionState(object):
         by the specified cipher suite.
         If mac failures occur they will be flagged but
         decrypted result is still made available.'''
+        
         self.tlsver = tlsn_common.tlsver #either TLS1.0 or 1.1
         assert self.tlsver in tls_versions, "Unrecognised or invalid TLS version"
         self.cipher_suite = cipher_suite
@@ -421,8 +420,6 @@ class TLSConnectionState(object):
             ciphertext = self.IV + bytearray(ciphertext)
             self.IV = os.urandom(aes_block_size) #use a new, random IV for each record
         self.seq_no += 1 
-        print ("constructed this mac then encrypted data, length: ", \
-               len(ciphertext), " and content: ", binascii.hexlify(bytearray(ciphertext[:10])))
         return bytearray(ciphertext)
     
     def aes_cbc_dum(self,ciphertext,rec_type, return_mac=False):
@@ -455,7 +452,6 @@ def tls_sender(sckt,msg,rec_type,conn=None):
     if conn:
         msg = conn.mte(msg,rec_type)
     rec = TLSRecord(rec_type, f=msg)
-    print ("About to send out: ", binascii.hexlify(rec.serialized[:20]))
     sckt.send(rec.serialized)
     
 class TLSNClientSession(object):
@@ -699,7 +695,12 @@ class TLSNClientSession(object):
      
     def set_auditee_secret(self):
         '''Sets up the auditee's half of the preparatory
-        secret material to create the master secret.'''
+        secret material to create the master secret. Note
+        that according to the RFC, the tls version prepended to the
+        premaster secret must be that used in the client hello message,
+        not the negotiated/downgraded version set by the server hello. 
+        See variable tlsver_ch.'''
+        tlsver_ch = tls_ver_1_1 if tlsn_common.config.get("General","tls_11") else tls_ver_1_0
         cr = self.client_random
         sr = self.server_random
         assert cr and sr,"one of client or server random not set"
@@ -709,7 +710,7 @@ class TLSNClientSession(object):
             self.auditee_padding_secret = os.urandom(15)
         label = 'master secret'
         seed = cr + sr
-        pms1 = tlsn_common.tlsver+self.auditee_secret + ('\x00' * (24-2-self.n_auditee_entropy))
+        pms1 = tlsver_ch+self.auditee_secret + ('\x00' * (24-2-self.n_auditee_entropy))
         self.p_auditee = tls_10_prf(label+seed,first_half = pms1)[0]
         #encrypted PMS has already been calculated before the audit began
         return (self.p_auditee)
@@ -917,17 +918,17 @@ class TLSNClientSession(object):
             if type(self.server_response_app_data[i]) is TLSAppData:
                 rt = appd
             elif type(self.server_response_app_data[i]) is TLSAlert:
-                print ("***WE RECEIVED AN ALERT!!***")
                 rt = alrt
             else:
-                print ("Got an unexpected record type in the server response: ")
+                print ("Info: Got an unexpected record type in the server response: ", 
+                       type(self.server_response_app_data[i]))
                 
             validity, stripped_pt = dummy_connection_state.verify_mac(pt,rt)
             assert validity==True, "Fatal error - invalid mac, data not authenticated!"
             if rt==appd:
                 mac_stripped_plaintext += stripped_pt
             elif rt==alrt:
-                print ("Decrypted alert: ", binascii.hexlify(stripped_pt))
+                print ("Info: alert received, decrypted: ", binascii.hexlify(stripped_pt))
 
         return mac_stripped_plaintext
     

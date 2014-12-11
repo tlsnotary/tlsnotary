@@ -202,9 +202,16 @@ def check_complete_records(d):
     '''Given a response d from a server,
     we want to know if its contents represents
     a complete set of records, however many.'''
-    print ("were checking the record with tlsver being: ", binascii.hexlify(tlsver))
-    print ("and d13 being: ", binascii.hexlify(d[:20]))
-    assert d[1:3] == tlsver,"invalid ssl data"
+    global tlsver
+    if not d[1:3] ==tlsver:
+        if d[1:3]=='\x03\x01' and tlsver == '\x03\x02':
+            #server requested downgrade
+            #note that this can only happen *before* a TLSConnectionState object is
+            #initialised, so the tlsversion used in that object will be synchronised.
+            #TODO: error checking to make sure this is the case.
+            tlsver = '\x03\x01'
+        else:
+            raise Exception("Failed to negotiate valid TLS version with server")
     l = ba2int(d[3:5])
     if len(d)< l+5: return False
     elif len(d)==l+5: return True
