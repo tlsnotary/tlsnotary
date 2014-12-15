@@ -193,6 +193,9 @@ class HandleBrowserRequestsClass(SimpleHTTPServer.SimpleHTTPRequestHandler):
         return
     
     def start_audit(self, args):
+        #set TLS version according to user preference
+        if int(shared.config.get("General","tls_11")):
+            shared.set_tlsver('\x03\x02')        
         arg1, arg2, arg3 = args.split('&')
         if not arg1.startswith('b64dercert=') or not arg2.startswith('b64headers=') or not arg3.startswith('ciphersuite='):
             self.respond({'response':'start_audit', 'status':'wrong HEAD parameter'})
@@ -977,7 +980,7 @@ if __name__ == "__main__":
     from slowaes import AESModeOfOperation        
     import shared
     shared.load_program_config()
-    
+        
     firefox_install_path = None
     if len(sys.argv) > 1: firefox_install_path = sys.argv[1]
     if firefox_install_path == 'test': firefox_install_path = None

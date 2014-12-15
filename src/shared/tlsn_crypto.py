@@ -13,6 +13,8 @@ from slowaes import AESModeOfOperation
 from slowaes import AES
 from shared.tlsn_ssl import TLSNClientSession as TLSNClientSession
 from shared.tlsn_ssl import tls_10_prf as tls_10_prf
+import tlsn_common
+
 #*********CODE FOR ENCRYPTION OF PEER TO PEER MESSAGING*******
 #encrypt and base64 encode
 def ee(msg,pubkey):
@@ -123,7 +125,7 @@ class TLSNClientSession_Paillier(TLSNClientSession):
         #auditee or auditor, accordingly secrets will be used
         self.auditee_secret = os.urandom(22)
         self.auditee_padding_secret = random_non_zero(103)
-        self.auditee_padded_rsa_half = '\x02' + self.auditee_padding_secret + '\x00'*102 + '\x00\x03\x01' + self.auditee_secret + '\x00'*24        
+        self.auditee_padded_rsa_half = '\x02' + self.auditee_padding_secret + '\x00'*102 + '\x00' +tlsn_common.tlsver + self.auditee_secret + '\x00'*24        
         
         self.auditor_secret = os.urandom(24)
         self.auditor_padding_secret = random_non_zero(102)
@@ -136,7 +138,7 @@ class TLSNClientSession_Paillier(TLSNClientSession):
         assert self.client_random and self.server_random,"one of client or server random not set"
         label = 'master secret'
         seed = self.client_random + self.server_random
-        pms1 = '\x03\x01'+ self.auditee_secret
+        pms1 = tlsn_common.tlsver + self.auditee_secret
         self.p_auditee = tls_10_prf(label+seed,first_half = pms1)[0]
         #encrypted PMS has already been calculated before the audit began
         return (self.p_auditee)
