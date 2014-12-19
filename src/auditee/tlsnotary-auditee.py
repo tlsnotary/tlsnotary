@@ -980,7 +980,9 @@ if __name__ == "__main__":
     from slowaes import AESModeOfOperation        
     import shared
     shared.load_program_config()
-        
+    #set TLS version according to user preference 	
+    if int(shared.config.get("General","tls_11")): 		
+        shared.set_tlsver('\x03\x02')        
     firefox_install_path = None
     if len(sys.argv) > 1: firefox_install_path = sys.argv[1]
     if firefox_install_path == 'test': firefox_install_path = None
