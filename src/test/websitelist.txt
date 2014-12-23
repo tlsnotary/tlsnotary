@@ -4,7 +4,6 @@ https://online.citibank.com/US/JPS/portal/NoCookie.do 47,53,5,4
 https://www.wellsfargo.com/  47,53,5
 https://www.security.us.hsbc.com 47,53,5
 https://usbank.com 47,53,5
-https://thepiratebay.se 47,53
 https://citizenfourfilm.com 4,5,47,53 
 https://www.chase.com/ 47,53,5
 https://www.bankofamerica.com/ 47,53,5
