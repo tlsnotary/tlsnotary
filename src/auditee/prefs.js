@@ -7,8 +7,6 @@ user_pref("browser.shell.checkDefaultBrowser", false);
 user_pref("browser.search.update", false);
 user_pref("browser.link.open_newwindow", 3);
 user_pref("browser.link.open_newwindow.restriction", 0);
-user_pref("extensions.lastAppVersion", "100.0.0");
-user_pref("extensions.checkCompatibility.4.*", false);
 user_pref("extensions.update.autoUpdate", false);
 user_pref("extensions.update.enabled", false);
 user_pref("extensions.enabledScopes", 0);

@@ -7,14 +7,16 @@
     <em:id>tlsnotary@tlsnotary</em:id>
     <em:version>!</em:version>
     <em:type>2</em:type>
+    <em:bootstrap>true</em:bootstrap>
+    <em:unpack>true</em:unpack>
    
     <!-- Target Application this extension can install into, 
          with minimum and maximum supported versions. --> 
     <em:targetApplication>
       <Description>
         <em:id>{ec8030f7-c20a-464f-9b0e-13a3a9e97384}</em:id>
-        <em:minVersion>1.5</em:minVersion>
-        <em:maxVersion>32.0.*</em:maxVersion>
+        <em:minVersion>4.0</em:minVersion>
+        <em:maxVersion>99.*</em:maxVersion>
       </Description>
     </em:targetApplication>
    
@@ -22,6 +24,6 @@
     <em:name>Enable this plugin to use tlsnotary</em:name>
     <em:description>tlsnotary</em:description>
     <em:creator>tlsnotary</em:creator>
-    <em:homepageURL>http://www.tlsnotary.com/</em:homepageURL>
+    <em:homepageURL>https://tlsnotary.org</em:homepageURL>
   </Description>      
 </RDF>

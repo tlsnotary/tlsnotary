@@ -1,3 +1,8 @@
+var testdriver_exception;
+try {
+
+Cu.import("resource://gre/modules/XPCOMUtils.jsm");
+
 var auditeeBrowser;
 var tlsnGetUrlsResponded = false;
 var reqGetUrls;
@@ -7,12 +12,12 @@ var tlsnLinkIndex=0;
 var tlsnCipherSuiteNames={"47":"security.ssl3.rsa_aes_128_sha","53":"security.ssl3.rsa_aes_256_sha",
 	"4":"security.ssl3.rsa_rc4_128_md5","5":"security.ssl3.rsa_rc4_128_sha"};
 var current_ciphersuite=''; //Testing only: used by script.js to tell backend which CS to use 
-//we are using hardcoded port 37777 for now 
-//var port_for_ciphertext = Cc["@mozilla.org/process/environment;1"].getService(Ci.nsIEnvironment).get("port_for_ciphertext");
 
 //copied from https://developer.mozilla.org/en-US/docs/Code_snippets/Progress_Listeners
 const STATE_STOP = Ci.nsIWebProgressListener.STATE_STOP;
 const STATE_IS_WINDOW = Ci.nsIWebProgressListener.STATE_IS_WINDOW;
+
+
 
 var tgNB;
 
@@ -45,26 +50,30 @@ var tlsnLoadListener = {
 }
 
 
-if ("true" == Cc["@mozilla.org/process/environment;1"].getService(Ci.nsIEnvironment).get("TLSNOTARY_TEST")){
-		setTimeout(tlsnInitTesting,3000); //allow some time for Connect button to activate
-		testingMode = true;
-}
+function tlsnSimulateClick(element) {
+  var options = { // defaults
+    clientX: 0, clientY: 0, button: 0,
+    ctrlKey: false, altKey: false, shiftKey: false,
+    metaKey: false, bubbles: true, cancelable: true
+     // create event object:
+  }, event = element.ownerDocument.createEvent("MouseEvents");
 
-
-function tlsnSimulateClick(what_to_click) {
-  var event = new MouseEvent('click', {
-    'view': window,
-    'bubbles': true,
-    'cancelable': true
-  });
+  // initialize the event object
+  event.initMouseEvent('click', options.bubbles, options.cancelable,
+                       element.ownerDocument.defaultView,  options.button,
+                       options.clientX, options.clientY, options.clientX,
+                       options.clientY, options.ctrlKey, options.altKey,
+                       options.shiftKey, options.metaKey, options.button,
+                       element);
   //prevent popup blocker
-  Cc["@mozilla.org/preferences-service;1"].getService(Ci.nsIPrefService).setBoolPref("dom.disable_open_during_load", false);
-  what_to_click.dispatchEvent(event);
+  prefs.setBoolPref("dom.disable_open_during_load", false);
+  element.dispatchEvent(event);
 }
+
 
 
 function tlsnSendErrorMsg(errmsg){
-    var reqSendError = new XMLHttpRequest();
+    var reqSendError = Cc["@mozilla.org/xmlextras/xmlhttprequest;1"].createInstance();
     reqSendError.open("HEAD", "http://127.0.0.1:27777"+"/log_error?errmsg="+errmsg, true);
     reqSendError.send();
     return;
@@ -73,15 +82,16 @@ function tlsnSendErrorMsg(errmsg){
 
 function tlsnInitTesting(){
     //required to allow silent close of all other tabs
-    Cc["@mozilla.org/preferences-service;1"].getService(Ci.nsIPrefService).setBoolPref("browser.tabs.warnOnCloseOtherTabs", false);	
+    prefs.setBoolPref("browser.tabs.warnOnCloseOtherTabs", false);	
     //ask the back end for a list of websites to visit
-    reqGetUrls = new XMLHttpRequest();
+    reqGetUrls = Cc["@mozilla.org/xmlextras/xmlhttprequest;1"].createInstance();
     reqGetUrls.onload = responseGetUrls;
     reqGetUrls.open("HEAD", "http://127.0.0.1:27777"+"/get_websites", true);
     reqGetUrls.send();
     //wait for response
     responseGetUrls(0);
 }
+
 
 
 function responseGetUrls(iteration){
@@ -107,7 +117,7 @@ function responseGetUrls(iteration){
     linkArray = tlsnUrlList.split(',');
     tlsnCipherSuiteList = cipherSuiteList.split(',');
     //urls received, start the p2p connection
-    var btn = content.document.getElementById("start_button");
+    var btn = win.content.document.getElementById("start_button");
     tlsnSimulateClick(btn);
     //wait for status bar to show readiness.
     waitForP2PConnection();
@@ -144,7 +154,6 @@ function openNextLink(){
         return;
     }
     //set the cipher suite to be ONLY that in the given argument
-    var prefs = Cc["@mozilla.org/preferences-service;1"].getService(Ci.nsIPrefService);
     var cs = tlsnCipherSuiteList[tlsnLinkIndex];
     //iterate over keys of associative array
     for (var key in tlsnCipherSuiteNames){
@@ -225,11 +234,14 @@ function waitForSessionEnd(iteration){
          return;
         }
 	//the audit is fully completed. trigger the backend to do hash checks
-    reqFinaliseTest = new XMLHttpRequest();
+    reqFinaliseTest = Cc["@mozilla.org/xmlextras/xmlhttprequest;1"].createInstance();
     //reqFinaliseTest.onload = responseGetKeyboardInput;
     reqFinaliseTest.open("HEAD", "http://127.0.0.1:27777"+"/end_test", true);
     reqFinaliseTest.send();
     //finished; there will be no response
 }
 
+} catch (e){
+	testdriver_exception = e;
+}
 
