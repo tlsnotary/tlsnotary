@@ -437,7 +437,7 @@ def process_certificate_queue():
 #padding, we first try the encrypted PMS with a reliable site and see if it gets rejected.
 #TODO the probability seems to have increased too much w.r.t. random padding, investigate
 def prepare_pms():
-    for i in range(7): #try 7 times until reliable site check succeeds
+    for i in range(10): #keep trying until reliable site check succeeds
         #first 4 bytes of client random are unix time
         pms_session = shared.TLSNClientSession(rs_choice,shared.reliable_sites[rs_choice][0], ccs=53)
         if not pms_session: 
@@ -465,8 +465,8 @@ def prepare_pms():
             print ("PMS trial failed, retrying. (",binascii.hexlify(response),")")
             continue
         return (pms_session.auditee_secret,pms_session.auditee_padding_secret)
-    #no dice after 7 tries
-    raise Exception ('Could not prepare PMS with ', rs_choice, ' after 7 tries. Please '+\
+    #no dice after 10 tries
+    raise Exception ('Could not prepare PMS with ', rs_choice, ' after 10 tries. Please '+\
                      'double check that you are using a valid public key modulus for this site; '+\
                      'it may have expired.')
 
@@ -788,25 +788,14 @@ def start_firefox(FF_to_backend_port, firefox_install_path, AES_decryption_port)
     else:
         with open(hash_path, 'rb') as f: saved_hash = f.read()
         if saved_hash != final_hash:
-            print('''FF-addon directory changed since last invocation. 
-            Replacing some of your Firefox\'s copy folders''')
+            print("FF-addon directory changed since last invocation. Creating a new Firefox profile directory...")
             try:
-                shutil.rmtree(local_ff_copy)
                 shutil.rmtree(join(data_dir, 'FF-profile'))
             except:
                 pass
             with open(hash_path, 'wb') as f: f.write(final_hash)            
             
-             
-    if not os.path.exists(local_ff_copy):
-        try:
-            shutil.copytree(firefox_install_path, local_ff_copy, symlinks=True)        
-        except  Exception,e:   
-            #we dont want a half-copied dir. Delete everything and rethrow
-            shutil.rmtree(local_ff_copy)
-            raise e
-        
-    firefox_exepath = join(*([local_ff_copy]+ffbinloc[OS]))
+    firefox_exepath = join(*([firefox_install_path]+ffbinloc[OS]))
     
     logs_dir = join(data_dir, 'logs')
     if not os.path.isdir(logs_dir): os.makedirs(logs_dir)
@@ -816,15 +805,26 @@ def start_firefox(FF_to_backend_port, firefox_install_path, AES_decryption_port)
     if not os.path.exists(ffprof_dir): os.makedirs(ffprof_dir)
     shutil.copyfile(join(data_dir,'prefs.js'),join(ffprof_dir,'prefs.js'))
     shutil.copyfile(join(data_dir,'localstore.rdf'),join(ffprof_dir,'localstore.rdf'))
-    if OS=='macos':
-        bundles_dir = os.path.join(local_ff_copy, 'Contents','MacOS','distribution', 'bundles')
-    else:
-        bundles_dir = os.path.join(local_ff_copy, 'distribution', 'bundles')
-    if not os.path.exists(bundles_dir):
-        os.makedirs(bundles_dir)    
-    for ext_dir in ['tlsnotary@tlsnotary']:
-        if not os.path.exists(join(bundles_dir,ext_dir)):
-            shutil.copytree(join(data_dir, 'FF-addon', ext_dir),join(bundles_dir, ext_dir))                  
+    shutil.copyfile(join(data_dir,'extensions.json'),join(ffprof_dir,'extensions.json'))
+ 
+    extension_path = join(ffprof_dir, 'extensions', 'tlsnotary@tlsnotary')
+    if not os.path.exists(extension_path):
+        shutil.copytree(join(data_dir, 'FF-addon', 'tlsnotary@tlsnotary'),extension_path)
+
+    #Disable addon compatibility check on startup
+    try:
+        application_ini_data = None
+        with open(join(firefox_install_path, 'application.ini'), 'r') as f: application_ini_data = f.read()
+        version_pos = application_ini_data.find('Version=')+len('Version=')
+        #version string can be 34.0 or 34.0.5
+        version_raw = application_ini_data[version_pos:version_pos+8]
+        version = ''.join(char for char in version_raw if char in '1234567890.')
+        
+        with open(join(ffprof_dir, 'prefs.js'), 'a') as f:
+            f.write('user_pref("extensions.lastAppVersion", "' + version + '"); ')
+    except:
+        print ('Failed to disable add-on compatibility check')
+
     os.putenv('FF_to_backend_port', str(FF_to_backend_port))
     os.putenv('FF_first_window', 'true')   #prevents addon confusion when websites open multiple FF windows
     if int(shared.config.get("General","decrypt_with_slowaes")) == 0:
