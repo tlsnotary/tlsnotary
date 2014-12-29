@@ -270,7 +270,7 @@ class HandleBrowserRequestsClass(SimpleHTTPServer.SimpleHTTPRequestHandler):
         return              
           
     def selftest(self):
-        auditor_py = join(install_dir, 'src', 'auditor', 'tlsnotary-auditor.py')
+        auditor_py = join(install_dir, 'src', 'auditor', 'auditor.py')
         output = check_output([sys.executable, auditor_py, 'daemon', 'genkey'])
         auditor_key = output.split()[-1]
         import_auditor_pubkey(auditor_key)
@@ -947,7 +947,7 @@ def start_testing():
     import subprocess    
     #initiate an auditor window in daemon mode
     print ("TESTING: starting auditor")    
-    auditor_py = os.path.join(install_dir, 'src', 'auditor', 'tlsnotary-auditor.py')
+    auditor_py = os.path.join(install_dir, 'src', 'auditor', 'auditor.py')
     auditor_proc = subprocess.Popen(['python', auditor_py,'daemon'])
     global test_auditor_pid 
     test_auditor_pid = auditor_proc.pid    
