@@ -967,10 +967,16 @@ class TLSNClientSession(object):
         "Could not process the server response, no ciphertext found."
         plaintexts = ''
         for ciphertext in self.server_response_app_data:
-            validity, plaintext = self.server_connection_state.dtvm(ciphertext.serialized,appd)
+            if type(ciphertext) is TLSAppData:
+                rt = appd
+            elif type(ciphertext) is TLSAlert:
+                rt = alrt
+            else:
+                raise Exception ("Server response contained unexpected record type: ", type(ciphertext))
+            validity, plaintext = self.server_connection_state.dtvm(ciphertext.serialized,rt)
             if not validity==True: 
                 bad_record_mac += 1
-            plaintexts += plaintext
+            if rt== appd: plaintexts += plaintext
     
         return (plaintexts, bad_record_mac)    
 
