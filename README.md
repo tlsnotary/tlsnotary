@@ -1,5 +1,5 @@
 UPDATE October 2020.
-These instructions will only work if you use an old Firefox version which was around in 2015. Additionally the website you plan notarize must support TLS 1.0 or TLS 1.1 (a rare thing in 2020). Finally, you will have to modify /src/shared/pubkeys.txt and provide pubkeys which are up-to-date.
+These instructions will only work if you use an old Firefox version which was around in 2015 (e.g. v37). Additionally the website you plan notarize must support TLS 1.0 or TLS 1.1 (a rare thing in 2020). Finally, you will have to modify /src/shared/pubkeys.txt and provide pubkeys which are up-to-date. Run the auditee like this python2 ./src/auditee/tlsnotary-auditee.py <path to Firefox folder containing the firefox executable>
 
 
 TLSNotary project
