@@ -1,3 +1,7 @@
+UPDATE October 2020.
+These instructions will only work if you use an old Firefox version which was around in 2015. Additionally the website you plan notarize must support TLS 1.0 or TLS 1.1 (a rare thing in 2020). Finally, you will have to modify /src/shared/pubkeys.txt and provide pubkeys which are up-to-date.
+
+
 TLSNotary project
 ==================
 
