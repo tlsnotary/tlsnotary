@@ -1,3 +1,7 @@
+UPDATE November 2021.
+This repo is obsoleted by PageSigner v3. PageSigner v3 is a Chromium extension (https://github.com/tlsnotary/pagesigner/) which implements the TLSNotary protocol compatible with TLS 1.2+. 
+
+
 UPDATE October 2020.
 These instructions will only work if you use an old Firefox version which was around in 2015 (e.g. v37). Additionally the website you plan notarize must support TLS 1.0 or TLS 1.1 (a rare thing in 2020). Finally, you will have to modify /src/shared/pubkeys.txt and provide pubkeys which are up-to-date. Run the auditee like this python2 ./src/auditee/tlsnotary-auditee.py <path to Firefox folder containing the firefox executable>
 
